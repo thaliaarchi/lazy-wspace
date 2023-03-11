@@ -5,6 +5,8 @@ use std::rc::Rc;
 use bitvec::vec::BitVec;
 use rug::Integer;
 
+use crate::error::ParseError;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Inst {
     Push(NumberLit),
@@ -31,6 +33,13 @@ pub enum Inst {
     Printi,
     Readc,
     Readi,
+    ParseError(ParseError),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgKind {
+    Number,
+    Label,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,6 +92,7 @@ impl Display for Inst {
             Inst::Printi => write!(f, "OutputNum"),
             Inst::Readc => write!(f, "ReadChar"),
             Inst::Readi => write!(f, "ReadNum"),
+            Inst::ParseError(_) => panic!("BUG: cannot display parse error"),
         }
     }
 }

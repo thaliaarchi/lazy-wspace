@@ -9,7 +9,7 @@ use rug::ops::{
 };
 use rug::Integer;
 
-use crate::error::LazyError;
+use crate::error::NumberError;
 use crate::inst::NumberLit;
 
 pub type NumberRef = Rc<RefCell<Number>>;
@@ -18,7 +18,7 @@ pub type NumberRef = Rc<RefCell<Number>>;
 pub enum Number {
     Value(Rc<Integer>),
     Op(Op, NumberRef, NumberRef),
-    Error(LazyError),
+    Error(NumberError),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub enum Op {
 }
 
 impl Number {
-    pub fn eval(n: NumberRef) -> Result<Rc<Integer>, LazyError> {
+    pub fn eval(n: NumberRef) -> Result<Rc<Integer>, NumberError> {
         match &*n.borrow() {
             Number::Value(n) => return Ok(n.clone()),
             Number::Op(_, _, _) => {}
@@ -39,7 +39,7 @@ impl Number {
         }
 
         let cell = n;
-        let n = cell.replace(Number::Error(LazyError::Internal));
+        let n = cell.replace(Number::Error(NumberError::Internal));
         let res = match n {
             Number::Op(op, x, y) => Number::eval_op(op, x, y),
             _ => unreachable!(),
@@ -48,17 +48,17 @@ impl Number {
             Ok(n) => Number::Value(n.clone()),
             Err(err) => Number::Error(*err),
         });
-        debug_assert_eq!(Number::Error(LazyError::Internal), inner);
+        debug_assert_eq!(Number::Error(NumberError::Internal), inner);
         res
     }
 
     #[inline]
-    fn eval_op(op: Op, x: NumberRef, y: NumberRef) -> Result<Rc<Integer>, LazyError> {
+    fn eval_op(op: Op, x: NumberRef, y: NumberRef) -> Result<Rc<Integer>, NumberError> {
         let x = Number::eval(x)?;
         let y = Number::eval(y)?;
         match op.eval(x, y) {
             Some(z) => Ok(Rc::new(z)),
-            None => Err(LazyError::DivModZero),
+            None => Err(NumberError::DivModZero),
         }
     }
 }
@@ -133,7 +133,7 @@ impl From<&NumberLit> for Number {
     fn from(n: &NumberLit) -> Self {
         match n {
             NumberLit::Number(n) => Number::Value(n.clone()),
-            NumberLit::Empty => Number::Error(LazyError::EmptyLit),
+            NumberLit::Empty => Number::Error(NumberError::EmptyLit),
         }
     }
 }
@@ -145,9 +145,9 @@ impl<T: Into<Integer>> From<T> for Number {
     }
 }
 
-impl From<LazyError> for Number {
+impl From<NumberError> for Number {
     #[inline]
-    fn from(err: LazyError) -> Self {
+    fn from(err: NumberError) -> Self {
         Number::Error(err)
     }
 }
@@ -166,9 +166,9 @@ impl From<&NumberLit> for NumberRef {
     }
 }
 
-impl From<LazyError> for NumberRef {
+impl From<NumberError> for NumberRef {
     #[inline]
-    fn from(err: LazyError) -> Self {
+    fn from(err: NumberError) -> Self {
         Rc::new(RefCell::new(err.into()))
     }
 }
@@ -190,12 +190,12 @@ mod tests {
 
     #[test]
     fn eval_error_order() {
-        let x = NumberRef::from(LazyError::CopyLarge);
-        let y = NumberRef::from(LazyError::EmptyLit);
+        let x = NumberRef::from(NumberError::CopyLarge);
+        let y = NumberRef::from(NumberError::EmptyLit);
         let z = NumberRef::from(Number::Op(Op::Add, x, y));
         let z1 = z.clone();
         let err = Number::eval(z).unwrap_err();
-        assert_eq!(LazyError::CopyLarge, err);
-        assert_eq!(NumberRef::from(LazyError::CopyLarge), z1);
+        assert_eq!(NumberError::CopyLarge, err);
+        assert_eq!(NumberRef::from(NumberError::CopyLarge), z1);
     }
 }

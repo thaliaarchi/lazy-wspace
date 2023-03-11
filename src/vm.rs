@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rug::Integer;
 
-use crate::error::{Error, LazyError};
+use crate::error::{Error, NumberError};
 use crate::inst::{Inst, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
@@ -76,16 +76,16 @@ impl<'a> VM<'a> {
                 let x = match i {
                     NumberLit::Number(i) => {
                         if i.cmp0() == Ordering::Less {
-                            LazyError::CopyNegative.into()
+                            NumberError::CopyNegative.into()
                         } else {
                             let i = i.to_usize().unwrap_or(usize::MAX);
                             match self.stack.get(self.stack.len().wrapping_sub(i)) {
                                 Some(n) => n.clone(),
-                                None => LazyError::CopyLarge.into(),
+                                None => NumberError::CopyLarge.into(),
                             }
                         }
                     }
-                    NumberLit::Empty => LazyError::EmptyLit.into(),
+                    NumberLit::Empty => NumberError::EmptyLit.into(),
                 };
                 self.stack.push(x);
             }
@@ -135,6 +135,7 @@ impl<'a> VM<'a> {
             Inst::Printi => todo!(),
             Inst::Readc => todo!(),
             Inst::Readi => todo!(),
+            Inst::ParseError(err) => return Err(Error::Parse(err.clone())),
         }
         self.pc += 1;
         Ok(())
@@ -144,7 +145,7 @@ impl<'a> VM<'a> {
     fn underflow(&self, inst: &Inst) -> Error {
         match self.on_underflow {
             UnderflowError::Pop => Error::Underflow(inst.clone()),
-            UnderflowError::SlideEmpty => Error::Lazy(LazyError::EmptyLit),
+            UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
         }
     }
 }
@@ -178,21 +179,21 @@ mod tests {
     fn copy_empty() {
         let mut vm = VM::from(vec![Inst::Copy(NumberLit::Empty)]);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(LazyError::EmptyLit)], vm.stack());
+        assert_eq!(&[NumberRef::from(NumberError::EmptyLit)], vm.stack());
     }
 
     #[test]
     fn copy_negative() {
         let mut vm = VM::from(vec![Inst::Copy(NumberLit::from(-1))]);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(LazyError::CopyNegative)], vm.stack());
+        assert_eq!(&[NumberRef::from(NumberError::CopyNegative)], vm.stack());
     }
 
     #[test]
     fn copy_large() {
         let mut vm = VM::from(vec![Inst::Copy(NumberLit::from(1))]);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(LazyError::CopyLarge)], vm.stack());
+        assert_eq!(&[NumberRef::from(NumberError::CopyLarge)], vm.stack());
     }
 
     #[test]
@@ -206,7 +207,7 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(LazyError::EmptyLit.into()), vm.step());
+        assert_eq!(Err(NumberError::EmptyLit.into()), vm.step());
     }
 
     #[test]
