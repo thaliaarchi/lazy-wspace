@@ -10,6 +10,7 @@ pub enum LazyError {
     DivModZero,
     RetrieveLarge,
     RetrieveNegative,
+    Internal,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +46,7 @@ impl Display for LazyError {
                 writeln!(f, "wspace: Prelude.!!: negative index")
             }
             LazyError::DivModZero => writeln!(f, "wspace: divide by zero"),
+            LazyError::Internal => panic!("BUG: cannot display internal error"),
         }
     }
 }

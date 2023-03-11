@@ -6,7 +6,7 @@ use rug::Integer;
 
 use crate::error::{Error, LazyError};
 use crate::inst::{Inst, NumberLit};
-use crate::number::{ArithOp, Number, NumberRef};
+use crate::number::{Number, NumberRef, Op};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VM<'a> {
@@ -117,11 +117,11 @@ impl<'a> VM<'a> {
                 }
                 self.stack.push(top);
             }
-            Inst::Add => arith!(ArithOp::Add),
-            Inst::Sub => arith!(ArithOp::Sub),
-            Inst::Mul => arith!(ArithOp::Mul),
-            Inst::Div => arith!(ArithOp::Div),
-            Inst::Mod => arith!(ArithOp::Mod),
+            Inst::Add => arith!(Op::Add),
+            Inst::Sub => arith!(Op::Sub),
+            Inst::Mul => arith!(Op::Mul),
+            Inst::Div => arith!(Op::Div),
+            Inst::Mod => arith!(Op::Mod),
             Inst::Store => todo!(),
             Inst::Retrieve => todo!(),
             Inst::Label(_) => todo!(),
