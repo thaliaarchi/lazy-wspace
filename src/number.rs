@@ -31,6 +31,11 @@ pub enum Op {
 }
 
 impl Number {
+    #[inline]
+    pub fn zero() -> Self {
+        Integer::ZERO.into()
+    }
+
     pub fn eval(n: NumberRef) -> Result<Rc<Integer>, NumberError> {
         match &*n.borrow() {
             Number::Value(n) => return Ok(n.clone()),

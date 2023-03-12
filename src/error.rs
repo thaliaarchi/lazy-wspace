@@ -1,4 +1,7 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::Formatter;
+use std::process;
+use std::thread;
+use std::time::Duration;
 
 use crate::inst::{ArgKind, Inst};
 
@@ -22,6 +25,7 @@ pub enum NumberError {
     CopyLarge,
     CopyNegative,
     DivModZero,
+    StoreNegative,
     RetrieveLarge,
     RetrieveNegative,
     Internal,
@@ -34,56 +38,63 @@ impl From<NumberError> for Error {
     }
 }
 
-// TODO: Substitute binary name
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl Error {
+    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, filename: &str) -> ! {
         match self {
-            Error::Parse(err) => write!(f, "{err}"),
-            Error::Number(err) => write!(f, "{err}"),
-            Error::Underflow(inst) => writeln!(f, "wspace: user error (Can't do {inst})"),
+            Error::Parse(err) => err.handle_wspace(f, wspace, filename),
+            Error::Number(err) => err.handle_wspace(f, wspace, filename),
+            Error::Underflow(inst) => {
+                writeln!(f, "{wspace}: user error (Can't do {inst})").unwrap();
+                process::exit(1)
+            }
         }
     }
 }
 
-impl Display for ParseError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl ParseError {
+    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, filename: &str) -> ! {
         match self {
             ParseError::Unterminated(arg) => {
                 match arg {
                     // Extra LFs are reproduced
                     ArgKind::Number => writeln!(
                         f,
-                        "wspace: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n"
+                        "{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n"
                     ),
                     ArgKind::Label => writeln!(
                         f,
-                        "wspace: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n"
+                        "{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n"
                     ),
                 }
             }
-            ParseError::ImplicitEnd => writeln!(f, "wspace: Prelude.!!: index too large"),
-            // TODO: substitute program filename
+            ParseError::ImplicitEnd => writeln!(f, "{wspace}: Prelude.!!: index too large"),
             ParseError::InvalidUtf8 => writeln!(
                 f,
-                "wspace: <filename>: hGetContents: invalid argument (invalid byte sequence)"
+                "{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)"
             ),
         }
+        .unwrap();
+        process::exit(1)
     }
 }
 
-impl Display for NumberError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl NumberError {
+    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, _filename: &str) -> ! {
         match self {
-            NumberError::EmptyLit => writeln!(f, "wspace: Prelude.last: empty list"),
+            NumberError::EmptyLit => writeln!(f, "{wspace}: Prelude.last: empty list"),
             NumberError::CopyLarge | NumberError::RetrieveLarge => {
-                writeln!(f, "wspace: Prelude.!!: index too large")
+                writeln!(f, "{wspace}: Prelude.!!: index too large")
             }
             NumberError::CopyNegative | NumberError::RetrieveNegative => {
-                writeln!(f, "wspace: Prelude.!!: negative index")
+                writeln!(f, "{wspace}: Prelude.!!: negative index")
             }
-            NumberError::DivModZero => writeln!(f, "wspace: divide by zero"),
-            NumberError::Internal => panic!("BUG: cannot display internal error"),
+            NumberError::StoreNegative => loop {
+                thread::sleep(Duration::MAX);
+            },
+            NumberError::DivModZero => writeln!(f, "{wspace}: divide by zero"),
+            NumberError::Internal => panic!("BUG: internal error"),
         }
+        .unwrap();
+        process::exit(1)
     }
 }

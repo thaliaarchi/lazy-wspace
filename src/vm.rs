@@ -27,7 +27,7 @@ pub enum UnderflowError {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Heap {
-    small: HashMap<i64, NumberRef>,
+    small: HashMap<u64, NumberRef>,
     big: HashMap<Rc<Integer>, NumberRef>,
 }
 
@@ -122,8 +122,16 @@ impl<'a> VM<'a> {
             Inst::Mul => arith!(Op::Mul),
             Inst::Div => arith!(Op::Div),
             Inst::Mod => arith!(Op::Mod),
-            Inst::Store => todo!(),
-            Inst::Retrieve => todo!(),
+            Inst::Store => {
+                let n = pop!()?;
+                let addr = pop!()?;
+                self.heap.store(addr, n)?;
+            }
+            Inst::Retrieve => {
+                let addr = pop!()?;
+                let n = self.heap.retrieve(addr)?.clone();
+                self.stack.push(n);
+            }
             Inst::Label(_) => todo!(),
             Inst::Call(_) => todo!(),
             Inst::Jmp(_) => todo!(),
@@ -154,6 +162,31 @@ impl Heap {
     #[inline]
     pub fn new() -> Self {
         Heap::default()
+    }
+
+    pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), NumberError> {
+        let addr = Number::eval(addr)?;
+        if addr.cmp0() == Ordering::Less {
+            return Err(NumberError::StoreNegative);
+        }
+        if let Some(addr) = addr.to_u64() {
+            self.small.insert(addr, n);
+        } else {
+            self.big.insert(addr, n);
+        }
+        Ok(())
+    }
+
+    pub fn retrieve(&mut self, addr: NumberRef) -> Result<&NumberRef, NumberError> {
+        let addr = Number::eval(addr)?;
+        if addr.cmp0() == Ordering::Less {
+            return Err(NumberError::RetrieveNegative);
+        }
+        if let Some(addr) = addr.to_u64() {
+            Ok(self.small.entry(addr).or_insert(Number::zero().into()))
+        } else {
+            Ok(self.big.entry(addr).or_insert(Number::zero().into()))
+        }
     }
 }
 
