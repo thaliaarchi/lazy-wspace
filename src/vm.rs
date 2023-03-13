@@ -3,9 +3,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::rc::Rc;
-
-use rug::Integer;
 
 use crate::error::{Error, NumberError};
 use crate::inst::{Inst, NumberLit};
@@ -33,8 +30,8 @@ pub enum UnderflowError {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Heap {
-    small: HashMap<u64, NumberRef>,
-    big: HashMap<Rc<Integer>, NumberRef>,
+    heap: HashMap<u32, NumberRef>,
+    len: u32,
 }
 
 pub fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {
@@ -125,20 +122,19 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Drop => pop!().map(|_| ())?,
             Inst::Slide(n) => {
-                // When `n` is positive, `n` values are popped off the stack under
-                // the top. When `n` is negative or zero, the stack under the top is
-                // unchanged. When `n` is an empty literal, accessing the stack under
-                // the top is a lazily evaluated error.
-
                 let top = pop!()?;
                 match n {
                     NumberLit::Number(n) => {
+                        // Negative values slide nothing.
                         if n.cmp0() == Ordering::Greater {
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             self.stack.truncate(self.stack.len().saturating_sub(n));
                         }
                     }
                     NumberLit::Empty => {
+                        // If the stack later underflows, the empty argument
+                        // from this slide is evaluated and the resulting error
+                        // takes precedence over the underflow error.
                         self.on_underflow = UnderflowError::SlideEmpty;
                         self.stack.clear();
                     }
@@ -157,7 +153,7 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Retrieve => {
                 let addr = pop!()?;
-                let n = self.heap.retrieve(addr)?.clone();
+                let n = self.heap.retrieve(addr)?;
                 self.stack.push(n);
             }
             Inst::Label(_) => todo!(),
@@ -202,34 +198,46 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
 }
 
 impl Heap {
+    /// The approximate maximum address at which a value can be stored before
+    /// wspace exits with a Haskell stack space overflow error.
+    pub const MAX_ADDRESS: u32 = u32::MAX;
+
     #[inline]
     pub fn new() -> Self {
         Heap::default()
     }
 
-    pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), NumberError> {
+    pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), Error> {
         let addr = Number::eval(addr)?;
         if addr.cmp0() == Ordering::Less {
-            return Err(NumberError::StoreNegative);
+            return Err(NumberError::StoreNegative.into());
         }
-        if let Some(addr) = addr.to_u64() {
-            self.small.insert(addr, n);
-        } else {
-            self.big.insert(addr, n);
+        if let Some(addr) = addr.to_u32() {
+            if addr <= Self::MAX_ADDRESS {
+                self.heap.insert(addr, n);
+                self.len = self.len.max(addr + 1);
+                return Ok(());
+            }
         }
-        Ok(())
+        Err(Error::StoreOverflow)
     }
 
-    pub fn retrieve(&mut self, addr: NumberRef) -> Result<&NumberRef, NumberError> {
+    pub fn retrieve(&mut self, addr: NumberRef) -> Result<NumberRef, Error> {
         let addr = Number::eval(addr)?;
         if addr.cmp0() == Ordering::Less {
-            return Err(NumberError::RetrieveNegative);
+            return Ok(NumberError::RetrieveNegative.into());
         }
-        if let Some(addr) = addr.to_u64() {
-            Ok(self.small.entry(addr).or_insert(Number::zero().into()))
-        } else {
-            Ok(self.big.entry(addr).or_insert(Number::zero().into()))
+        if let Some(addr) = addr.to_u32() {
+            if addr < self.len {
+                let n = self
+                    .heap
+                    .entry(addr)
+                    .or_insert(Number::zero().into())
+                    .clone();
+                return Ok(n);
+            }
         }
+        Ok(NumberError::RetrieveLarge.into())
     }
 }
 
