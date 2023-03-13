@@ -1,13 +1,17 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{Read, Write};
+use std::path::Path;
 use std::rc::Rc;
 
 use rug::Integer;
 
 use crate::error::{Error, NumberError};
 use crate::inst::{Inst, NumberLit};
+use crate::lex::Lexer;
 use crate::number::{Number, NumberRef, Op};
+use crate::parse::Parser;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VM<'a, I: ?Sized, O: ?Sized> {
@@ -31,6 +35,17 @@ pub enum UnderflowError {
 pub struct Heap {
     small: HashMap<u64, NumberRef>,
     big: HashMap<Rc<Integer>, NumberRef>,
+}
+
+pub fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {
+    let mut f = File::open(&path).unwrap();
+    let mut src = Vec::<u8>::new();
+    f.read_to_end(&mut src).unwrap();
+
+    let prog = Parser::new(Lexer::new(&src)).collect();
+    let mut stdout = Vec::new();
+    let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+    (vm.execute(), stdout)
 }
 
 impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
