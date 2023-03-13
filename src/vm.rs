@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use crate::error::{Error, NumberError};
-use crate::inst::{Inst, NumberLit};
+use crate::error::{Error, NumberError, ParseError};
+use crate::inst::{Inst, LabelLit, NumberLit};
 use crate::lex::Lexer;
 use crate::number::{Number, NumberRef, Op};
 use crate::parse::Parser;
@@ -17,6 +17,7 @@ pub struct VM<'a, I: ?Sized, O: ?Sized> {
     heap: Heap,
     pc: usize,
     call_stack: Vec<usize>,
+    labels: HashMap<LabelLit, usize>,
     stdin: &'a mut I,
     stdout: &'a mut O,
     on_underflow: UnderflowError,
@@ -48,12 +49,19 @@ pub fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Er
 impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
     #[inline]
     pub fn new(prog: Vec<Inst>, stdin: &'a mut I, stdout: &'a mut O) -> Self {
+        let mut labels = HashMap::new();
+        for (pc, inst) in prog.iter().enumerate() {
+            if let Inst::Label(l) = inst {
+                labels.entry(l.clone()).or_insert(pc);
+            }
+        }
         VM {
             prog,
             stack: Vec::new(),
             heap: Heap::new(),
             pc: 0,
             call_stack: Vec::new(),
+            labels,
             stdin,
             stdout,
             on_underflow: UnderflowError::Pop,
@@ -88,6 +96,12 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             let y = pop!()?;
             let x = pop!()?;
             self.stack.push(Number::Op($op, x, y).into());
+        }});
+        macro_rules! jump(($l:expr) => {{
+            self.pc = *self
+                .labels
+                .get($l)
+                .ok_or_else(|| ParseError::UndefinedLabel($l.clone()))?;
         }});
 
         match inst {
@@ -156,11 +170,24 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
                 let n = self.heap.retrieve(addr)?;
                 self.stack.push(n);
             }
-            Inst::Label(_) => todo!(),
-            Inst::Call(_) => todo!(),
-            Inst::Jmp(_) => todo!(),
-            Inst::Jz(_) => todo!(),
-            Inst::Jn(_) => todo!(),
+            Inst::Label(_) => {}
+            Inst::Call(l) => {
+                self.call_stack.push(self.pc);
+                jump!(l);
+            }
+            Inst::Jmp(l) => jump!(l),
+            Inst::Jz(l) => {
+                let n = Number::eval(pop!()?)?;
+                if n.cmp0() == Ordering::Equal {
+                    jump!(l);
+                }
+            }
+            Inst::Jn(l) => {
+                let n = Number::eval(pop!()?)?;
+                if n.cmp0() == Ordering::Less {
+                    jump!(l);
+                }
+            }
             Inst::Ret => {
                 self.pc = self.call_stack.pop().ok_or(Error::RetUnderflow)?;
             }

@@ -78,8 +78,9 @@ pub enum NumberLit {
     Empty,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LabelLit(BitVec);
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LabelLit(pub BitVec);
 
 impl From<ParseError> for Inst {
     #[inline]
@@ -130,6 +131,22 @@ impl From<BitVec> for LabelLit {
 
 impl Inst {
     #[inline]
+    pub fn get_number(&self) -> Option<&NumberLit> {
+        match self {
+            Inst::Push(n) | Inst::Copy(n) | Inst::Slide(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn get_label(&self) -> Option<&LabelLit> {
+        match self {
+            Inst::Label(l) | Inst::Call(l) | Inst::Jmp(l) | Inst::Jz(l) | Inst::Jn(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub fn to_printable(&self) -> Result<PrintableInst, Error> {
         match self {
             Inst::Push(n) => Ok(PrintableInst::Push(n.unwrap()?.clone())),
@@ -177,11 +194,11 @@ impl Display for PrintableInst {
             PrintableInst::Mod => f.write_str("Infix Modulo"),
             PrintableInst::Store => f.write_str("Store"),
             PrintableInst::Retrieve => f.write_str("Retrieve"),
-            PrintableInst::Label(l) => write!(f, "Label {}", HaskellDisplay(l)),
-            PrintableInst::Call(l) => write!(f, "Call {}", HaskellDisplay(l)),
-            PrintableInst::Jmp(l) => write!(f, "Jump {}", HaskellDisplay(l)),
-            PrintableInst::Jz(l) => write!(f, "If Zero {}", HaskellDisplay(l)),
-            PrintableInst::Jn(l) => write!(f, "If Negative {}", HaskellDisplay(l)),
+            PrintableInst::Label(l) => write!(f, "Label {}", l.to_haskell_show()),
+            PrintableInst::Call(l) => write!(f, "Call {}", l.to_haskell_show()),
+            PrintableInst::Jmp(l) => write!(f, "Jump {}", l.to_haskell_show()),
+            PrintableInst::Jz(l) => write!(f, "If Zero {}", l.to_haskell_show()),
+            PrintableInst::Jn(l) => write!(f, "If Negative {}", l.to_haskell_show()),
             PrintableInst::Ret => f.write_str("Return"),
             PrintableInst::End => f.write_str("End"),
             PrintableInst::Printc => f.write_str("OutputChar"),
@@ -213,14 +230,23 @@ impl Display for HaskellDisplay<&Integer> {
     }
 }
 
-impl Display for HaskellDisplay<&LabelLit> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let l = self.0;
-        write!(f, "\"")?;
-        for bit in l.0.iter().rev() {
-            f.write_str(if *bit { "\\t" } else { " " })?;
+impl LabelLit {
+    pub fn to_haskell_string(&self) -> String {
+        let mut s = String::with_capacity(self.0.len());
+        for bit in self.0.iter().rev() {
+            s.push(if *bit { '\t' } else { ' ' });
         }
-        write!(f, "\"")
+        s
+    }
+
+    pub fn to_haskell_show(&self) -> String {
+        let mut s = String::with_capacity(self.0.len() + self.0.count_ones() + 2);
+        s.push('"');
+        for bit in self.0.iter().rev() {
+            s.push_str(if *bit { "\\t" } else { " " });
+        }
+        s.push('"');
+        s
     }
 }
 

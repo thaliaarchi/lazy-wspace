@@ -1,7 +1,9 @@
 use std::path::Path;
 
+use bitvec::prelude::*;
+
 use crate::error::ParseError;
-use crate::inst::ArgKind;
+use crate::inst::{ArgKind, LabelLit};
 use crate::vm::execute_file;
 
 #[test]
@@ -47,4 +49,9 @@ fn execute_expected() {
     test!("parse/unterminated_jmp.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
     test!("parse/unterminated_jz.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
     test!("parse/unterminated_jn.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
+
+    test!("parse/undefined_label_call.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jmp.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jz.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jn.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
 }

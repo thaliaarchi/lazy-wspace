@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use rug::Integer;
 
-use crate::inst::{ArgKind, PrintableInst};
+use crate::inst::{ArgKind, LabelLit, PrintableInst};
 
 pub struct HaskellDisplay<T>(pub T);
 
@@ -25,6 +25,7 @@ pub enum ParseError {
     IncompleteInst,
     UnrecognizedInst,
     UnterminatedArg(ArgKind),
+    UndefinedLabel(LabelLit),
     ImplicitEnd,
     InvalidUtf8,
 }
@@ -95,6 +96,9 @@ impl ParseError {
             }
             ParseError::UnterminatedArg(ArgKind::Label) => {
                 HaskellError::Error(format!("{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n\n"), 1)
+            }
+            ParseError::UndefinedLabel(l) => {
+                HaskellError::Error(format!("{wspace}: user error (Undefined label ({}))\n", l.to_haskell_string()), 1)
             }
             ParseError::ImplicitEnd => {
                 HaskellError::Error(format!("{wspace}: Prelude.!!: index too large\n"), 1)
