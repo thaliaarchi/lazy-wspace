@@ -14,8 +14,9 @@ pub enum Error {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
-    Unterminated(ArgKind),
+    IncompleteInst,
     UnrecognizedInst,
+    UnterminatedArg(ArgKind),
     ImplicitEnd,
     InvalidUtf8,
 }
@@ -67,14 +68,14 @@ impl Error {
 impl ParseError {
     pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
         HaskellError::Error(match self {
-            ParseError::Unterminated(ArgKind::Number) => {
+            ParseError::IncompleteInst | ParseError::UnrecognizedInst => {
+                format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n")
+            }
+            ParseError::UnterminatedArg(ArgKind::Number) => {
                 format!("{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n\n")
             }
-            ParseError::Unterminated(ArgKind::Label) => {
+            ParseError::UnterminatedArg(ArgKind::Label) => {
                 format!("{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n\n")
-            }
-            ParseError::UnrecognizedInst => {
-                format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n")
             }
             ParseError::ImplicitEnd => {
                 format!("{wspace}: Prelude.!!: index too large\n")

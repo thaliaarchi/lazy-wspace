@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::rc::Rc;
 
-use bitvec::vec::BitVec;
+use bitvec::prelude::*;
+use rug::integer::Order;
+use rug::ops::NegAssign;
 use rug::Integer;
 
 use crate::error::{Error, NumberError, ParseError};
@@ -79,10 +81,43 @@ pub enum NumberLit {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LabelLit(BitVec);
 
-impl<T: Into<Integer>> From<T> for NumberLit {
+impl From<ParseError> for Inst {
     #[inline]
-    fn from(n: T) -> Self {
+    fn from(err: ParseError) -> Self {
+        Inst::ParseError(err)
+    }
+}
+
+impl NumberLit {
+    #[inline]
+    pub fn new<T: Into<Integer>>(n: T) -> Self {
         NumberLit::Number(Rc::new(n.into()))
+    }
+}
+
+impl From<Integer> for NumberLit {
+    #[inline]
+    fn from(n: Integer) -> Self {
+        NumberLit::Number(Rc::new(n))
+    }
+}
+
+impl From<BitVec> for NumberLit {
+    fn from(bits: BitVec) -> Self {
+        match bits.split_first() {
+            Some((neg, bits)) => {
+                let mut bits = BitBox::<usize, Lsb0>::from(bits);
+                bits.force_align();
+                bits.fill_uninitialized(false);
+                bits.reverse();
+                let mut n = Integer::from_digits(bits.as_raw_slice(), Order::LsfLe);
+                if *neg {
+                    n.neg_assign();
+                }
+                NumberLit::from(n)
+            }
+            None => NumberLit::Empty,
+        }
     }
 }
 
@@ -205,20 +240,20 @@ mod tests {
         });
         let l = LabelLit(bitvec![0, 1, 0, 0, 1, 1, 0, 0]);
         test_empty!(Inst::Push(NumberLit::Empty));
-        test!("Push 0", Inst::Push(0.into()));
-        test!("Push 1234", Inst::Push(1234.into()));
-        test!("Push (-1234)", Inst::Push((-1234).into()));
+        test!("Push 0", Inst::Push(NumberLit::new(0)));
+        test!("Push 1234", Inst::Push(NumberLit::new(1234)));
+        test!("Push (-1234)", Inst::Push(NumberLit::new(-1234)));
         test!("Dup", Inst::Dup);
         test_empty!(Inst::Copy(NumberLit::Empty));
-        test!("Ref 0", Inst::Copy(0.into()));
-        test!("Ref 1234", Inst::Copy(1234.into()));
-        test!("Ref (-1234)", Inst::Copy((-1234).into()));
+        test!("Ref 0", Inst::Copy(NumberLit::new(0)));
+        test!("Ref 1234", Inst::Copy(NumberLit::new(1234)));
+        test!("Ref (-1234)", Inst::Copy(NumberLit::new(-1234)));
         test!("Swap", Inst::Swap);
         test!("Discard", Inst::Drop);
         test_empty!(Inst::Slide(NumberLit::Empty));
-        test!("Slide 0", Inst::Slide(0.into()));
-        test!("Slide 1234", Inst::Slide(1234.into()));
-        test!("Slide (-1234)", Inst::Slide((-1234).into()));
+        test!("Slide 0", Inst::Slide(NumberLit::new(0)));
+        test!("Slide 1234", Inst::Slide(NumberLit::new(1234)));
+        test!("Slide (-1234)", Inst::Slide(NumberLit::new(-1234)));
         test!("Infix Plus", Inst::Add);
         test!("Infix Minus", Inst::Sub);
         test!("Infix Times", Inst::Mul);

@@ -206,14 +206,14 @@ mod tests {
 
     #[test]
     fn copy_negative() {
-        let mut vm = VM::new(vec![Inst::Copy(NumberLit::from(-1))]);
+        let mut vm = VM::new(vec![Inst::Copy(NumberLit::new(-1))]);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyNegative)], vm.stack());
     }
 
     #[test]
     fn copy_large() {
-        let mut vm = VM::new(vec![Inst::Copy(NumberLit::from(1))]);
+        let mut vm = VM::new(vec![Inst::Copy(NumberLit::new(1))]);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyLarge)], vm.stack());
     }
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn slide_empty() {
         let mut vm = VM::new(vec![
-            Inst::Push(NumberLit::from(1)),
+            Inst::Push(NumberLit::new(1)),
             Inst::Slide(NumberLit::Empty),
             Inst::Drop,
             Inst::Drop,
@@ -235,8 +235,8 @@ mod tests {
     #[test]
     fn slide_negative() {
         let mut vm = VM::new(vec![
-            Inst::Push(NumberLit::from(1)),
-            Inst::Slide(NumberLit::from(-2)),
+            Inst::Push(NumberLit::new(1)),
+            Inst::Slide(NumberLit::new(-2)),
             Inst::Drop,
             Inst::Drop,
         ]);
