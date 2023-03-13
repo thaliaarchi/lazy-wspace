@@ -200,7 +200,7 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
 impl Heap {
     /// The approximate maximum address at which a value can be stored before
     /// wspace exits with a Haskell stack space overflow error.
-    pub const MAX_ADDRESS: u32 = u32::MAX;
+    pub const MAX_ADDRESS: u32 = 3311732932;
 
     #[inline]
     pub fn new() -> Self {
