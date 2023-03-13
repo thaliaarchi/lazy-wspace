@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::rc::Rc;
 
 use rug::Integer;
@@ -8,13 +9,15 @@ use crate::error::{Error, NumberError};
 use crate::inst::{Inst, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VM {
+#[derive(Debug, PartialEq, Eq)]
+pub struct VM<'a, I: ?Sized, O: ?Sized> {
     prog: Vec<Inst>,
     stack: Vec<NumberRef>,
     heap: Heap,
     pc: usize,
     call_stack: Vec<usize>,
+    stdin: &'a mut I,
+    stdout: &'a mut O,
     on_underflow: UnderflowError,
 }
 
@@ -30,15 +33,17 @@ pub struct Heap {
     big: HashMap<Rc<Integer>, NumberRef>,
 }
 
-impl VM {
+impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
     #[inline]
-    pub fn new(prog: Vec<Inst>) -> Self {
+    pub fn new(prog: Vec<Inst>, stdin: &'a mut I, stdout: &'a mut O) -> Self {
         VM {
             prog,
             stack: Vec::new(),
             heap: Heap::new(),
             pc: 0,
             call_stack: Vec::new(),
+            stdin,
+            stdout,
             on_underflow: UnderflowError::Pop,
         }
     }
@@ -48,8 +53,17 @@ impl VM {
         &self.stack
     }
 
+    pub fn execute(&mut self) -> Result<(), Error> {
+        while self.pc < self.prog.len() {
+            self.step()?;
+        }
+        Ok(())
+    }
+
     pub fn step(&mut self) -> Result<(), Error> {
         let inst = &self.prog[self.pc];
+        self.pc += 1;
+
         macro_rules! pop(() => {
             self.stack.pop().ok_or_else(|| self.underflow(inst))
         });
@@ -63,6 +77,7 @@ impl VM {
             let x = pop!()?;
             self.stack.push(Number::Op($op, x, y).into());
         }});
+
         match inst {
             Inst::Push(n) => {
                 self.stack.push(n.into());
@@ -135,15 +150,27 @@ impl VM {
             Inst::Jmp(_) => todo!(),
             Inst::Jz(_) => todo!(),
             Inst::Jn(_) => todo!(),
-            Inst::Ret => todo!(),
-            Inst::End => todo!(),
-            Inst::Printc => todo!(),
-            Inst::Printi => todo!(),
+            Inst::Ret => {
+                self.pc = self.call_stack.pop().ok_or(Error::RetUnderflow)?;
+            }
+            Inst::End => self.pc = self.prog.len(),
+            Inst::Printc => {
+                let n = Number::eval(pop!()?)?;
+                let ch = n
+                    .to_u32()
+                    .and_then(char::from_u32)
+                    .ok_or(Error::PrintcInvalid(n))?;
+                write!(self.stdout, "{ch}").unwrap();
+                self.stdout.flush().unwrap();
+            }
+            Inst::Printi => {
+                let n = Number::eval(pop!()?)?;
+                writeln!(self.stdout, "{n}").unwrap();
+            }
             Inst::Readc => todo!(),
             Inst::Readi => todo!(),
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),
         }
-        self.pc += 1;
         Ok(())
     }
 
@@ -199,50 +226,70 @@ mod tests {
 
     #[test]
     fn copy_empty() {
-        let mut vm = VM::new(vec![Inst::Copy(NumberLit::Empty)]);
+        let prog = vec![Inst::Copy(NumberLit::Empty)];
+        let mut stdin = &b""[..];
+        let mut stdout = Vec::<u8>::new();
+        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::EmptyLit)], vm.stack());
+        assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn copy_negative() {
-        let mut vm = VM::new(vec![Inst::Copy(NumberLit::new(-1))]);
+        let prog = vec![Inst::Copy(NumberLit::new(-1))];
+        let mut stdin = &b""[..];
+        let mut stdout = Vec::<u8>::new();
+        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyNegative)], vm.stack());
+        assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn copy_large() {
-        let mut vm = VM::new(vec![Inst::Copy(NumberLit::new(1))]);
+        let prog = vec![Inst::Copy(NumberLit::new(1))];
+        let mut stdin = &b""[..];
+        let mut stdout = Vec::<u8>::new();
+        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyLarge)], vm.stack());
+        assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn slide_empty() {
-        let mut vm = VM::new(vec![
+        let prog = vec![
             Inst::Push(NumberLit::new(1)),
             Inst::Slide(NumberLit::Empty),
             Inst::Drop,
             Inst::Drop,
-        ]);
+        ];
+        let mut stdin = &b""[..];
+        let mut stdout = Vec::<u8>::new();
+        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
         assert_eq!(Err(NumberError::EmptyLit.into()), vm.step());
+        assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn slide_negative() {
-        let mut vm = VM::new(vec![
+        let prog = vec![
             Inst::Push(NumberLit::new(1)),
             Inst::Slide(NumberLit::new(-2)),
             Inst::Drop,
             Inst::Drop,
-        ]);
+        ];
+        let mut stdin = &b""[..];
+        let mut stdout = Vec::<u8>::new();
+        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
         assert_eq!(Err(Error::Underflow(PrintableInst::Drop)), vm.step());
+        assert_eq!(Vec::<u8>::new(), stdout);
     }
 }

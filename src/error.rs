@@ -1,15 +1,22 @@
 use std::io::{stderr, Write};
 use std::process;
+use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
 
+use rug::Integer;
+
 use crate::inst::{ArgKind, PrintableInst};
+
+pub struct HaskellDisplay<T>(pub T);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     Parse(ParseError),
     Number(NumberError),
     Underflow(PrintableInst),
+    RetUnderflow,
+    PrintcInvalid(Rc<Integer>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +68,13 @@ impl Error {
             Error::Underflow(inst) => {
                 HaskellError::Error(format!("{wspace}: user error (Can't do {inst})\n"))
             }
+            Error::RetUnderflow => {
+                HaskellError::Error(format!("{wspace}: user error (Can't do Return)\n"))
+            }
+            Error::PrintcInvalid(n) => HaskellError::Error(format!(
+                "{wspace}: Prelude.chr: bad argument: {}",
+                HaskellDisplay(n.as_ref())
+            )),
         }
     }
 }

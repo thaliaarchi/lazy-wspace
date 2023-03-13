@@ -7,7 +7,7 @@ use rug::integer::Order;
 use rug::ops::NegAssign;
 use rug::Integer;
 
-use crate::error::{Error, NumberError, ParseError};
+use crate::error::{Error, HaskellDisplay, NumberError, ParseError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Inst {
@@ -163,16 +163,13 @@ impl Inst {
 
 impl Display for PrintableInst {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        macro_rules! write_number(($f:expr, $name:literal, $n:expr) => {{
-            $f.write_str(concat!($name, " ")).and_then(|_| fmt_integer_haskell($f, $n))
-        }});
         match self {
-            PrintableInst::Push(n) => write_number!(f, "Push", n),
+            PrintableInst::Push(n) => write!(f, "Push {}", HaskellDisplay(n.as_ref())),
             PrintableInst::Dup => f.write_str("Dup"),
-            PrintableInst::Copy(n) => write_number!(f, "Ref", n),
+            PrintableInst::Copy(n) => write!(f, "Ref {}", HaskellDisplay(n.as_ref())),
             PrintableInst::Swap => f.write_str("Swap"),
             PrintableInst::Drop => f.write_str("Discard"),
-            PrintableInst::Slide(n) => write_number!(f, "Slide", n),
+            PrintableInst::Slide(n) => write!(f, "Slide {}", HaskellDisplay(n.as_ref())),
             PrintableInst::Add => f.write_str("Infix Plus"),
             PrintableInst::Sub => f.write_str("Infix Minus"),
             PrintableInst::Mul => f.write_str("Infix Times"),
@@ -180,11 +177,11 @@ impl Display for PrintableInst {
             PrintableInst::Mod => f.write_str("Infix Modulo"),
             PrintableInst::Store => f.write_str("Store"),
             PrintableInst::Retrieve => f.write_str("Retrieve"),
-            PrintableInst::Label(l) => write!(f, "Label {l}"),
-            PrintableInst::Call(l) => write!(f, "Call {l}"),
-            PrintableInst::Jmp(l) => write!(f, "Jump {l}"),
-            PrintableInst::Jz(l) => write!(f, "If Zero {l}"),
-            PrintableInst::Jn(l) => write!(f, "If Negative {l}"),
+            PrintableInst::Label(l) => write!(f, "Label {}", HaskellDisplay(l)),
+            PrintableInst::Call(l) => write!(f, "Call {}", HaskellDisplay(l)),
+            PrintableInst::Jmp(l) => write!(f, "Jump {}", HaskellDisplay(l)),
+            PrintableInst::Jz(l) => write!(f, "If Zero {}", HaskellDisplay(l)),
+            PrintableInst::Jn(l) => write!(f, "If Negative {}", HaskellDisplay(l)),
             PrintableInst::Ret => f.write_str("Return"),
             PrintableInst::End => f.write_str("End"),
             PrintableInst::Printc => f.write_str("OutputChar"),
@@ -205,18 +202,22 @@ impl NumberLit {
     }
 }
 
-pub fn fmt_integer_haskell(f: &mut dyn fmt::Write, n: &Integer) -> fmt::Result {
-    if n.cmp0() == Ordering::Less {
-        write!(f, "({n})") // Parenthesize negatives
-    } else {
-        write!(f, "{n}")
+impl Display for HaskellDisplay<&Integer> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = self.0;
+        if n.cmp0() == Ordering::Less {
+            write!(f, "({n})") // Parenthesize negatives
+        } else {
+            write!(f, "{n}")
+        }
     }
 }
 
-impl Display for LabelLit {
+impl Display for HaskellDisplay<&LabelLit> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let l = self.0;
         write!(f, "\"")?;
-        for bit in self.0.iter().rev() {
+        for bit in l.0.iter().rev() {
             f.write_str(if *bit { "\\t" } else { " " })?;
         }
         write!(f, "\"")
