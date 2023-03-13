@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::rc::Rc;
 
@@ -7,7 +6,8 @@ use rug::integer::Order;
 use rug::ops::NegAssign;
 use rug::Integer;
 
-use crate::error::{Error, HaskellDisplay, NumberError, ParseError};
+use crate::error::{Error, NumberError, ParseError};
+use crate::number::IntegerExt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Inst {
@@ -181,12 +181,12 @@ impl Inst {
 impl Display for PrintableInst {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            PrintableInst::Push(n) => write!(f, "Push {}", HaskellDisplay(n.as_ref())),
+            PrintableInst::Push(n) => write!(f, "Push {}", n.to_haskell_show()),
             PrintableInst::Dup => f.write_str("Dup"),
-            PrintableInst::Copy(n) => write!(f, "Ref {}", HaskellDisplay(n.as_ref())),
+            PrintableInst::Copy(n) => write!(f, "Ref {}", n.to_haskell_show()),
             PrintableInst::Swap => f.write_str("Swap"),
             PrintableInst::Drop => f.write_str("Discard"),
-            PrintableInst::Slide(n) => write!(f, "Slide {}", HaskellDisplay(n.as_ref())),
+            PrintableInst::Slide(n) => write!(f, "Slide {}", n.to_haskell_show()),
             PrintableInst::Add => f.write_str("Infix Plus"),
             PrintableInst::Sub => f.write_str("Infix Minus"),
             PrintableInst::Mul => f.write_str("Infix Times"),
@@ -215,17 +215,6 @@ impl NumberLit {
         match self {
             NumberLit::Number(n) => Ok(n),
             NumberLit::Empty => Err(NumberError::EmptyLit),
-        }
-    }
-}
-
-impl Display for HaskellDisplay<&Integer> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n = self.0;
-        if n.cmp0() == Ordering::Less {
-            write!(f, "({n})") // Parenthesize negatives
-        } else {
-            write!(f, "{n}")
         }
     }
 }

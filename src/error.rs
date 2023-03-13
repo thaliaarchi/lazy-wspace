@@ -7,8 +7,7 @@ use std::time::Duration;
 use rug::Integer;
 
 use crate::inst::{ArgKind, LabelLit, PrintableInst};
-
-pub struct HaskellDisplay<T>(pub T);
+use crate::number::IntegerExt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -78,7 +77,7 @@ impl Error {
                 HaskellError::Error(format!("{wspace}: user error (Can't do Return)\n"), 1)
             }
             Error::PrintcInvalid(n) => {
-                HaskellError::Error(format!("{wspace}: Prelude.chr: bad argument: {}", HaskellDisplay(n.as_ref())), 1)
+                HaskellError::Error(format!("{wspace}: Prelude.chr: bad argument: {}", n.to_haskell_show()), 1)
             }
         }
     }

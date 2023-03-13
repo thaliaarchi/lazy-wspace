@@ -69,37 +69,46 @@ impl Number {
 }
 
 impl Op {
-    pub fn eval(self, x: Rc<Integer>, y: Rc<Integer>) -> Option<Integer> {
+    pub fn eval(self, lhs: Rc<Integer>, rhs: Rc<Integer>) -> Option<Integer> {
         match self {
-            Op::Add => Some(add_rc(x, y)),
-            Op::Sub => Some(sub_rc(x, y)),
-            Op::Mul => Some(mul_rc(x, y)),
-            Op::Div => div_rc(x, y),
-            Op::Mod => mod_rc(x, y),
+            Op::Add => Some(lhs.add_rc(rhs)),
+            Op::Sub => Some(lhs.sub_rc(rhs)),
+            Op::Mul => Some(lhs.mul_rc(rhs)),
+            Op::Div => lhs.div_floor_rc(rhs),
+            Op::Mod => lhs.rem_floor_rc(rhs),
         }
     }
 }
 
-macro_rules! arith_op(($x:expr, $y:expr, $op:ident, $op_assign:ident, $op_from:ident) => {
-    match (Rc::try_unwrap($x), Rc::try_unwrap($y)) {
-        (Ok(mut x), Ok(mut y)) => {
-            if rhs_has_more_alloc(&x, &y) {
-                y.$op_from(x);
-                y
+pub trait IntegerExt {
+    fn add_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
+    fn sub_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
+    fn mul_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
+    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer>;
+    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer>;
+    fn to_haskell_show(&self) -> String;
+}
+
+macro_rules! arith_op(($lhs:expr, $rhs:expr, $op:ident, $op_assign:ident, $op_from:ident) => {
+    match (Rc::try_unwrap($lhs), Rc::try_unwrap($rhs)) {
+        (Ok(mut lhs), Ok(mut rhs)) => {
+            if rhs_has_more_alloc(&lhs, &rhs) {
+                rhs.$op_from(lhs);
+                rhs
             } else {
-                x.$op_assign(y);
-                x
+                lhs.$op_assign(rhs);
+                lhs
             }
         }
-        (Ok(mut x), Err(y)) => {
-            x.$op_assign(&*y);
-            x
+        (Ok(mut lhs), Err(rhs)) => {
+            lhs.$op_assign(&*rhs);
+            lhs
         }
-        (Err(x), Ok(mut y)) => {
-            y.$op_from(&*x);
-            y
+        (Err(lhs), Ok(mut rhs)) => {
+            rhs.$op_from(&*lhs);
+            rhs
         }
-        (Err(x), Err(y)) => (&*x).$op(&*y).into(),
+        (Err(lhs), Err(rhs)) => (&*lhs).$op(&*rhs).into(),
     }
 });
 
@@ -109,27 +118,53 @@ fn rhs_has_more_alloc(lhs: &Integer, rhs: &Integer) -> bool {
     unsafe { (*lhs.as_raw()).alloc < (*rhs.as_raw()).alloc }
 }
 
-fn add_rc(x: Rc<Integer>, y: Rc<Integer>) -> Integer {
-    arith_op!(x, y, add, add_assign, add_from)
-}
-fn sub_rc(x: Rc<Integer>, y: Rc<Integer>) -> Integer {
-    arith_op!(x, y, sub, sub_assign, sub_from)
-}
-fn mul_rc(x: Rc<Integer>, y: Rc<Integer>) -> Integer {
-    arith_op!(x, y, mul, mul_assign, mul_from)
-}
-fn div_rc(x: Rc<Integer>, y: Rc<Integer>) -> Option<Integer> {
-    if y.cmp0() == Ordering::Equal {
-        None
-    } else {
-        Some(arith_op!(x, y, div_floor, div_floor_assign, div_floor_from))
+impl IntegerExt for Integer {
+    fn add_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
+        arith_op!(self, rhs, add, add_assign, add_from)
     }
-}
-fn mod_rc(x: Rc<Integer>, y: Rc<Integer>) -> Option<Integer> {
-    if y.cmp0() == Ordering::Equal {
-        None
-    } else {
-        Some(arith_op!(x, y, rem_floor, rem_floor_assign, rem_floor_from))
+
+    fn sub_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
+        arith_op!(self, rhs, sub, sub_assign, sub_from)
+    }
+
+    fn mul_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
+        arith_op!(self, rhs, mul, mul_assign, mul_from)
+    }
+
+    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer> {
+        if rhs.cmp0() == Ordering::Equal {
+            None
+        } else {
+            Some(arith_op!(
+                self,
+                rhs,
+                div_floor,
+                div_floor_assign,
+                div_floor_from
+            ))
+        }
+    }
+
+    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer> {
+        if rhs.cmp0() == Ordering::Equal {
+            None
+        } else {
+            Some(arith_op!(
+                self,
+                rhs,
+                rem_floor,
+                rem_floor_assign,
+                rem_floor_from
+            ))
+        }
+    }
+
+    fn to_haskell_show(&self) -> String {
+        if self.cmp0() == Ordering::Less {
+            format!("({self})")
+        } else {
+            self.to_string()
+        }
     }
 }
 
