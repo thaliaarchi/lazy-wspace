@@ -1,25 +1,26 @@
-use std::fmt::Formatter;
+use std::io::{stderr, Write};
 use std::process;
 use std::thread;
 use std::time::Duration;
 
-use crate::inst::{ArgKind, Inst};
+use crate::inst::{ArgKind, PrintableInst};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     Parse(ParseError),
     Number(NumberError),
-    Underflow(Inst),
+    Underflow(PrintableInst),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Unterminated(ArgKind),
+    UnrecognizedInst,
     ImplicitEnd,
     InvalidUtf8,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NumberError {
     EmptyLit,
     CopyLarge,
@@ -31,6 +32,19 @@ pub enum NumberError {
     Internal,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HaskellError {
+    Error(String),
+    InfiniteLoop,
+}
+
+impl From<ParseError> for Error {
+    #[inline]
+    fn from(err: ParseError) -> Self {
+        Error::Parse(err)
+    }
+}
+
 impl From<NumberError> for Error {
     #[inline]
     fn from(err: NumberError) -> Self {
@@ -39,62 +53,70 @@ impl From<NumberError> for Error {
 }
 
 impl Error {
-    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, filename: &str) -> ! {
+    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
         match self {
-            Error::Parse(err) => err.handle_wspace(f, wspace, filename),
-            Error::Number(err) => err.handle_wspace(f, wspace, filename),
+            Error::Parse(err) => err.to_haskell(wspace, filename),
+            Error::Number(err) => err.to_haskell(wspace, filename),
             Error::Underflow(inst) => {
-                writeln!(f, "{wspace}: user error (Can't do {inst})").unwrap();
-                process::exit(1)
+                HaskellError::Error(format!("{wspace}: user error (Can't do {inst})\n"))
             }
         }
     }
 }
 
 impl ParseError {
-    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, filename: &str) -> ! {
-        match self {
-            ParseError::Unterminated(arg) => {
-                match arg {
-                    // Extra LFs are reproduced
-                    ArgKind::Number => writeln!(
-                        f,
-                        "{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n"
-                    ),
-                    ArgKind::Label => writeln!(
-                        f,
-                        "{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n"
-                    ),
-                }
+    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
+        HaskellError::Error(match self {
+            ParseError::Unterminated(ArgKind::Number) => {
+                format!("{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n\n")
             }
-            ParseError::ImplicitEnd => writeln!(f, "{wspace}: Prelude.!!: index too large"),
-            ParseError::InvalidUtf8 => writeln!(
-                f,
-                "{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)"
-            ),
-        }
-        .unwrap();
-        process::exit(1)
+            ParseError::Unterminated(ArgKind::Label) => {
+                format!("{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n\n")
+            }
+            ParseError::UnrecognizedInst => {
+                format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n")
+            }
+            ParseError::ImplicitEnd => {
+                format!("{wspace}: Prelude.!!: index too large\n")
+            }
+            ParseError::InvalidUtf8 => {
+                format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n")
+            }
+        })
     }
 }
 
 impl NumberError {
-    pub fn handle_wspace(&self, f: &mut Formatter<'_>, wspace: &str, _filename: &str) -> ! {
+    pub fn to_haskell(&self, wspace: &str, _filename: &str) -> HaskellError {
         match self {
-            NumberError::EmptyLit => writeln!(f, "{wspace}: Prelude.last: empty list"),
+            NumberError::EmptyLit => {
+                HaskellError::Error(format!("{wspace}: Prelude.last: empty list\n"))
+            }
             NumberError::CopyLarge | NumberError::RetrieveLarge => {
-                writeln!(f, "{wspace}: Prelude.!!: index too large")
+                HaskellError::Error(format!("{wspace}: Prelude.!!: index too large\n"))
             }
             NumberError::CopyNegative | NumberError::RetrieveNegative => {
-                writeln!(f, "{wspace}: Prelude.!!: negative index")
+                HaskellError::Error(format!("{wspace}: Prelude.!!: negative index\n"))
             }
-            NumberError::StoreNegative => loop {
-                thread::sleep(Duration::MAX);
-            },
-            NumberError::DivModZero => writeln!(f, "{wspace}: divide by zero"),
+            NumberError::StoreNegative => HaskellError::InfiniteLoop,
+            NumberError::DivModZero => HaskellError::Error(format!("{wspace}: divide by zero\n")),
             NumberError::Internal => panic!("BUG: internal error"),
         }
-        .unwrap();
-        process::exit(1)
+    }
+}
+
+impl HaskellError {
+    pub fn handle(&self) -> ! {
+        match self {
+            HaskellError::Error(err) => {
+                let mut w = stderr().lock();
+                write!(w, "{err}").unwrap();
+                w.flush().unwrap();
+                process::exit(1);
+            }
+            HaskellError::InfiniteLoop => loop {
+                thread::sleep(Duration::MAX);
+            },
+        }
     }
 }

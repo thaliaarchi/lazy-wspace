@@ -40,7 +40,7 @@ impl Number {
         match &*n.borrow() {
             Number::Value(n) => return Ok(n.clone()),
             Number::Op(_, _, _) => {}
-            Number::Error(err) => return Err(*err),
+            Number::Error(err) => return Err(err.clone()),
         }
 
         let cell = n;
@@ -51,7 +51,7 @@ impl Number {
         };
         let inner = cell.replace(match &res {
             Ok(n) => Number::Value(n.clone()),
-            Err(err) => Number::Error(*err),
+            Err(err) => Number::Error(err.clone()),
         });
         debug_assert_eq!(Number::Error(NumberError::Internal), inner);
         res

@@ -9,8 +9,7 @@ use crate::inst::{Inst, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VM<'a> {
-    src: &'a [u8],
+pub struct VM {
     prog: Vec<Inst>,
     stack: Vec<NumberRef>,
     heap: Heap,
@@ -31,12 +30,11 @@ pub struct Heap {
     big: HashMap<Rc<Integer>, NumberRef>,
 }
 
-impl<'a> VM<'a> {
+impl VM {
     #[inline]
-    pub fn new(src: &'a [u8]) -> Self {
+    pub fn new(prog: Vec<Inst>) -> Self {
         VM {
-            src,
-            prog: Vec::new(),
+            prog,
             stack: Vec::new(),
             heap: Heap::new(),
             pc: 0,
@@ -152,7 +150,10 @@ impl<'a> VM<'a> {
     #[inline]
     fn underflow(&self, inst: &Inst) -> Error {
         match self.on_underflow {
-            UnderflowError::Pop => Error::Underflow(inst.clone()),
+            UnderflowError::Pop => match inst.to_printable() {
+                Ok(inst) => Error::Underflow(inst),
+                Err(err) => err,
+            },
             UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
         }
     }
@@ -190,48 +191,36 @@ impl Heap {
     }
 }
 
-impl From<Vec<Inst>> for VM<'static> {
-    fn from(prog: Vec<Inst>) -> Self {
-        VM {
-            src: b"",
-            prog,
-            stack: Vec::new(),
-            heap: Heap::new(),
-            pc: 0,
-            call_stack: Vec::new(),
-            on_underflow: UnderflowError::Pop,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::inst::PrintableInst;
+
     use super::*;
 
     #[test]
     fn copy_empty() {
-        let mut vm = VM::from(vec![Inst::Copy(NumberLit::Empty)]);
+        let mut vm = VM::new(vec![Inst::Copy(NumberLit::Empty)]);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::EmptyLit)], vm.stack());
     }
 
     #[test]
     fn copy_negative() {
-        let mut vm = VM::from(vec![Inst::Copy(NumberLit::from(-1))]);
+        let mut vm = VM::new(vec![Inst::Copy(NumberLit::from(-1))]);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyNegative)], vm.stack());
     }
 
     #[test]
     fn copy_large() {
-        let mut vm = VM::from(vec![Inst::Copy(NumberLit::from(1))]);
+        let mut vm = VM::new(vec![Inst::Copy(NumberLit::from(1))]);
         vm.step().unwrap();
         assert_eq!(&[NumberRef::from(NumberError::CopyLarge)], vm.stack());
     }
 
     #[test]
     fn slide_empty() {
-        let mut vm = VM::from(vec![
+        let mut vm = VM::new(vec![
             Inst::Push(NumberLit::from(1)),
             Inst::Slide(NumberLit::Empty),
             Inst::Drop,
@@ -245,7 +234,7 @@ mod tests {
 
     #[test]
     fn slide_negative() {
-        let mut vm = VM::from(vec![
+        let mut vm = VM::new(vec![
             Inst::Push(NumberLit::from(1)),
             Inst::Slide(NumberLit::from(-2)),
             Inst::Drop,
@@ -254,6 +243,6 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(Error::Underflow(Inst::Drop)), vm.step());
+        assert_eq!(Err(Error::Underflow(PrintableInst::Drop)), vm.step());
     }
 }
