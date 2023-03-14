@@ -203,7 +203,8 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Printi => {
                 let n = Number::eval(pop!()?)?;
-                writeln!(self.stdout, "{n}").unwrap();
+                write!(self.stdout, "{n}").unwrap();
+                self.stdout.flush().unwrap();
             }
             Inst::Readc => todo!(),
             Inst::Readi => todo!(),
