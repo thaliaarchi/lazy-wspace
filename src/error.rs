@@ -1,4 +1,4 @@
-use std::io::{stderr, Write};
+use std::io::{self, stderr, Write};
 use std::process;
 use std::rc::Rc;
 use std::thread;
@@ -41,6 +41,13 @@ pub enum NumberError {
     Internal,
 }
 
+#[derive(Debug)]
+pub enum IoError {
+    Io(io::Error),
+    Eof,
+    InvalidUtf8,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HaskellError {
     Error(String, i32),
@@ -58,6 +65,13 @@ impl From<NumberError> for Error {
     #[inline]
     fn from(err: NumberError) -> Self {
         Error::Number(err)
+    }
+}
+
+impl From<io::Error> for IoError {
+    #[inline]
+    fn from(err: io::Error) -> Self {
+        IoError::Io(err)
     }
 }
 
@@ -127,6 +141,20 @@ impl NumberError {
                 HaskellError::Error(format!("{wspace}: divide by zero\n"), 1)
             }
             NumberError::Internal => panic!("BUG: internal error"),
+        }
+    }
+}
+
+impl IoError {
+    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
+        match self {
+            IoError::Io(err) => panic!("{err}"),
+            IoError::Eof => {
+                HaskellError::Error(format!("{wspace}: <stdin>: hGetChar: end of file\n"), 1)
+            }
+            IoError::InvalidUtf8 => {
+                HaskellError::Error(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
+            }
         }
     }
 }
