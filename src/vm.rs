@@ -167,7 +167,7 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Retrieve => {
                 let addr = pop!()?;
-                let n = self.heap.retrieve(addr)?;
+                let n = self.heap.retrieve(addr);
                 self.stack.push(n);
             }
             Inst::Label(_) => {}
@@ -249,10 +249,13 @@ impl Heap {
         Err(Error::StoreOverflow)
     }
 
-    pub fn retrieve(&mut self, addr: NumberRef) -> Result<NumberRef, Error> {
-        let addr = Number::eval(addr)?;
+    pub fn retrieve(&mut self, addr: NumberRef) -> NumberRef {
+        let addr = match Number::eval(addr) {
+            Ok(n) => n,
+            Err(err) => return err.into(),
+        };
         if addr.cmp0() == Ordering::Less {
-            return Ok(NumberError::RetrieveNegative.into());
+            return NumberError::RetrieveNegative.into();
         }
         if let Some(addr) = addr.to_u32() {
             if addr < self.len {
@@ -261,10 +264,10 @@ impl Heap {
                     .entry(addr)
                     .or_insert(Number::zero().into())
                     .clone();
-                return Ok(n);
+                return n;
             }
         }
-        Ok(NumberError::RetrieveLarge.into())
+        NumberError::RetrieveLarge.into()
     }
 }
 
