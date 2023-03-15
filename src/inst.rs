@@ -178,6 +178,38 @@ impl Inst {
     }
 }
 
+impl Display for Inst {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Inst::Push(n) => write!(f, "push {n}"),
+            Inst::Dup => write!(f, "dup"),
+            Inst::Copy(n) => write!(f, "copy {n}"),
+            Inst::Swap => write!(f, "swap"),
+            Inst::Drop => write!(f, "drop"),
+            Inst::Slide(n) => write!(f, "slide {n}"),
+            Inst::Add => write!(f, "add"),
+            Inst::Sub => write!(f, "sub"),
+            Inst::Mul => write!(f, "mul"),
+            Inst::Div => write!(f, "div"),
+            Inst::Mod => write!(f, "mod"),
+            Inst::Store => write!(f, "store"),
+            Inst::Retrieve => write!(f, "retrieve"),
+            Inst::Label(l) => write!(f, "label {l}"),
+            Inst::Call(l) => write!(f, "call {l}"),
+            Inst::Jmp(l) => write!(f, "jmp {l}"),
+            Inst::Jz(l) => write!(f, "jz {l}"),
+            Inst::Jn(l) => write!(f, "jn {l}"),
+            Inst::Ret => write!(f, "ret"),
+            Inst::End => write!(f, "end"),
+            Inst::Printc => write!(f, "printc"),
+            Inst::Printi => write!(f, "printi"),
+            Inst::Readc => write!(f, "readc"),
+            Inst::Readi => write!(f, "readi"),
+            Inst::ParseError(err) => write!(f, "error {err:?}"),
+        }
+    }
+}
+
 impl Display for PrintableInst {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -206,6 +238,25 @@ impl Display for PrintableInst {
             PrintableInst::Readc => f.write_str("ReadChar"),
             PrintableInst::Readi => f.write_str("ReadNum"),
         }
+    }
+}
+
+impl Display for NumberLit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            NumberLit::Number(n) => write!(f, "{n}"),
+            NumberLit::Empty => write!(f, "<empty>"),
+        }
+    }
+}
+
+impl Display for LabelLit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("l")?;
+        for bit in &self.0 {
+            f.write_str(if *bit { "1" } else { "0" })?;
+        }
+        Ok(())
     }
 }
 

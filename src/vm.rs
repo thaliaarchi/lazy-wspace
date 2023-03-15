@@ -74,11 +74,6 @@ impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
         macro_rules! pop(() => {
             self.stack.pop().ok_or_else(|| self.underflow(inst))
         });
-        macro_rules! top(() => {
-            self.stack
-                .get(self.stack.len().wrapping_sub(1))
-                .ok_or_else(|| self.underflow(inst))
-        });
         macro_rules! arith(($op:expr) => {{
             let y = pop!()?;
             let x = pop!()?;
@@ -96,17 +91,20 @@ impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
                 self.stack.push(n.into());
             }
             Inst::Dup => {
-                self.stack.push(top!()?.clone());
+                let i = self.stack.len().wrapping_sub(1);
+                let top = self.stack.get(i).ok_or_else(|| self.underflow(inst))?;
+                self.stack.push(top.clone());
             }
-            Inst::Copy(i) => {
-                let x = match i {
-                    NumberLit::Number(i) => {
-                        if i.cmp0() == Ordering::Less {
+            Inst::Copy(n) => {
+                let x = match n {
+                    NumberLit::Number(n) => {
+                        if n.cmp0() == Ordering::Less {
                             NumberError::CopyNegative.into()
                         } else {
-                            let i = i.to_usize().unwrap_or(usize::MAX);
-                            match self.stack.get(self.stack.len().wrapping_sub(i)) {
-                                Some(n) => n.clone(),
+                            let n = n.to_usize().unwrap_or(usize::MAX);
+                            let i = self.stack.len().wrapping_sub(n.wrapping_add(1));
+                            match self.stack.get(i) {
+                                Some(x) => x.clone(),
                                 None => NumberError::CopyLarge.into(),
                             }
                         }
