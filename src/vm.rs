@@ -1,14 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
+use std::io::{BufRead, Write};
+
+use rug::Integer;
 
 use crate::error::{Error, NumberError, ParseError};
 use crate::inst::{Inst, LabelLit, NumberLit};
-use crate::lex::Lexer;
 use crate::number::{Number, NumberRef, Op};
-use crate::parse::Parser;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VM<'a, I: ?Sized, O: ?Sized> {
@@ -35,18 +33,7 @@ pub struct Heap {
     len: u32,
 }
 
-pub fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {
-    let mut f = File::open(&path).unwrap();
-    let mut src = Vec::<u8>::new();
-    f.read_to_end(&mut src).unwrap();
-
-    let prog = Parser::new(Lexer::new(&src)).collect();
-    let mut stdout = Vec::new();
-    let mut vm = VM::new(prog, &mut stdin, &mut stdout);
-    (vm.execute(), stdout)
-}
-
-impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
+impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
     #[inline]
     pub fn new(prog: Vec<Inst>, stdin: &'a mut I, stdout: &'a mut O) -> Self {
         let mut labels = HashMap::new();
@@ -206,8 +193,23 @@ impl<'a, I: Read + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
                 write!(self.stdout, "{n}").unwrap();
                 self.stdout.flush().unwrap();
             }
-            Inst::Readc => todo!(),
-            Inst::Readi => todo!(),
+            Inst::Readc => {
+                let addr = pop!()?;
+                // TODO: Handle UTF-8
+                let mut buf = [0u8; 1];
+                self.stdin.read_exact(&mut buf[..])?;
+                self.heap.store(addr, Number::from(buf[0]).into())?;
+            }
+            Inst::Readi => {
+                let addr = pop!()?;
+                let mut line = String::new();
+                self.stdin.read_line(&mut line)?;
+                // TODO: Parse manually to match Haskell
+                let n = Integer::parse(&line)
+                    .map(Number::from)
+                    .unwrap_or(NumberError::ReadiParse.into());
+                self.heap.store(addr, n.into())?;
+            }
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),
         }
         Ok(())

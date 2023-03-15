@@ -1,10 +1,25 @@
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use bitvec::prelude::*;
 
-use crate::error::ParseError;
+use crate::error::{Error, ParseError};
 use crate::inst::{ArgKind, LabelLit};
-use crate::vm::execute_file;
+use crate::lex::Lexer;
+use crate::parse::Parser;
+use crate::vm::VM;
+
+fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {
+    let mut f = File::open(&path).unwrap();
+    let mut src = Vec::<u8>::new();
+    f.read_to_end(&mut src).unwrap();
+
+    let prog = Parser::new(Lexer::new(&src)).collect();
+    let mut stdout = Vec::new();
+    let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+    (vm.execute(), stdout)
+}
 
 #[test]
 fn execute_expected() {

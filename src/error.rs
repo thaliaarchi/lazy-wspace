@@ -1,15 +1,16 @@
-use std::io::{self, stderr, stdout, Write};
-use std::process;
+use std::fmt::Debug;
+use std::io::{self, stderr, stdout, ErrorKind, Write};
 use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
+use std::{mem, process};
 
 use rug::Integer;
 
 use crate::inst::{ArgKind, LabelLit, PrintableInst};
 use crate::number::IntegerExt;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Error {
     Usage,
     Parse(ParseError),
@@ -17,7 +18,10 @@ pub enum Error {
     Underflow(PrintableInst),
     StoreOverflow,
     RetUnderflow,
+    Io(io::Error),
     PrintcInvalid(Rc<Integer>),
+    ReadEof,
+    ReadInvalidUtf8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,14 +43,8 @@ pub enum NumberError {
     StoreNegative,
     RetrieveLarge,
     RetrieveNegative,
+    ReadiParse,
     Internal,
-}
-
-#[derive(Debug)]
-pub enum IoError {
-    Io(io::Error),
-    Eof,
-    InvalidUtf8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -70,12 +68,31 @@ impl From<NumberError> for Error {
     }
 }
 
-impl From<io::Error> for IoError {
+impl From<io::Error> for Error {
     #[inline]
     fn from(err: io::Error) -> Self {
-        IoError::Io(err)
+        if err.kind() == ErrorKind::UnexpectedEof {
+            Error::ReadEof
+        } else {
+            Error::Io(err)
+        }
     }
 }
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Error::Parse(err1), Error::Parse(err2)) => err1 == err2,
+            (Error::Number(err1), Error::Number(err2)) => err1 == err2,
+            (Error::Underflow(inst1), Error::Underflow(inst2)) => inst1 == inst2,
+            (Error::Io(err1), Error::Io(err2)) => err1.kind() == err2.kind(),
+            (Error::PrintcInvalid(err1), Error::PrintcInvalid(err2)) => err1 == err2,
+            _ => mem::discriminant(self) == mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for Error {}
 
 impl Error {
     #[rustfmt::skip]
@@ -96,8 +113,15 @@ impl Error {
             Error::RetUnderflow => {
                 HaskellError::Stderr(format!("{wspace}: user error (Can't do Return)\n"), 1)
             }
+            Error::Io(err) => panic!("{err}"),
             Error::PrintcInvalid(n) => {
                 HaskellError::Stderr(format!("{wspace}: Prelude.chr: bad argument: {}", n.to_haskell_show()), 1)
+            }
+            Error::ReadEof => {
+                HaskellError::Stderr(format!("{wspace}: <stdin>: hGetChar: end of file\n"), 1)
+            }
+            Error::ReadInvalidUtf8 => {
+                HaskellError::Stderr(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
             }
         }
     }
@@ -146,21 +170,10 @@ impl NumberError {
             NumberError::DivModZero => {
                 HaskellError::Stderr(format!("{wspace}: divide by zero\n"), 1)
             }
+            NumberError::ReadiParse => {
+                HaskellError::Stderr(format!("{wspace}: Prelude.read: no parse\n"), 1)
+            },
             NumberError::Internal => panic!("BUG: internal error"),
-        }
-    }
-}
-
-impl IoError {
-    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
-        match self {
-            IoError::Io(err) => panic!("{err}"),
-            IoError::Eof => {
-                HaskellError::Stderr(format!("{wspace}: <stdin>: hGetChar: end of file\n"), 1)
-            }
-            IoError::InvalidUtf8 => {
-                HaskellError::Stderr(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
-            }
         }
     }
 }
