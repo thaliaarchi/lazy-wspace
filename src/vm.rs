@@ -2,8 +2,6 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
-use rug::Integer;
-
 use crate::error::{Error, NumberError, ParseError};
 use crate::inst::{Inst, LabelLit, NumberLit};
 use crate::number::{Number, NumberRef, Op};
@@ -200,12 +198,7 @@ impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Readi => {
                 let addr = pop!()?;
-                let mut line = String::new();
-                self.stdin.read_line(&mut line)?;
-                // TODO: Parse manually to match Haskell
-                let n = Integer::parse(&line)
-                    .map(Number::from)
-                    .unwrap_or(NumberError::ReadiParse.into());
+                let n = Number::parse_from_read(&mut self.stdin)?;
                 self.heap.store(addr, n.into())?;
             }
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),

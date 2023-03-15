@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::io::BufRead;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::rc::Rc;
 
@@ -9,7 +10,7 @@ use rug::ops::{
 };
 use rug::Integer;
 
-use crate::error::NumberError;
+use crate::error::{Error, NumberError};
 use crate::inst::NumberLit;
 
 pub type NumberRef = Rc<RefCell<Number>>;
@@ -34,6 +35,95 @@ impl Number {
     #[inline]
     pub fn zero() -> Self {
         Integer::ZERO.into()
+    }
+
+    /// Parses a number of the form
+    /// `/\s*-?\s*([0-9]+|0[xX][0-9A-Fa-f]+|0[oO][0-7])\s*/`, where `\s`
+    /// represents any characters in the Unicode property White_Space, except
+    /// for line breaks U+000A, U+0085, U+2028, and U+2029.
+    pub fn parse(s: String) -> Result<Self, Error> {
+        if s.len() == 0 {
+            return Err(Error::ReadEof);
+        }
+
+        fn is_space(ch: char) -> bool {
+            match ch {
+                '\u{0009}' | '\u{000B}' | '\u{000C}' | '\u{000D}' | '\u{0020}' | '\u{00A0}'
+                | '\u{1680}' | '\u{2000}' | '\u{2001}' | '\u{2002}' | '\u{2003}' | '\u{2004}'
+                | '\u{2005}' | '\u{2006}' | '\u{2007}' | '\u{2008}' | '\u{2009}' | '\u{200A}'
+                | '\u{202F}' | '\u{205F}' | '\u{3000}' => true,
+                _ => false,
+            }
+        }
+
+        let number = s.strip_suffix('\n').unwrap_or(&s).trim_matches(is_space);
+        let (number, is_negative) = match number.strip_prefix('-') {
+            Some(number) => (number.trim_start_matches(is_space), true),
+            None => (number, false),
+        };
+
+        // The digits are ASCII, so convert it to bytes and reuse the buffer
+        // in-place for the Integer digits.
+        let start = unsafe {
+            // FIXME: replace with byte_offset_from, once stabilized
+            (number.as_ptr().cast::<u8>()).offset_from(s.as_ptr().cast::<u8>()) as usize
+        };
+        let end = start + number.len();
+        let mut b = s.into_bytes();
+        let mut digits = &mut b[start..end];
+        if digits.len() == 0 {
+            return Ok(NumberError::ReadiParse.into());
+        }
+
+        let radix = if digits[0] == b'0' {
+            match digits.get(1) {
+                Some(b'x' | b'X') => {
+                    digits = &mut digits[2..];
+                    16
+                }
+                Some(b'o' | b'O') => {
+                    digits = &mut digits[2..];
+                    8
+                }
+                _ => 10,
+            }
+        } else {
+            10
+        };
+
+        if radix == 16 {
+            for i in 0..digits.len() {
+                let digit = &mut digits[i];
+                if b'0' <= *digit && *digit <= b'9' {
+                    *digit -= b'0';
+                } else if b'A' <= *digit && *digit <= b'F' {
+                    *digit -= b'A' - 10;
+                } else if b'a' <= *digit && *digit <= b'f' {
+                    *digit -= b'a' - 10;
+                } else {
+                    return Ok(NumberError::ReadiParse.into());
+                }
+            }
+        } else {
+            for i in 0..digits.len() {
+                let digit = &mut digits[i];
+                if b'0' <= *digit && *digit < b'0' + radix as u8 {
+                    *digit -= b'0';
+                } else {
+                    return Ok(NumberError::ReadiParse.into());
+                }
+            }
+        }
+
+        let mut n = Integer::new();
+        unsafe { n.assign_bytes_radix_unchecked(&digits, radix, is_negative) }
+        Ok(n.into())
+    }
+
+    pub fn parse_from_read<R: BufRead>(r: &mut R) -> Result<Self, Error> {
+        let mut buf = String::new();
+        r.read_line(&mut buf)?;
+        Number::parse(buf)
     }
 
     pub fn eval(n: NumberRef) -> Result<Rc<Integer>, NumberError> {
