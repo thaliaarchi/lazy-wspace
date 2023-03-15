@@ -10,7 +10,9 @@ keywords = ["whitespace", "interpreter"]
 categories = ["compilers"]
 
 [dependencies]
+arrayvec = "0.7"
 bitvec = "1.0"
+bstr = "1.3"
 rug = "1.19"
 
 [profile.release]

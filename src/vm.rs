@@ -4,17 +4,18 @@ use std::io::{BufRead, Write};
 
 use crate::error::{Error, NumberError, ParseError};
 use crate::inst::{Inst, LabelLit, NumberLit};
+use crate::io::CharReader;
 use crate::number::{Number, NumberRef, Op};
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct VM<'a, I: ?Sized, O: ?Sized> {
+pub struct VM<'a, I, O: ?Sized> {
     prog: Vec<Inst>,
     stack: Vec<NumberRef>,
     heap: Heap,
     pc: usize,
     call_stack: Vec<usize>,
     labels: HashMap<LabelLit, usize>,
-    stdin: &'a mut I,
+    stdin: CharReader<I>,
     stdout: &'a mut O,
     on_underflow: UnderflowError,
 }
@@ -31,9 +32,9 @@ pub struct Heap {
     len: u32,
 }
 
-impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
+impl<'a, I: BufRead, O: Write + ?Sized> VM<'a, I, O> {
     #[inline]
-    pub fn new(prog: Vec<Inst>, stdin: &'a mut I, stdout: &'a mut O) -> Self {
+    pub fn new(prog: Vec<Inst>, stdin: I, stdout: &'a mut O) -> Self {
         let mut labels = HashMap::new();
         for (pc, inst) in prog.iter().enumerate() {
             if let Inst::Label(l) = inst {
@@ -47,7 +48,7 @@ impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             pc: 0,
             call_stack: Vec::new(),
             labels,
-            stdin,
+            stdin: CharReader::new(stdin),
             stdout,
             on_underflow: UnderflowError::Pop,
         }
@@ -191,14 +192,13 @@ impl<'a, I: BufRead + ?Sized, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Readc => {
                 let addr = pop!()?;
-                // TODO: Handle UTF-8
-                let mut buf = [0u8; 1];
-                self.stdin.read_exact(&mut buf[..])?;
-                self.heap.store(addr, Number::from(buf[0]).into())?;
+                let ch = self.stdin.read_char()?;
+                self.heap.store(addr, Number::from(ch as u32).into())?;
             }
             Inst::Readi => {
                 let addr = pop!()?;
-                let n = Number::parse_from_read(&mut self.stdin)?;
+                let line = self.stdin.read_line()?;
+                let n = Number::parse(line)?;
                 self.heap.store(addr, n.into())?;
             }
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),

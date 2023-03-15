@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::io::BufRead;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::rc::Rc;
 
@@ -37,8 +36,8 @@ impl Number {
         Integer::ZERO.into()
     }
 
-    /// Parses a number of the form
-    /// `/\s*-?\s*([0-9]+|0[xX][0-9A-Fa-f]+|0[oO][0-7])\s*/`, where `\s`
+    /// Parses a line of input, that contains a number of the form
+    /// `/\s*-?\s*([0-9]+|0[xX][0-9A-Fa-f]+|0[oO][0-7])\s*\n?/`, where `\s`
     /// represents any characters in the Unicode property White_Space, except
     /// for line breaks U+000A, U+0085, U+2028, and U+2029.
     pub fn parse(s: String) -> Result<Self, Error> {
@@ -118,12 +117,6 @@ impl Number {
         let mut n = Integer::new();
         unsafe { n.assign_bytes_radix_unchecked(&digits, radix, is_negative) }
         Ok(n.into())
-    }
-
-    pub fn parse_from_read<R: BufRead>(r: &mut R) -> Result<Self, Error> {
-        let mut buf = String::new();
-        r.read_line(&mut buf)?;
-        Number::parse(buf)
     }
 
     pub fn eval(n: NumberRef) -> Result<Rc<Integer>, NumberError> {
