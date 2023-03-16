@@ -1,5 +1,5 @@
-use std::cell::RefCell;
-use std::io::{self, BufRead, ErrorKind, Read, Write};
+use std::cell::{Ref, RefCell};
+use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
 use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
@@ -65,18 +65,19 @@ pub struct IoRecorder {
     start: Instant,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StdinRecorder<'a, R> {
-    r: R,
     rec: &'a IoRecorder,
+    inner: BufReader<R>,
+    fill_buf_time: Option<Duration>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StdoutRecorder<'a> {
     rec: &'a IoRecorder,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StderrRecorder<'a> {
     rec: &'a IoRecorder,
 }
@@ -101,7 +102,11 @@ impl IoRecorder {
 
     #[inline]
     pub fn stdin<R: Read>(&self, r: R) -> StdinRecorder<R> {
-        StdinRecorder { r, rec: self }
+        StdinRecorder {
+            rec: self,
+            inner: BufReader::new(r),
+            fill_buf_time: None,
+        }
     }
 
     #[inline]
@@ -113,13 +118,27 @@ impl IoRecorder {
     pub fn stderr(&self) -> StderrRecorder {
         StderrRecorder { rec: self }
     }
+
+    #[inline]
+    pub fn effects(&self) -> Ref<'_, Vec<(Effect, Duration)>> {
+        self.effects.borrow()
+    }
+
+    #[inline]
+    pub fn into_effects(self) -> Vec<(Effect, Duration)> {
+        self.effects.into_inner()
+    }
 }
 
 impl<R: Read> Read for StdinRecorder<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        assert!(
+            self.fill_buf_time.is_none(),
+            "consume must be called after fill_buf"
+        );
         let mut effects = self.rec.effects.borrow_mut();
         let time = self.rec.start.elapsed();
-        let res = self.r.read(buf);
+        let res = self.inner.read(buf);
         let effect = Effect::Read(
             res.as_ref()
                 .map(|&n| buf[..n].to_owned())
@@ -127,6 +146,36 @@ impl<R: Read> Read for StdinRecorder<'_, R> {
         );
         effects.push((effect, time));
         res
+    }
+}
+
+impl<R: Read> BufRead for StdinRecorder<'_, R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.fill_buf_time.is_none() {
+            let time = self.rec.start.elapsed();
+            let res = self.inner.fill_buf();
+            match &res {
+                Ok(_) => self.fill_buf_time = Some(time),
+                Err(err) => {
+                    let mut effects = self.rec.effects.borrow_mut();
+                    effects.push((Effect::Read(Err(err.kind())), time));
+                }
+            }
+            res
+        } else {
+            Ok(self.inner.buffer())
+        }
+    }
+
+    fn consume(&mut self, n: usize) {
+        let time = self
+            .fill_buf_time
+            .expect("fill_buf must have been called before consume");
+        let mut effects = self.rec.effects.borrow_mut();
+        let effect = Effect::Read(Ok(self.inner.buffer()[..n].to_owned()));
+        effects.push((effect, time));
+        self.inner.consume(n);
+        self.fill_buf_time = None;
     }
 }
 
