@@ -71,10 +71,10 @@ impl From<NumberError> for Error {
 impl From<io::Error> for Error {
     #[inline]
     fn from(err: io::Error) -> Self {
-        if err.kind() == ErrorKind::UnexpectedEof {
-            Error::ReadEof
-        } else {
-            Error::Io(err)
+        match err.kind() {
+            ErrorKind::InvalidData => Error::ReadInvalidUtf8,
+            ErrorKind::UnexpectedEof => Error::ReadEof,
+            _ => Error::Io(err),
         }
     }
 }
