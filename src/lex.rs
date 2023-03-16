@@ -1,6 +1,7 @@
 use std::iter::FusedIterator;
 use std::slice::Iter;
-use std::str;
+
+use simdutf8::compat::from_utf8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Token {
@@ -19,7 +20,7 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a [u8]) -> Self {
         let mut invalid_utf8 = false;
-        let src = match str::from_utf8(src) {
+        let src = match from_utf8(src) {
             Ok(_) => src,
             Err(err) => {
                 invalid_utf8 = true;
