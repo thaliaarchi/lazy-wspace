@@ -296,6 +296,18 @@ impl From<NumberError> for NumberRef {
     }
 }
 
+impl PartialEq<NumberRef> for Number {
+    fn eq(&self, other: &NumberRef) -> bool {
+        self == &*other.borrow()
+    }
+}
+
+impl PartialEq<Number> for NumberRef {
+    fn eq(&self, other: &Number) -> bool {
+        &*self.borrow() == other
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

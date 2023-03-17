@@ -4,7 +4,7 @@ use std::io::Write;
 
 use utf8_chars::BufReadCharsExt;
 
-use crate::error::{Error, NumberError, ParseError};
+use crate::error::{Error, NumberError, ParseError, UnderflowError};
 use crate::inst::{Inst, LabelLit, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
@@ -19,12 +19,6 @@ pub struct VM<'a, I, O: ?Sized> {
     stdin: I,
     stdout: &'a mut O,
     on_underflow: UnderflowError,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UnderflowError {
-    Pop,
-    SlideEmpty,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -51,7 +45,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             labels,
             stdin,
             stdout,
-            on_underflow: UnderflowError::Pop,
+            on_underflow: UnderflowError::Normal,
         }
     }
 
@@ -211,7 +205,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
     #[inline]
     fn underflow(&self, inst: &Inst) -> Error {
         match self.on_underflow {
-            UnderflowError::Pop => match inst.to_printable() {
+            UnderflowError::Normal => match inst.to_printable() {
                 Ok(inst) => Error::Underflow(inst),
                 Err(err) => err,
             },

@@ -6,5 +6,12 @@ pub mod number;
 pub mod parse;
 pub mod vm;
 
+pub mod ir {
+    mod number;
+    mod stack;
+    pub use number::*;
+    pub use stack::*;
+}
+
 #[cfg(test)]
 mod tests;

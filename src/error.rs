@@ -47,6 +47,12 @@ pub enum NumberError {
     Internal,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnderflowError {
+    Normal,
+    SlideEmpty,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HaskellError {
     Stderr(String, i32),
