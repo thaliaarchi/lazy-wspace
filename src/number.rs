@@ -9,7 +9,7 @@ use rug::ops::{
 };
 use rug::Integer;
 
-use crate::error::{Error, NumberError};
+use crate::error::{EagerError, Error, NumberError};
 use crate::inst::NumberLit;
 
 pub type NumberRef = Rc<RefCell<Number>>;
@@ -42,7 +42,7 @@ impl Number {
     /// for line breaks U+000A, U+0085, U+2028, and U+2029.
     pub fn parse(s: String) -> Result<Self, Error> {
         if s.len() == 0 {
-            return Err(Error::ReadEof);
+            return Err(EagerError::ReadEof.into());
         }
 
         fn is_space(ch: char) -> bool {

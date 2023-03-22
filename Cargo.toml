@@ -14,6 +14,8 @@ arrayvec = "0.7"
 bitvec = "1.0"
 rug = "1.19"
 simdutf8 = "0.1"
+strum = { version = "0.24", features = ["derive"] }
+thiserror = "1.0"
 utf8-chars = "2.0"
 
 [profile.release]

@@ -5,6 +5,7 @@ use bitvec::prelude::*;
 use rug::integer::Order;
 use rug::ops::NegAssign;
 use rug::Integer;
+use strum::Display;
 
 use crate::error::{Error, NumberError, ParseError};
 use crate::number::IntegerExt;
@@ -66,7 +67,8 @@ pub enum PrintableInst {
     Readi,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Display, Clone, Copy, Debug, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
 pub enum ArgKind {
     Number,
     Label,

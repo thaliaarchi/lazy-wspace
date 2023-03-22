@@ -4,7 +4,7 @@ use std::io::Write;
 
 use utf8_chars::BufReadCharsExt;
 
-use crate::error::{Error, NumberError, ParseError, UnderflowError};
+use crate::error::{EagerError, Error, NumberError, ParseError, UnderflowError};
 use crate::inst::{Inst, LabelLit, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
@@ -168,7 +168,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                 }
             }
             Inst::Ret => {
-                self.pc = self.call_stack.pop().ok_or(Error::RetUnderflow)?;
+                self.pc = self.call_stack.pop().ok_or(EagerError::RetUnderflow)?;
             }
             Inst::End => self.pc = self.prog.len(),
             Inst::Printc => {
@@ -176,7 +176,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                 let ch = n
                     .to_u32()
                     .and_then(char::from_u32)
-                    .ok_or(Error::PrintcInvalid(n))?;
+                    .ok_or(EagerError::PrintcInvalid(n))?;
                 write!(self.stdout, "{ch}").unwrap();
                 self.stdout.flush().unwrap();
             }
@@ -187,7 +187,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Readc => {
                 let addr = pop!()?;
-                let ch = self.stdin.read_char()?.ok_or(Error::ReadEof)?;
+                let ch = self.stdin.read_char()?.ok_or(EagerError::ReadEof)?;
                 self.heap.store(addr, Number::from(ch as u32).into())?;
             }
             Inst::Readi => {
@@ -206,7 +206,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
     fn underflow(&self, inst: &Inst) -> Error {
         match self.on_underflow {
             UnderflowError::Normal => match inst.to_printable() {
-                Ok(inst) => Error::Underflow(inst),
+                Ok(inst) => EagerError::Underflow(inst).into(),
                 Err(err) => err,
             },
             UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
@@ -236,14 +236,14 @@ impl Heap {
     pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), Error> {
         let addr = Number::eval(addr)?;
         if addr.cmp0() == Ordering::Less {
-            return Err(Error::StoreNegative);
+            return Err(EagerError::StoreNegative.into());
         }
         if let Some(addr) = addr.to_u32() {
             self.heap.insert(addr, n);
             self.len = self.len.max(addr + 1);
             return Ok(());
         }
-        Err(Error::StoreOverflow)
+        Err(EagerError::StoreOverflow.into())
     }
 
     pub fn retrieve(&mut self, addr: NumberRef) -> NumberRef {
@@ -338,7 +338,10 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(Error::Underflow(PrintableInst::Drop)), vm.step());
+        assert_eq!(
+            Err(EagerError::Underflow(PrintableInst::Drop).into()),
+            vm.step()
+        );
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 }
