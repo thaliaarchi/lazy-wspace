@@ -12,14 +12,16 @@ use rug::Integer;
 use crate::error::{EagerError, Error, NumberError};
 use crate::inst::NumberLit;
 
-pub type NumberRef = Rc<RefCell<Number>>;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Number {
     Value(Rc<Integer>),
     Op(Op, NumberRef, NumberRef),
     Error(NumberError),
 }
+
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NumberRef(Rc<RefCell<Number>>);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
@@ -119,14 +121,26 @@ impl Number {
         Ok(n.into())
     }
 
-    pub fn eval(n: NumberRef) -> Result<Rc<Integer>, NumberError> {
-        match &*n.borrow() {
+    #[inline]
+    fn eval_op(op: Op, x: NumberRef, y: NumberRef) -> Result<Rc<Integer>, NumberError> {
+        let x = x.eval()?;
+        let y = y.eval()?;
+        match op.eval(x, y) {
+            Some(z) => Ok(Rc::new(z)),
+            None => Err(NumberError::DivModZero),
+        }
+    }
+}
+
+impl NumberRef {
+    pub fn eval(self) -> Result<Rc<Integer>, NumberError> {
+        match &*self.0.borrow() {
             Number::Value(n) => return Ok(n.clone()),
             Number::Op(_, _, _) => {}
             Number::Error(err) => return Err(err.clone()),
         }
 
-        let cell = n;
+        let cell = self.0;
         let n = cell.replace(Number::Error(NumberError::Internal));
         let res = match n {
             Number::Op(op, x, y) => Number::eval_op(op, x, y),
@@ -138,16 +152,6 @@ impl Number {
         });
         debug_assert_eq!(Number::Error(NumberError::Internal), inner);
         res
-    }
-
-    #[inline]
-    fn eval_op(op: Op, x: NumberRef, y: NumberRef) -> Result<Rc<Integer>, NumberError> {
-        let x = Number::eval(x)?;
-        let y = Number::eval(y)?;
-        match op.eval(x, y) {
-            Some(z) => Ok(Rc::new(z)),
-            None => Err(NumberError::DivModZero),
-        }
     }
 }
 
@@ -263,8 +267,8 @@ impl From<&NumberLit> for Number {
 
 impl<T: Into<Integer>> From<T> for Number {
     #[inline]
-    fn from(n: T) -> Self {
-        Number::Value(Rc::new(n.into()))
+    fn from(v: T) -> Self {
+        Number::Value(Rc::new(v.into()))
     }
 }
 
@@ -275,36 +279,22 @@ impl From<NumberError> for Number {
     }
 }
 
-impl From<Number> for NumberRef {
+impl<T: Into<Number>> From<T> for NumberRef {
     #[inline]
-    fn from(n: Number) -> Self {
-        Rc::new(RefCell::new(n))
-    }
-}
-
-impl From<&NumberLit> for NumberRef {
-    #[inline]
-    fn from(n: &NumberLit) -> Self {
-        Rc::new(RefCell::new(n.into()))
-    }
-}
-
-impl From<NumberError> for NumberRef {
-    #[inline]
-    fn from(err: NumberError) -> Self {
-        Rc::new(RefCell::new(err.into()))
+    fn from(v: T) -> Self {
+        NumberRef(Rc::new(RefCell::new(v.into())))
     }
 }
 
 impl PartialEq<NumberRef> for Number {
     fn eq(&self, other: &NumberRef) -> bool {
-        self == &*other.borrow()
+        self == &*other.0.borrow()
     }
 }
 
 impl PartialEq<Number> for NumberRef {
     fn eq(&self, other: &Number) -> bool {
-        &*self.borrow() == other
+        &*self.0.borrow() == other
     }
 }
 
@@ -314,22 +304,22 @@ mod tests {
 
     #[test]
     fn eval_update_refs() {
-        let x = Number::from(1).into();
-        let y = Number::from(2).into();
+        let x = NumberRef::from(1);
+        let y = NumberRef::from(2);
         let z = NumberRef::from(Number::Op(Op::Add, x, y));
         let z1 = z.clone();
-        let z2 = Number::eval(z).unwrap();
+        let z2 = z.eval().unwrap();
         assert_eq!(Integer::from(3), *z2);
-        assert_eq!(NumberRef::from(Number::from(3)), z1);
+        assert_eq!(NumberRef::from(3), z1);
     }
 
     #[test]
     fn eval_error_order() {
-        let x = NumberRef::from(NumberError::CopyLarge);
-        let y = NumberRef::from(NumberError::EmptyLit);
+        let x = NumberError::CopyLarge.into();
+        let y = NumberError::EmptyLit.into();
         let z = NumberRef::from(Number::Op(Op::Add, x, y));
         let z1 = z.clone();
-        let err = Number::eval(z).unwrap_err();
+        let err = z.eval().unwrap_err();
         assert_eq!(NumberError::CopyLarge, err);
         assert_eq!(NumberRef::from(NumberError::CopyLarge), z1);
     }

@@ -156,13 +156,13 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Jmp(l) => jump!(l),
             Inst::Jz(l) => {
-                let n = Number::eval(pop!()?)?;
+                let n = pop!()?.eval()?;
                 if n.cmp0() == Ordering::Equal {
                     jump!(l);
                 }
             }
             Inst::Jn(l) => {
-                let n = Number::eval(pop!()?)?;
+                let n = pop!()?.eval()?;
                 if n.cmp0() == Ordering::Less {
                     jump!(l);
                 }
@@ -172,7 +172,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::End => self.pc = self.prog.len(),
             Inst::Printc => {
-                let n = Number::eval(pop!()?)?;
+                let n = pop!()?.eval()?;
                 let ch = n
                     .to_u32()
                     .and_then(char::from_u32)
@@ -181,7 +181,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                 self.stdout.flush().unwrap();
             }
             Inst::Printi => {
-                let n = Number::eval(pop!()?)?;
+                let n = pop!()?.eval()?;
                 write!(self.stdout, "{n}").unwrap();
                 self.stdout.flush().unwrap();
             }
@@ -234,7 +234,7 @@ impl Heap {
     /// This implementation mimics the upper address bound, by only allowing
     /// addresses up to 2^32, but does not have the linear performance issues.
     pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), Error> {
-        let addr = Number::eval(addr)?;
+        let addr = addr.eval()?;
         if addr.cmp0() == Ordering::Less {
             return Err(EagerError::StoreNegative.into());
         }
@@ -247,7 +247,7 @@ impl Heap {
     }
 
     pub fn retrieve(&mut self, addr: NumberRef) -> NumberRef {
-        let addr = match Number::eval(addr) {
+        let addr = match addr.eval() {
             Ok(n) => n,
             Err(err) => return err.into(),
         };

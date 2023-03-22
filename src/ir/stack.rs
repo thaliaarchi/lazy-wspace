@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::error::UnderflowError;
 use crate::ir::{AbstractNumber, AbstractNumberRef};
 
@@ -135,7 +133,7 @@ impl AbstractStack {
         let mut shift = 0;
         for i in 0..dropped {
             if let Some(u) = self.under[dropped - i - 1].as_ref() {
-                if Rc::ptr_eq(u, &self.values[i]) {
+                if u.same_ref(&self.values[i]) {
                     shift += 1;
                     continue;
                 }
@@ -149,7 +147,7 @@ impl AbstractStack {
         // Clear unused stack references
         for i in 0..self.under.len() {
             if let Some(u) = &self.under[i] {
-                if Rc::strong_count(u) == 1 && u == &AbstractNumber::StackRef(i) {
+                if u.is_unique() && u == &AbstractNumber::StackRef(i) {
                     self.under[i] = None;
                 }
             }
