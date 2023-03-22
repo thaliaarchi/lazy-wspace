@@ -236,7 +236,7 @@ impl Heap {
     pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), Error> {
         let addr = Number::eval(addr)?;
         if addr.cmp0() == Ordering::Less {
-            return Err(NumberError::StoreNegative.into());
+            return Err(Error::StoreNegative);
         }
         if let Some(addr) = addr.to_u32() {
             self.heap.insert(addr, n);
