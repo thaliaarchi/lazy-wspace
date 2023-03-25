@@ -16,10 +16,12 @@ pub mod ast {
 
 pub mod ir {
     mod cfg;
+    mod dag;
     mod exp;
     mod heap;
     mod stack;
     pub use cfg::*;
+    pub use dag::*;
     pub use exp::*;
     pub use heap::*;
     pub use stack::*;

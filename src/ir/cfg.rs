@@ -27,6 +27,7 @@ pub enum Stmt {
     GuardStack(usize),
     Eval(ExpRef),
     Store(ExpRef, ExpRef),
+    // Retrieve(u32), // TODO add for proper scheduling
     Print(IoKind, ExpRef),
     Read(IoKind, ExpRef),
 }

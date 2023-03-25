@@ -35,6 +35,11 @@ impl ExpRef {
     }
 
     #[inline]
+    pub fn as_ptr(&self) -> *const RefCell<Exp> {
+        Rc::as_ptr(&self.0)
+    }
+
+    #[inline]
     pub fn borrow(&self) -> Ref<'_, Exp> {
         self.0.borrow()
     }
