@@ -149,6 +149,28 @@ impl Inst {
     }
 
     #[inline]
+    pub fn is_terminator(&self) -> bool {
+        match self {
+            Inst::Call(_)
+            | Inst::Jmp(_)
+            | Inst::Jz(_)
+            | Inst::Jn(_)
+            | Inst::Ret
+            | Inst::End
+            | Inst::ParseError(_) => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn can_end_program(&self) -> bool {
+        match self {
+            Inst::Jmp(_) | Inst::Ret | Inst::End | Inst::ParseError(_) => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
     pub fn to_printable(&self) -> Result<PrintableInst, Error> {
         match self {
             Inst::Push(n) => Ok(PrintableInst::Push(n.unwrap()?.clone())),
