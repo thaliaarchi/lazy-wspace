@@ -167,6 +167,7 @@ impl BasicBlock {
             Inst::Mod => self.stack.apply_op(Op::Mod)?,
             Inst::Store => {
                 let (addr, val) = self.stack.pop2()?;
+                self.stmts.push(Stmt::Store(addr.clone(), val.clone())); // TODO: cache
                 return Ok(self.heap.store(addr, val));
             }
             Inst::Retrieve => {
