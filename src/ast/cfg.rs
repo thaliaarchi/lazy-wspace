@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
-use crate::ast::Inst;
+use crate::ast::{Inst, LabelLit};
 use crate::error::ParseError;
 
 /// Control-flow graph for AST instructions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg {
-    blocks: Vec<BasicBlock>,
+    bbs: Vec<BasicBlock>,
 }
 
 /// Basic block for AST instructions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BasicBlock {
+    id: usize,
+    label: Option<LabelLit>,
     insts: Vec<Inst>,
     term: TermInst,
 }
@@ -46,45 +48,47 @@ impl Cfg {
         let prog = &prog[..prog_len];
 
         let mut labels = HashMap::new();
-        let mut block_count = 0;
+        let mut bbs_count = 0;
         for (pc, inst) in prog.iter().enumerate() {
             match inst {
                 Inst::Label(l) => {
                     if pc != 0 && !matches!(prog[pc - 1], Inst::Label(_)) {
-                        block_count += 1;
+                        bbs_count += 1;
                     }
-                    labels.insert(l.clone(), block_count);
+                    labels.insert(l.clone(), bbs_count);
                 }
                 _ => {
                     if inst.is_terminator() {
-                        block_count += 1;
+                        bbs_count += 1;
                     }
                 }
             }
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {
-            block_count += 1;
+            bbs_count += 1;
         }
 
         macro_rules! get_label(($l:expr) => {
-            labels.get($l).copied().unwrap_or(block_count - 1)
+            labels.get($l).copied().unwrap_or(bbs_count - 1)
         });
 
-        let mut blocks = Vec::with_capacity(block_count);
+        let mut bbs = Vec::with_capacity(bbs_count);
+        let mut curr_label = None;
         let mut curr_block = Vec::new();
         for (pc, inst) in prog.iter().enumerate() {
             let term = match inst {
                 Inst::Label(l) => {
+                    curr_label = curr_label.or_else(|| Some(l.clone()));
                     if pc != 0 && !matches!(prog[pc - 1], Inst::Label(_)) {
                         TermInst::Jmp(get_label!(l))
                     } else {
                         continue;
                     }
                 }
-                Inst::Call(l) => TermInst::Call(get_label!(l), blocks.len() + 1),
+                Inst::Call(l) => TermInst::Call(get_label!(l), bbs.len() + 1),
                 Inst::Jmp(l) => TermInst::Jmp(get_label!(l)),
-                Inst::Jz(l) => TermInst::Jz(get_label!(l), blocks.len() + 1),
-                Inst::Jn(l) => TermInst::Jn(get_label!(l), blocks.len() + 1),
+                Inst::Jz(l) => TermInst::Jz(get_label!(l), bbs.len() + 1),
+                Inst::Jn(l) => TermInst::Jn(get_label!(l), bbs.len() + 1),
                 Inst::Ret => TermInst::Ret,
                 Inst::End => TermInst::End,
                 Inst::ParseError(err) => TermInst::Error(err.clone()),
@@ -93,30 +97,45 @@ impl Cfg {
                     continue;
                 }
             };
-            blocks.push(BasicBlock {
+            bbs.push(BasicBlock {
+                id: bbs.len(),
+                label: curr_label,
                 insts: curr_block,
                 term,
             });
+            curr_label = None;
             curr_block = Vec::new();
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {
-            blocks.push(BasicBlock {
+            bbs.push(BasicBlock {
+                id: bbs.len(),
+                label: curr_label,
                 insts: curr_block,
                 term: TermInst::Error(ParseError::ImplicitEnd),
             });
         }
-        assert_eq!(block_count, blocks.len());
+        assert_eq!(bbs_count, bbs.len());
 
-        Cfg { blocks }
+        Cfg { bbs }
     }
 
     #[inline]
-    pub fn blocks(&self) -> &[BasicBlock] {
-        &self.blocks
+    pub fn bbs(&self) -> &[BasicBlock] {
+        &self.bbs
     }
 }
 
 impl BasicBlock {
+    #[inline]
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    #[inline]
+    pub fn label(&self) -> Option<&LabelLit> {
+        self.label.as_ref()
+    }
+
     #[inline]
     pub fn insts(&self) -> &[Inst] {
         &self.insts
@@ -130,12 +149,25 @@ impl BasicBlock {
 
 impl Display for Cfg {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for (id, block) in self.blocks.iter().enumerate() {
+        for (id, bb) in self.bbs.iter().enumerate() {
             if id != 0 {
                 writeln!(f)?;
             }
-            writeln!(f, "bb{id}:")?;
-            Display::fmt(block, f)?;
+            writeln!(f, "{bb}:")?;
+            for inst in &bb.insts {
+                writeln!(f, "    {inst}")?;
+            }
+            write!(f, "    ")?;
+            match &bb.term {
+                TermInst::Call(l1, l2) => write!(f, "call {} {}", self.bbs[*l1], self.bbs[*l2]),
+                TermInst::Jmp(l) => write!(f, "jmp {}", self.bbs[*l]),
+                TermInst::Jz(l1, l2) => write!(f, "jz {} {}", self.bbs[*l1], self.bbs[*l2]),
+                TermInst::Jn(l1, l2) => write!(f, "jn {} {}", self.bbs[*l1], self.bbs[*l2]),
+                TermInst::Ret => write!(f, "ret"),
+                TermInst::End => write!(f, "end"),
+                TermInst::Error(err) => write!(f, "error {err:?}"),
+            }?;
+            writeln!(f)?;
         }
         Ok(())
     }
@@ -143,23 +175,9 @@ impl Display for Cfg {
 
 impl Display for BasicBlock {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for inst in &self.insts {
-            writeln!(f, "    {inst}")?;
-        }
-        writeln!(f, "    {}", self.term)
-    }
-}
-
-impl Display for TermInst {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            TermInst::Call(l1, l2) => write!(f, "call bb{l1} bb{l2}"),
-            TermInst::Jmp(l) => write!(f, "jmp bb{l}"),
-            TermInst::Jz(l1, l2) => write!(f, "jz bb{l1} bb{l2}"),
-            TermInst::Jn(l1, l2) => write!(f, "jn bb{l1} bb{l2}"),
-            TermInst::Ret => write!(f, "ret"),
-            TermInst::End => write!(f, "end"),
-            TermInst::Error(err) => write!(f, "error {err:?}"),
+        match &self.label {
+            Some(l) => write!(f, "{l}"),
+            None => write!(f, "bb{}", self.id),
         }
     }
 }
