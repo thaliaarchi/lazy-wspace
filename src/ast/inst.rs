@@ -1,5 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 use std::rc::Rc;
+use std::str;
 
 use bitvec::prelude::*;
 use rug::integer::Order;
@@ -108,17 +109,7 @@ impl From<Integer> for NumberLit {
 impl From<BitVec> for NumberLit {
     fn from(bits: BitVec) -> Self {
         match bits.split_first() {
-            Some((neg, bits)) => {
-                let mut bits = BitBox::<usize, Lsb0>::from(bits);
-                bits.force_align();
-                bits.fill_uninitialized(false);
-                bits.reverse();
-                let mut n = Integer::from_digits(bits.as_raw_slice(), Order::LsfLe);
-                if *neg {
-                    n.neg_assign();
-                }
-                NumberLit::from(n)
-            }
+            Some((sign, bits)) => NumberLit::from(integer_from_bits(bits, *sign)),
             None => NumberLit::Empty,
         }
     }
@@ -277,11 +268,39 @@ impl Display for NumberLit {
 
 impl Display for LabelLit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("l")?;
-        for bit in &self.0 {
-            f.write_str(if *bit { "1" } else { "0" })?;
+        let bits = &self.0;
+        write!(f, "@")?;
+
+        // Try to decode it as UTF-8
+        if bits.len() % 8 == 0 {
+            let mut bytes = Vec::with_capacity(bits.len() / 8);
+            for byte in bits.chunks(8) {
+                bytes.push(byte.load_le::<u8>().reverse_bits());
+            }
+            if let Ok(s) = str::from_utf8(&bytes) {
+                if s.len() == 0
+                    || s.starts_with(|c| char::is_ascii_digit(&c))
+                    || s.contains(char::is_whitespace)
+                {
+                    return write!(f, "\"{s}\"");
+                } else {
+                    return write!(f, "{s}");
+                }
+            }
         }
-        Ok(())
+
+        // Print in binary, if it has leading zeros
+        if bits.first().as_deref() != Some(&true) {
+            write!(f, "0b")?;
+            for bit in &self.0 {
+                f.write_str(if *bit { "1" } else { "0" })?;
+            }
+            return Ok(());
+        }
+
+        // Otherwise, print it in decimal
+        let n = integer_from_bits(bits, false);
+        write!(f, "{n}")
     }
 }
 
@@ -313,6 +332,18 @@ impl LabelLit {
         s.push('"');
         s
     }
+}
+
+fn integer_from_bits(bits: &BitSlice<usize, Lsb0>, is_negative: bool) -> Integer {
+    let mut bits = BitBox::<usize, Lsb0>::from(bits);
+    bits.force_align();
+    bits.fill_uninitialized(false);
+    bits.reverse();
+    let mut n = Integer::from_digits(bits.as_raw_slice(), Order::LsfLe);
+    if is_negative {
+        n.neg_assign();
+    }
+    n
 }
 
 #[cfg(test)]
