@@ -6,10 +6,10 @@ use thiserror::Error;
 
 use rug::Integer;
 
-use crate::ast::{ArgKind, LabelLit, PrintableInst};
+use crate::ast::{ArgKind, Inst, LabelLit, PrintableInst};
 use crate::number::IntegerExt;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum Error {
     #[error("incorrect usage")]
     Usage,
@@ -57,7 +57,7 @@ pub enum NumberError {
     Internal,
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum EagerError {
     #[error("stack underflow: {0}")]
     Underflow(PrintableInst),
@@ -68,7 +68,7 @@ pub enum EagerError {
     #[error("call stack underflow")]
     RetUnderflow,
     #[error("io error: {0}")]
-    Io(io::Error),
+    Io(Rc<io::Error>),
     #[error("printc invalid codepoint")]
     PrintcInvalid(Rc<Integer>),
     #[error("read at EOF")]
@@ -112,7 +112,7 @@ impl From<io::Error> for EagerError {
         match err.kind() {
             ErrorKind::InvalidData => EagerError::ReadInvalidUtf8,
             ErrorKind::UnexpectedEof => EagerError::ReadEof,
-            _ => EagerError::Io(err),
+            _ => EagerError::Io(Rc::new(err)),
         }
     }
 }
@@ -121,7 +121,7 @@ impl PartialEq for EagerError {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (EagerError::Underflow(inst1), EagerError::Underflow(inst2)) => inst1 == inst2,
-            (EagerError::Io(err1), EagerError::Io(err2)) => err1.kind() == err2.kind(),
+            (EagerError::Io(err1), EagerError::Io(err2)) => Rc::ptr_eq(err1, err2),
             (EagerError::PrintcInvalid(c1), EagerError::PrintcInvalid(c2)) => c1 == c2,
             _ => mem::discriminant(self) == mem::discriminant(other),
         }
@@ -129,6 +129,19 @@ impl PartialEq for EagerError {
 }
 
 impl Eq for EagerError {}
+
+impl UnderflowError {
+    #[inline]
+    pub fn to_error(self, inst: &Inst) -> Error {
+        match self {
+            UnderflowError::Normal => match inst.to_printable() {
+                Ok(inst) => EagerError::Underflow(inst).into(),
+                Err(err) => err,
+            },
+            UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
+        }
+    }
+}
 
 impl Error {
     #[rustfmt::skip]

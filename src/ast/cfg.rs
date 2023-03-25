@@ -4,7 +4,7 @@ use std::fmt::{self, Display, Formatter};
 use crate::ast::{Inst, LabelLit};
 use crate::error::ParseError;
 
-/// Control-flow graph for AST instructions.
+/// Control-flow graph of AST basic blocks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg<'a> {
     bbs: Vec<Option<BasicBlock<'a>>>,
@@ -16,16 +16,16 @@ pub struct BasicBlock<'a> {
     id: usize,
     label: Option<&'a LabelLit>,
     insts: &'a [Inst],
-    exit: ExitInst,
+    exit: ExitInst<'a>,
 }
 
 /// Exit instruction in a basic block (the terminator).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExitInst {
+pub enum ExitInst<'a> {
     Call(usize, usize),
     Jmp(usize),
-    Jz(usize, usize),
-    Jn(usize, usize),
+    Jz(usize, usize, &'a Inst),
+    Jn(usize, usize, &'a Inst),
     Ret,
     End,
     Error(ParseError),
@@ -90,8 +90,8 @@ impl<'a> Cfg<'a> {
                 }
                 Inst::Call(l) => ExitInst::Call(get_label!(l), bbs.len() + 1),
                 Inst::Jmp(l) => ExitInst::Jmp(get_label!(l)),
-                Inst::Jz(l) => ExitInst::Jz(get_label!(l), bbs.len() + 1),
-                Inst::Jn(l) => ExitInst::Jn(get_label!(l), bbs.len() + 1),
+                Inst::Jz(l) => ExitInst::Jz(get_label!(l), bbs.len() + 1, inst),
+                Inst::Jn(l) => ExitInst::Jn(get_label!(l), bbs.len() + 1, inst),
                 Inst::Ret => ExitInst::Ret,
                 Inst::End => ExitInst::End,
                 Inst::ParseError(err) => ExitInst::Error(err.clone()),
@@ -138,7 +138,7 @@ impl<'a> Cfg<'a> {
                         queue.push_back(l)
                     }
                 }
-                ExitInst::Call(l1, l2) | ExitInst::Jz(l1, l2) | ExitInst::Jn(l1, l2) => {
+                ExitInst::Call(l1, l2) | ExitInst::Jz(l1, l2, _) | ExitInst::Jn(l1, l2, _) => {
                     if !visited.contains(&l1) {
                         queue.push_back(l1);
                     }
@@ -204,8 +204,8 @@ impl Display for Cfg<'_> {
                 match &bb.exit {
                     ExitInst::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
                     ExitInst::Jmp(l) => write!(f, "jmp {}", bb!(l)),
-                    ExitInst::Jz(l1, l2) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
-                    ExitInst::Jn(l1, l2) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
+                    ExitInst::Jz(l1, l2, _) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
+                    ExitInst::Jn(l1, l2, _) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
                     ExitInst::Ret => write!(f, "ret"),
                     ExitInst::End => write!(f, "end"),
                     ExitInst::Error(err) => write!(f, "error {err:?}"),
