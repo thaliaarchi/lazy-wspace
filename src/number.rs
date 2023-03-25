@@ -1,5 +1,6 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
+use std::fmt::{self, Debug, Formatter};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::rc::Rc;
 
@@ -20,7 +21,7 @@ pub enum Number {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NumberRef(Rc<RefCell<Number>>);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -296,15 +297,22 @@ impl<T: Into<Number>> From<T> for NumberRef {
     }
 }
 
+impl Debug for NumberRef {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&*self.borrow(), f)
+    }
+}
+
 impl PartialEq<NumberRef> for Number {
     fn eq(&self, other: &NumberRef) -> bool {
-        self == &*other.0.borrow()
+        self == &*other.borrow()
     }
 }
 
 impl PartialEq<Number> for NumberRef {
     fn eq(&self, other: &Number) -> bool {
-        &*self.0.borrow() == other
+        &*self.borrow() == other
     }
 }
 

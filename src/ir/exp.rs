@@ -1,4 +1,5 @@
 use std::cell::{Ref, RefCell, RefMut};
+use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -19,7 +20,7 @@ pub enum Exp {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ExpRef(Rc<RefCell<Exp>>);
 
 impl ExpRef {
@@ -75,17 +76,24 @@ impl<T: Into<Exp>> From<T> for ExpRef {
     }
 }
 
+impl Debug for ExpRef {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&*self.borrow(), f)
+    }
+}
+
 impl PartialEq<ExpRef> for Exp {
     #[inline]
     fn eq(&self, other: &ExpRef) -> bool {
-        self == &*other.0.borrow()
+        self == &*other.borrow()
     }
 }
 
 impl PartialEq<Exp> for ExpRef {
     #[inline]
     fn eq(&self, other: &Exp) -> bool {
-        &*self.0.borrow() == other
+        &*self.borrow() == other
     }
 }
 
