@@ -1,10 +1,18 @@
 pub mod error;
-pub mod inst;
 pub mod io;
-pub mod lex;
 pub mod number;
-pub mod parse;
 pub mod vm;
+
+pub mod ast {
+    mod cfg;
+    mod inst;
+    mod lex;
+    mod parse;
+    pub use cfg::*;
+    pub use inst::*;
+    pub use lex::*;
+    pub use parse::*;
+}
 
 pub mod ir {
     mod heap;

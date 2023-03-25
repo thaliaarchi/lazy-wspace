@@ -2,9 +2,8 @@ use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
 
+use crate::ast::{ArgKind, Inst, LabelLit, Lexer, NumberLit, Token};
 use crate::error::ParseError;
-use crate::inst::{ArgKind, Inst, LabelLit, NumberLit};
-use crate::lex::{Lexer, Token};
 
 pub struct Parser<'a> {
     lex: Lexer<'a>,

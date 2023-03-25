@@ -4,10 +4,8 @@ use std::path::Path;
 
 use bitvec::prelude::*;
 
+use crate::ast::{ArgKind, LabelLit, Lexer, Parser};
 use crate::error::{Error, ParseError};
-use crate::inst::{ArgKind, LabelLit};
-use crate::lex::Lexer;
-use crate::parse::Parser;
 use crate::vm::VM;
 
 fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {

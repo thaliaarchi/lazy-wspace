@@ -4,8 +4,8 @@ use std::rc::Rc;
 
 use rug::Integer;
 
+use crate::ast::NumberLit;
 use crate::error::NumberError;
-use crate::inst::NumberLit;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AbstractNumber {

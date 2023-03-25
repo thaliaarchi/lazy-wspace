@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use rug::Integer;
 
-use crate::inst::{ArgKind, LabelLit, PrintableInst};
+use crate::ast::{ArgKind, LabelLit, PrintableInst};
 use crate::number::IntegerExt;
 
 #[derive(Debug, Error, PartialEq, Eq)]

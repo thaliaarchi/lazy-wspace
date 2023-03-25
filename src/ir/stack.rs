@@ -1,5 +1,5 @@
+use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::inst::NumberLit;
 use crate::ir::{AbstractNumber, AbstractNumberRef};
 
 /// An abstract stack for stack operations in a basic block

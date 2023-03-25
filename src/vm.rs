@@ -4,8 +4,8 @@ use std::io::Write;
 
 use utf8_chars::BufReadCharsExt;
 
+use crate::ast::{Inst, LabelLit, NumberLit};
 use crate::error::{EagerError, Error, NumberError, ParseError, UnderflowError};
-use crate::inst::{Inst, LabelLit, NumberLit};
 use crate::number::{Number, NumberRef, Op};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -269,7 +269,7 @@ impl Heap {
 
 #[cfg(test)]
 mod tests {
-    use crate::inst::PrintableInst;
+    use crate::ast::PrintableInst;
 
     use super::*;
 

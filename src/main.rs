@@ -2,9 +2,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::{env, path::PathBuf};
 
+use lazy_wspace::ast::{Lexer, Parser};
 use lazy_wspace::error::Error;
-use lazy_wspace::lex::Lexer;
-use lazy_wspace::parse::Parser;
 use lazy_wspace::vm::VM;
 
 fn main() {

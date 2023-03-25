@@ -9,8 +9,8 @@ use rug::ops::{
 };
 use rug::Integer;
 
+use crate::ast::NumberLit;
 use crate::error::{EagerError, Error, NumberError};
-use crate::inst::NumberLit;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Number {

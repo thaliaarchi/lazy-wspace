@@ -3,10 +3,10 @@ name = "lazy-wspace"
 version = "0.1.0"
 authors = ["Thalia Archibald"]
 edition = "2021"
-description = "A Whitespace interpreter with lazy semantics"
+description = "A Whitespace compiler and interpreter with lazy semantics"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "GPL-3.0-or-later"
-keywords = ["whitespace", "interpreter"]
+keywords = ["whitespace", "compiler", "interpreter"]
 categories = ["compilers"]
 
 [dependencies]
