@@ -1,10 +1,10 @@
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
 use std::{env, path::PathBuf};
 
-use lazy_wspace::ast::{Lexer, Parser};
+use lazy_wspace::ast::{self, Lexer, Parser};
 use lazy_wspace::error::Error;
-use lazy_wspace::vm::VM;
+use lazy_wspace::ir::{self, DisplayCfgWithDag};
 
 fn main() {
     let mut args = env::args_os();
@@ -22,13 +22,16 @@ fn main() {
     let mut f = File::open(&filename).unwrap();
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
-    let prog = Parser::new(Lexer::new(&src)).collect();
+    let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
 
-    let mut stdin = io::stdin().lock();
-    let mut stdout = io::stdout().lock();
-    let mut vm = VM::new(prog, &mut stdin, &mut stdout);
-    if let Err(err) = vm.execute() {
-        err.to_haskell(&wspace, &filename.to_string_lossy())
-            .handle();
-    }
+    let mut cfg = ast::Cfg::new(&prog);
+    print!("===== AST CFG =====\n\n{}", cfg);
+    cfg.eliminate_dead();
+    print!("\n\n===== After dead-code elimination =====\n\n{}", cfg);
+    let cfg = ir::Cfg::new(&cfg);
+    print!("\n\n===== CFG =====\n\n{}", cfg);
+    print!(
+        "\n\n===== CFG with DAG =====\n\n{}",
+        DisplayCfgWithDag(&cfg)
+    );
 }
