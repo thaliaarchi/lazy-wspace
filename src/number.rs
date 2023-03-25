@@ -9,6 +9,7 @@ use rug::ops::{
     RemRoundingAssign, RemRoundingFrom, SubFrom,
 };
 use rug::Integer;
+use strum::Display;
 
 use crate::ast::NumberLit;
 use crate::error::{EagerError, Error, NumberError};
@@ -24,7 +25,8 @@ pub enum Number {
 #[derive(Clone, PartialEq, Eq)]
 pub struct NumberRef(Rc<RefCell<Number>>);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
 pub enum Op {
     Add,
     Sub,

@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::ast::{self, ExitInst, Inst, LabelLit};
 use crate::error::{Error, UnderflowError};
-use crate::ir::{AbstractHeap, AbstractStack, ExpRef, LazySize};
+use crate::ir::{AbstractHeap, AbstractStack, Dag, ExpRef, LazySize};
 use crate::number::Op;
 
 /// Control-flow graph of IR basic blocks.
@@ -106,6 +106,36 @@ impl BasicBlock {
         bb
     }
 
+    #[inline]
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    #[inline]
+    pub fn label(&self) -> Option<&LabelLit> {
+        self.label.as_ref()
+    }
+
+    #[inline]
+    pub fn stmts(&self) -> &[Stmt] {
+        &self.stmts
+    }
+
+    #[inline]
+    pub fn exit(&self) -> &ExitStmt {
+        &self.exit
+    }
+
+    #[inline]
+    pub fn stack(&self) -> &AbstractStack {
+        &self.stack
+    }
+
+    #[inline]
+    pub fn heap(&self) -> &AbstractHeap {
+        &self.heap
+    }
+
     fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
         let pre = self.stack.drop_count().max(self.stack.values_under().len());
         match self.push_inst_underflow(inst) {
@@ -196,7 +226,7 @@ impl Display for Cfg {
                     writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
                 }
                 for val in bb.stack.values_pushed() {
-                    writeln!(f, "    push {val:?}")?;
+                    writeln!(f, "    push {val}")?;
                 }
                 macro_rules! bb(($l:ident) => {
                     self.bbs[*$l].as_ref().expect("undefined label")
@@ -207,6 +237,60 @@ impl Display for Cfg {
                     ExitStmt::Jmp(l) => write!(f, "jmp {}", bb!(l)),
                     ExitStmt::Br(cond, val, l1, l2) => {
                         write!(f, "br {cond:?} {val:?} {} {}", bb!(l1), bb!(l2))
+                    }
+                    ExitStmt::Ret => write!(f, "ret"),
+                    ExitStmt::End => write!(f, "end"),
+                    ExitStmt::Error(err) => write!(f, "error {err:?}"),
+                }?;
+                writeln!(f)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DisplayCfgWithDag<'a>(pub &'a Cfg);
+
+impl<'a> Display for DisplayCfgWithDag<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut first = true;
+        for bb in &self.0.bbs {
+            if let Some(bb) = bb {
+                if !first {
+                    writeln!(f)?;
+                }
+                first = false;
+                writeln!(f, "{bb}:")?;
+                for stmt in &bb.stmts {
+                    writeln!(f, "    {stmt}")?;
+                }
+                if bb.stack.drop_count() != 0 {
+                    writeln!(f, "    drop_eager {}", bb.stack.drop_count())?;
+                }
+                if bb.stack.slide_count() != LazySize::Finite(0) {
+                    writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
+                }
+
+                let dag = Dag::from_block(&bb);
+                for (i, val) in dag.values().iter().enumerate() {
+                    writeln!(f, "    %{i} = {val}")?;
+                }
+                for val in bb.stack.values_pushed() {
+                    writeln!(f, "    push %{}", dag.lookup(val).unwrap())?;
+                }
+
+                macro_rules! bb(($l:ident) => {
+                    self.0.bbs[*$l].as_ref().expect("undefined label")
+                });
+                write!(f, "    ")?;
+                match &bb.exit {
+                    ExitStmt::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
+                    ExitStmt::Jmp(l) => write!(f, "jmp {}", bb!(l)),
+                    ExitStmt::Br(cond, val, l1, l2) => {
+                        let val = dag.lookup(val).unwrap();
+                        write!(f, "br {cond:?} %{} {} {}", val, bb!(l1), bb!(l2))
                     }
                     ExitStmt::Ret => write!(f, "ret"),
                     ExitStmt::End => write!(f, "end"),

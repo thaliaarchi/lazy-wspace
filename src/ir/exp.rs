@@ -1,5 +1,5 @@
 use std::cell::{Ref, RefCell, RefMut};
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -106,5 +106,18 @@ impl Hash for ExpRef {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.borrow().hash(state);
+    }
+}
+
+impl Display for ExpRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &*self.borrow() {
+            Exp::Value(n) => write!(f, "value {n}"),
+            Exp::Op(op, l, r) => write!(f, "{op} ({l}) ({r})"),
+            Exp::StackRef(n) => write!(f, "stack_ref {n}"),
+            Exp::LazyStackRef(n) => write!(f, "lazy_stack_ref {n}"),
+            Exp::HeapRef(addr) => write!(f, "heap_ref {addr}"),
+            Exp::Error(err) => write!(f, "error {err:?}"),
+        }
     }
 }
