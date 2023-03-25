@@ -1,4 +1,4 @@
-use crate::error::UnderflowError;
+use crate::error::{NumberError, UnderflowError};
 use crate::inst::NumberLit;
 use crate::ir::{AbstractNumber, AbstractNumberRef};
 
@@ -49,11 +49,18 @@ impl AbstractStack {
 
     /// Eagerly pushes a lazy reference to the nth element on the stack.
     #[inline]
-    pub fn copy(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
-        // TODO: Use a lazy reference
-        let nth = self.at(n)?;
+    pub fn copy(&mut self, n: LazySize) -> AbstractNumberRef {
+        let nth = match n {
+            LazySize::Finite(n) => match self.at_lazy(n) {
+                Ok(nth) => nth,
+                Err(UnderflowError::Normal) => NumberError::CopyLarge.into(),
+                Err(UnderflowError::SlideEmpty) => NumberError::EmptyLit.into(),
+            },
+            LazySize::Overflow => NumberError::CopyLarge.into(),
+            LazySize::EmptyLit => NumberError::EmptyLit.into(),
+        };
         self.push(nth.clone());
-        Ok(nth)
+        nth
     }
 
     /// Eagerly swaps the top two elements on the stack.
@@ -69,12 +76,12 @@ impl AbstractStack {
     /// Eagerly accesses the top element of the stack and returns it.
     #[inline]
     pub fn top(&mut self) -> Result<AbstractNumberRef, UnderflowError> {
-        self.at(0)
+        self.at_eager(0)
     }
 
     /// Eagerly accesses the nth element from the top of the stack and returns
     /// it.
-    pub fn at(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn at_eager(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1].clone())
         } else {
@@ -90,12 +97,39 @@ impl AbstractStack {
         }
     }
 
+    /// Lazily accesses the nth element from the top of the stack and returns
+    /// it.
+    pub fn at_lazy(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
+        if n < self.values.len() {
+            Ok(self.values[self.values.len() - n - 1].clone())
+        } else {
+            let n = n - self.values.len();
+            let slide_and_drops = add_or_underflow(self.slide.as_usize()?, self.drops)?;
+            let i = add_or_underflow(slide_and_drops, n)?;
+            if i < self.under.len() {
+                Ok(self.under[i]
+                    .get_or_insert_with(|| AbstractNumber::StackRef(n).into())
+                    .clone())
+            } else {
+                Ok(AbstractNumber::LazyStackRef(i).into())
+            }
+        }
+    }
+
     /// Eagerly removes the top element from the stack and returns it.
     #[inline]
     pub fn pop(&mut self) -> Result<AbstractNumberRef, UnderflowError> {
         let top = self.top()?;
         self.drop_eager(1)?;
         Ok(top)
+    }
+
+    /// Eagerly removes the top two elements from the stack and returns them.
+    #[inline]
+    pub fn pop2(&mut self) -> Result<(AbstractNumberRef, AbstractNumberRef), UnderflowError> {
+        let vals = (self.at_eager(1)?, self.at_eager(0)?);
+        self.drop_eager(2)?;
+        Ok(vals)
     }
 
     /// Eagerly removes the top `n` elements from the stack.
@@ -107,7 +141,7 @@ impl AbstractStack {
             let n = n - self.values.len();
             self.values.clear();
             self.eval_slide()?;
-            self.drops = self.drops.checked_add(n).ok_or(UnderflowError::Normal)?;
+            self.drops = add_or_underflow(self.drops, n)?;
         }
         Ok(())
     }
@@ -153,9 +187,7 @@ impl AbstractStack {
 
     /// Forces evaluation of slide, to perform an eager operation.
     fn eval_slide(&mut self) -> Result<(), UnderflowError> {
-        self.drops = (self.slide.as_usize()?)
-            .checked_add(self.drops)
-            .ok_or(UnderflowError::Normal)?;
+        self.drops = add_or_underflow(self.slide.as_usize()?, self.drops)?;
         self.slide = LazySize::Finite(0);
         Ok(())
     }
@@ -164,7 +196,9 @@ impl AbstractStack {
     /// and clears unused stack references.
     pub fn simplify(&mut self) {
         // Simplify pop-push identities
-        if let Ok(drops_and_slide) = self.slide.add_eager(self.drops) {
+        if let Ok(drops_and_slide) =
+            (self.slide.as_usize()).and_then(|s| add_or_underflow(s, self.drops))
+        {
             if drops_and_slide <= self.under.len() {
                 let mut shift = 0;
                 for i in 0..drops_and_slide.min(self.values.len()) {
@@ -194,6 +228,11 @@ impl AbstractStack {
     }
 }
 
+#[inline]
+fn add_or_underflow(n: usize, m: usize) -> Result<usize, UnderflowError> {
+    n.checked_add(m).ok_or(UnderflowError::Normal)
+}
+
 impl LazySize {
     #[inline]
     pub fn combine(self, rhs: LazySize) -> LazySize {
@@ -214,12 +253,6 @@ impl LazySize {
             LazySize::Overflow => Err(UnderflowError::Normal),
             LazySize::EmptyLit => Err(UnderflowError::SlideEmpty),
         }
-    }
-
-    #[inline]
-    pub fn add_eager(&self, drops: usize) -> Result<usize, UnderflowError> {
-        self.as_usize()
-            .and_then(|n| n.checked_add(drops).ok_or(UnderflowError::Normal))
     }
 }
 

@@ -11,6 +11,7 @@ use crate::inst::NumberLit;
 pub enum AbstractNumber {
     Value(Rc<Integer>),
     StackRef(usize),
+    LazyStackRef(usize),
     HeapRef(AbstractNumberRef),
     Error(NumberError),
 }
