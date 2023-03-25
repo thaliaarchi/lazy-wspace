@@ -23,7 +23,7 @@ pub enum Number {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NumberRef(Rc<RefCell<Number>>);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Op {
     Add,
     Sub,

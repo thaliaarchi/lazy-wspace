@@ -6,88 +6,90 @@ use rug::Integer;
 
 use crate::ast::NumberLit;
 use crate::error::NumberError;
+use crate::number::Op;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AbstractNumber {
+pub enum Exp {
     Value(Rc<Integer>),
+    Op(Op, ExpRef, ExpRef),
     StackRef(usize),
     LazyStackRef(usize),
-    HeapRef(AbstractNumberRef),
+    HeapRef(ExpRef),
     Error(NumberError),
 }
 
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AbstractNumberRef(Rc<RefCell<AbstractNumber>>);
+pub struct ExpRef(Rc<RefCell<Exp>>);
 
-impl AbstractNumberRef {
+impl ExpRef {
     #[inline]
     pub fn is_unique(&self) -> bool {
         Rc::strong_count(&self.0) == 1
     }
 
     #[inline]
-    pub fn same_ref(&self, other: &AbstractNumberRef) -> bool {
+    pub fn same_ref(&self, other: &ExpRef) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
 
     #[inline]
-    pub fn borrow(&self) -> Ref<'_, AbstractNumber> {
+    pub fn borrow(&self) -> Ref<'_, Exp> {
         self.0.borrow()
     }
 
     #[inline]
-    pub fn borrow_mut(&self) -> RefMut<'_, AbstractNumber> {
+    pub fn borrow_mut(&self) -> RefMut<'_, Exp> {
         self.0.borrow_mut()
     }
 }
 
-impl From<&NumberLit> for AbstractNumber {
+impl From<&NumberLit> for Exp {
     #[inline]
     fn from(n: &NumberLit) -> Self {
         match n {
-            NumberLit::Number(n) => AbstractNumber::Value(n.clone()),
-            NumberLit::Empty => AbstractNumber::Error(NumberError::EmptyLit),
+            NumberLit::Number(n) => Exp::Value(n.clone()),
+            NumberLit::Empty => Exp::Error(NumberError::EmptyLit),
         }
     }
 }
 
-impl<T: Into<Integer>> From<T> for AbstractNumber {
+impl<T: Into<Integer>> From<T> for Exp {
     #[inline]
     fn from(v: T) -> Self {
-        AbstractNumber::Value(Rc::new(v.into()))
+        Exp::Value(Rc::new(v.into()))
     }
 }
 
-impl From<NumberError> for AbstractNumber {
+impl From<NumberError> for Exp {
     #[inline]
     fn from(err: NumberError) -> Self {
-        AbstractNumber::Error(err)
+        Exp::Error(err)
     }
 }
 
-impl<T: Into<AbstractNumber>> From<T> for AbstractNumberRef {
+impl<T: Into<Exp>> From<T> for ExpRef {
     #[inline]
     fn from(v: T) -> Self {
-        AbstractNumberRef(Rc::new(RefCell::new(v.into())))
+        ExpRef(Rc::new(RefCell::new(v.into())))
     }
 }
 
-impl PartialEq<AbstractNumberRef> for AbstractNumber {
+impl PartialEq<ExpRef> for Exp {
     #[inline]
-    fn eq(&self, other: &AbstractNumberRef) -> bool {
+    fn eq(&self, other: &ExpRef) -> bool {
         self == &*other.0.borrow()
     }
 }
 
-impl PartialEq<AbstractNumber> for AbstractNumberRef {
+impl PartialEq<Exp> for ExpRef {
     #[inline]
-    fn eq(&self, other: &AbstractNumber) -> bool {
+    fn eq(&self, other: &Exp) -> bool {
         &*self.0.borrow() == other
     }
 }
 
-impl Hash for AbstractNumberRef {
+impl Hash for ExpRef {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.borrow().hash(state);

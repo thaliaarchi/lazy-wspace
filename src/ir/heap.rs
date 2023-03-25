@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use crate::error::{EagerError, Error, NumberError};
-use crate::ir::{AbstractNumber, AbstractNumberRef};
+use crate::ir::{Exp, ExpRef};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbstractHeap {
-    consts: HashMap<u32, AbstractNumberRef>,
-    vars: HashMap<AbstractNumberRef, AbstractNumberRef>,
+    consts: HashMap<u32, ExpRef>,
+    vars: HashMap<ExpRef, ExpRef>,
 }
 
 impl AbstractHeap {
@@ -21,33 +21,33 @@ impl AbstractHeap {
     /// Get the value at address `addr` in the heap. It will return the same
     /// value as previous calls to `retrieve` with the same value for `addr`,
     /// unless a potentially-aliasing address has been written to.
-    pub fn retrieve(&mut self, addr: AbstractNumberRef) -> AbstractNumberRef {
+    pub fn retrieve(&mut self, addr: ExpRef) -> ExpRef {
         match &*addr.borrow() {
-            AbstractNumber::Value(n) => {
+            Exp::Value(n) => {
                 return if let Some(n) = n.to_u32() {
                     self.consts
                         .entry(n)
-                        .or_insert_with(|| AbstractNumber::HeapRef(addr.clone()).into())
+                        .or_insert_with(|| Exp::HeapRef(addr.clone()).into())
                         .clone()
                 } else {
-                    AbstractNumber::Error(NumberError::RetrieveLarge).into()
+                    Exp::Error(NumberError::RetrieveLarge).into()
                 };
             }
-            AbstractNumber::Error(_) => return addr.clone(),
+            Exp::Error(_) => return addr.clone(),
             _ => {}
         }
 
         self.vars
             .entry(addr.clone())
-            .or_insert_with(|| AbstractNumber::HeapRef(addr).into())
+            .or_insert_with(|| Exp::HeapRef(addr).into())
             .clone()
     }
 
     /// Write a value to address `addr` in the heap. It invalidates any known
     /// values at addresses that may alias with `addr`.
-    pub fn store(&mut self, addr: AbstractNumberRef, val: AbstractNumberRef) -> Result<(), Error> {
+    pub fn store(&mut self, addr: ExpRef, val: ExpRef) -> Result<(), Error> {
         match &*addr.borrow() {
-            AbstractNumber::Value(n) => {
+            Exp::Value(n) => {
                 return if let Some(n) = n.to_u32() {
                     // A constant address may alias computed addresses, but not
                     // other constant addresses
@@ -59,7 +59,7 @@ impl AbstractHeap {
                     Err(EagerError::StoreOverflow.into())
                 };
             }
-            AbstractNumber::Error(err) => return Err(err.clone().into()),
+            Exp::Error(err) => return Err(err.clone().into()),
             _ => {}
         }
 

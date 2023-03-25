@@ -1,12 +1,13 @@
 use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::ir::{AbstractNumber, AbstractNumberRef};
+use crate::ir::{Exp, ExpRef};
+use crate::number::Op;
 
 /// An abstract stack for stack operations in a basic block
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbstractStack {
-    values: Vec<AbstractNumberRef>,
-    under: Vec<Option<AbstractNumberRef>>,
+    values: Vec<ExpRef>,
+    under: Vec<Option<ExpRef>>,
     drops: usize,
     slide: LazySize,
 }
@@ -33,23 +34,43 @@ impl AbstractStack {
         }
     }
 
+    #[inline]
+    pub fn values_pushed(&self) -> &[ExpRef] {
+        &self.values
+    }
+
+    #[inline]
+    pub fn values_under(&self) -> &[Option<ExpRef>] {
+        &self.under
+    }
+
+    #[inline]
+    pub fn drop_count(&self) -> usize {
+        self.drops
+    }
+
+    #[inline]
+    pub fn slide_count(&self) -> LazySize {
+        self.slide
+    }
+
     /// Pushes a value to the stack.
     #[inline]
-    pub fn push(&mut self, n: AbstractNumberRef) {
+    pub fn push(&mut self, n: ExpRef) {
         self.values.push(n);
     }
 
     /// Eagerly pushes a reference to the top element on the stack.
     #[inline]
-    pub fn dup(&mut self) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn dup(&mut self) -> Result<(), UnderflowError> {
         let top = self.top()?;
-        self.push(top.clone());
-        Ok(top)
+        self.push(top);
+        Ok(())
     }
 
     /// Eagerly pushes a lazy reference to the nth element on the stack.
     #[inline]
-    pub fn copy(&mut self, n: LazySize) -> AbstractNumberRef {
+    pub fn copy(&mut self, n: LazySize) {
         let nth = match n {
             LazySize::Finite(n) => match self.at_lazy(n) {
                 Ok(nth) => nth,
@@ -59,8 +80,7 @@ impl AbstractStack {
             LazySize::Overflow => NumberError::CopyLarge.into(),
             LazySize::EmptyLit => NumberError::EmptyLit.into(),
         };
-        self.push(nth.clone());
-        nth
+        self.push(nth);
     }
 
     /// Eagerly swaps the top two elements on the stack.
@@ -75,13 +95,13 @@ impl AbstractStack {
 
     /// Eagerly accesses the top element of the stack and returns it.
     #[inline]
-    pub fn top(&mut self) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn top(&mut self) -> Result<ExpRef, UnderflowError> {
         self.at_eager(0)
     }
 
     /// Eagerly accesses the nth element from the top of the stack and returns
     /// it.
-    pub fn at_eager(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn at_eager(&mut self, n: usize) -> Result<ExpRef, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1].clone())
         } else {
@@ -92,14 +112,14 @@ impl AbstractStack {
                 self.under.resize(i + 1, None);
             }
             Ok(self.under[i]
-                .get_or_insert_with(|| AbstractNumber::StackRef(i).into())
+                .get_or_insert_with(|| Exp::StackRef(i).into())
                 .clone())
         }
     }
 
     /// Lazily accesses the nth element from the top of the stack and returns
     /// it.
-    pub fn at_lazy(&mut self, n: usize) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn at_lazy(&mut self, n: usize) -> Result<ExpRef, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1].clone())
         } else {
@@ -108,17 +128,17 @@ impl AbstractStack {
             let i = add_or_underflow(slide_and_drops, n)?;
             if i < self.under.len() {
                 Ok(self.under[i]
-                    .get_or_insert_with(|| AbstractNumber::StackRef(n).into())
+                    .get_or_insert_with(|| Exp::StackRef(n).into())
                     .clone())
             } else {
-                Ok(AbstractNumber::LazyStackRef(i).into())
+                Ok(Exp::LazyStackRef(i).into())
             }
         }
     }
 
     /// Eagerly removes the top element from the stack and returns it.
     #[inline]
-    pub fn pop(&mut self) -> Result<AbstractNumberRef, UnderflowError> {
+    pub fn pop(&mut self) -> Result<ExpRef, UnderflowError> {
         let top = self.top()?;
         self.drop_eager(1)?;
         Ok(top)
@@ -126,10 +146,19 @@ impl AbstractStack {
 
     /// Eagerly removes the top two elements from the stack and returns them.
     #[inline]
-    pub fn pop2(&mut self) -> Result<(AbstractNumberRef, AbstractNumberRef), UnderflowError> {
+    pub fn pop2(&mut self) -> Result<(ExpRef, ExpRef), UnderflowError> {
         let vals = (self.at_eager(1)?, self.at_eager(0)?);
         self.drop_eager(2)?;
         Ok(vals)
+    }
+
+    /// Eagerly applies an arithmetic operation to the the top two elements on
+    /// the stack.
+    #[inline]
+    pub fn apply_op(&mut self, op: Op) -> Result<(), UnderflowError> {
+        let (x, y) = self.pop2()?;
+        self.push(Exp::Op(op, x, y).into());
+        Ok(())
     }
 
     /// Eagerly removes the top `n` elements from the stack.
@@ -220,7 +249,7 @@ impl AbstractStack {
         // Clear unused stack references
         for i in 0..self.under.len() {
             if let Some(u) = &self.under[i] {
-                if u.is_unique() && u == &AbstractNumber::StackRef(i) {
+                if u.is_unique() && u == &Exp::StackRef(i) {
                     self.under[i] = None;
                 }
             }
@@ -256,9 +285,9 @@ impl LazySize {
     }
 }
 
-impl From<NumberLit> for LazySize {
+impl From<&NumberLit> for LazySize {
     #[inline]
-    fn from(n: NumberLit) -> Self {
+    fn from(n: &NumberLit) -> Self {
         match n {
             NumberLit::Number(n) => {
                 if let Some(n) = n.to_usize() {
@@ -278,10 +307,10 @@ mod tests {
     use LazySize::*;
 
     macro_rules! num(($n:expr) => {
-        AbstractNumberRef::from($n)
+        ExpRef::from($n)
     });
     macro_rules! stk(($n:expr) => {
-        AbstractNumberRef::from(AbstractNumber::StackRef($n))
+        ExpRef::from(Exp::StackRef($n))
     });
     macro_rules! stack(([$($value:expr),*], [$($under:expr),*], $drops:expr, $slide:expr$(,)?) => {
         AbstractStack {

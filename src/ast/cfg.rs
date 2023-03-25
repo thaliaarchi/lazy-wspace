@@ -16,12 +16,12 @@ pub struct BasicBlock<'a> {
     id: usize,
     label: Option<&'a LabelLit>,
     insts: &'a [Inst],
-    term: TermInst,
+    exit: ExitInst,
 }
 
-/// Terminator instruction in a basic block.
+/// Exit instruction in a basic block (the terminator).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TermInst {
+pub enum ExitInst {
     Call(usize, usize),
     Jmp(usize),
     Jz(usize, usize),
@@ -77,7 +77,7 @@ impl<'a> Cfg<'a> {
         let mut block_start = 0;
         for (pc, inst) in prog.iter().enumerate() {
             let mut next_label = None;
-            let term = match inst {
+            let exit = match inst {
                 Inst::Label(l) => {
                     if block_start == pc {
                         curr_label = curr_label.or_else(|| Some(l));
@@ -85,23 +85,23 @@ impl<'a> Cfg<'a> {
                         continue;
                     } else {
                         next_label = Some(l);
-                        TermInst::Jmp(get_label!(l))
+                        ExitInst::Jmp(get_label!(l))
                     }
                 }
-                Inst::Call(l) => TermInst::Call(get_label!(l), bbs.len() + 1),
-                Inst::Jmp(l) => TermInst::Jmp(get_label!(l)),
-                Inst::Jz(l) => TermInst::Jz(get_label!(l), bbs.len() + 1),
-                Inst::Jn(l) => TermInst::Jn(get_label!(l), bbs.len() + 1),
-                Inst::Ret => TermInst::Ret,
-                Inst::End => TermInst::End,
-                Inst::ParseError(err) => TermInst::Error(err.clone()),
+                Inst::Call(l) => ExitInst::Call(get_label!(l), bbs.len() + 1),
+                Inst::Jmp(l) => ExitInst::Jmp(get_label!(l)),
+                Inst::Jz(l) => ExitInst::Jz(get_label!(l), bbs.len() + 1),
+                Inst::Jn(l) => ExitInst::Jn(get_label!(l), bbs.len() + 1),
+                Inst::Ret => ExitInst::Ret,
+                Inst::End => ExitInst::End,
+                Inst::ParseError(err) => ExitInst::Error(err.clone()),
                 _ => continue,
             };
             bbs.push(Some(BasicBlock {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..pc],
-                term,
+                exit,
             }));
             curr_label = next_label;
             block_start = pc + 1;
@@ -111,7 +111,7 @@ impl<'a> Cfg<'a> {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..],
-                term: TermInst::Error(ParseError::ImplicitEnd),
+                exit: ExitInst::Error(ParseError::ImplicitEnd),
             }));
         }
         assert_eq!(bbs_count, bbs.len());
@@ -132,13 +132,13 @@ impl<'a> Cfg<'a> {
             visited.insert(id);
             let bb = self.bbs[id].as_ref().expect("undefined block");
             // TODO: Call and ret are not paired
-            match bb.term {
-                TermInst::Jmp(l) => {
+            match bb.exit {
+                ExitInst::Jmp(l) => {
                     if !visited.contains(&l) {
                         queue.push_back(l)
                     }
                 }
-                TermInst::Call(l1, l2) | TermInst::Jz(l1, l2) | TermInst::Jn(l1, l2) => {
+                ExitInst::Call(l1, l2) | ExitInst::Jz(l1, l2) | ExitInst::Jn(l1, l2) => {
                     if !visited.contains(&l1) {
                         queue.push_back(l1);
                     }
@@ -179,8 +179,8 @@ impl<'a> BasicBlock<'a> {
     }
 
     #[inline]
-    pub fn term(&self) -> &TermInst {
-        &self.term
+    pub fn exit(&self) -> &ExitInst {
+        &self.exit
     }
 }
 
@@ -201,14 +201,14 @@ impl Display for Cfg<'_> {
                     self.bbs[*$l].as_ref().expect("undefined label")
                 });
                 write!(f, "    ")?;
-                match &bb.term {
-                    TermInst::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
-                    TermInst::Jmp(l) => write!(f, "jmp {}", bb!(l)),
-                    TermInst::Jz(l1, l2) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
-                    TermInst::Jn(l1, l2) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
-                    TermInst::Ret => write!(f, "ret"),
-                    TermInst::End => write!(f, "end"),
-                    TermInst::Error(err) => write!(f, "error {err:?}"),
+                match &bb.exit {
+                    ExitInst::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
+                    ExitInst::Jmp(l) => write!(f, "jmp {}", bb!(l)),
+                    ExitInst::Jz(l1, l2) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
+                    ExitInst::Jn(l1, l2) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
+                    ExitInst::Ret => write!(f, "ret"),
+                    ExitInst::End => write!(f, "end"),
+                    ExitInst::Error(err) => write!(f, "error {err:?}"),
                 }?;
                 writeln!(f)?;
             }

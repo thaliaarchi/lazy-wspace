@@ -15,11 +15,11 @@ pub mod ast {
 }
 
 pub mod ir {
+    mod exp;
     mod heap;
-    mod number;
     mod stack;
+    pub use exp::*;
     pub use heap::*;
-    pub use number::*;
     pub use stack::*;
 }
 
