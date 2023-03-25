@@ -52,13 +52,13 @@ impl Cfg {
         for (pc, inst) in prog.iter().enumerate() {
             match inst {
                 Inst::Label(l) => {
-                    if pc != 0 && !matches!(prog[pc - 1], Inst::Label(_)) {
+                    if pc != 0 && !prog[pc - 1].is_control_flow() {
                         bbs_count += 1;
                     }
                     labels.insert(l.clone(), bbs_count);
                 }
                 _ => {
-                    if inst.is_terminator() {
+                    if inst.is_control_flow() {
                         bbs_count += 1;
                     }
                 }
@@ -76,12 +76,14 @@ impl Cfg {
         let mut curr_label = None;
         let mut curr_block = Vec::new();
         for (pc, inst) in prog.iter().enumerate() {
+            let mut next_label = None;
             let term = match inst {
                 Inst::Label(l) => {
-                    curr_label = curr_label.or_else(|| Some(l.clone()));
-                    if pc != 0 && !matches!(prog[pc - 1], Inst::Label(_)) {
+                    if pc != 0 && !prog[pc - 1].is_control_flow() {
+                        next_label = Some(l.clone());
                         TermInst::Jmp(get_label!(l))
                     } else {
+                        curr_label = curr_label.or_else(|| Some(l.clone()));
                         continue;
                     }
                 }
@@ -103,7 +105,7 @@ impl Cfg {
                 insts: curr_block,
                 term,
             });
-            curr_label = None;
+            curr_label = next_label;
             curr_block = Vec::new();
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {

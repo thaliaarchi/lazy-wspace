@@ -149,9 +149,10 @@ impl Inst {
     }
 
     #[inline]
-    pub fn is_terminator(&self) -> bool {
+    pub fn is_control_flow(&self) -> bool {
         match self {
-            Inst::Call(_)
+            Inst::Label(_)
+            | Inst::Call(_)
             | Inst::Jmp(_)
             | Inst::Jz(_)
             | Inst::Jn(_)
