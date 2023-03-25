@@ -7,8 +7,10 @@ pub mod parse;
 pub mod vm;
 
 pub mod ir {
+    mod heap;
     mod number;
     mod stack;
+    pub use heap::*;
     pub use number::*;
     pub use stack::*;
 }

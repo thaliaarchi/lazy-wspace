@@ -37,7 +37,7 @@ pub enum ParseError {
     InvalidUtf8,
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum NumberError {
     #[error("empty number literal")]
     EmptyLit,

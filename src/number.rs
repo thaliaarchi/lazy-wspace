@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::rc::Rc;
@@ -152,6 +152,16 @@ impl NumberRef {
         });
         debug_assert_eq!(Number::Error(NumberError::Internal), inner);
         res
+    }
+
+    #[inline]
+    pub fn borrow(&self) -> Ref<'_, Number> {
+        self.0.borrow()
+    }
+
+    #[inline]
+    pub fn borrow_mut(&self) -> RefMut<'_, Number> {
+        self.0.borrow_mut()
     }
 }
 

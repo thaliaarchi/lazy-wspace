@@ -245,7 +245,7 @@ mod tests {
     use LazySize::*;
 
     macro_rules! num(($n:expr) => {
-        AbstractNumberRef::from(AbstractNumber::Number($n.into()))
+        AbstractNumberRef::from($n)
     });
     macro_rules! stk(($n:expr) => {
         AbstractNumberRef::from(AbstractNumber::StackRef($n))
