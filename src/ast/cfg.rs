@@ -6,16 +6,16 @@ use crate::error::ParseError;
 
 /// Control-flow graph for AST instructions.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cfg {
-    bbs: Vec<BasicBlock>,
+pub struct Cfg<'a> {
+    bbs: Vec<BasicBlock<'a>>,
 }
 
 /// Basic block for AST instructions.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BasicBlock {
+pub struct BasicBlock<'a> {
     id: usize,
-    label: Option<LabelLit>,
-    insts: Vec<Inst>,
+    label: Option<&'a LabelLit>,
+    insts: &'a [Inst],
     term: TermInst,
 }
 
@@ -31,8 +31,8 @@ pub enum TermInst {
     Error(ParseError),
 }
 
-impl Cfg {
-    pub fn new(prog: &[Inst]) -> Self {
+impl<'a> Cfg<'a> {
+    pub fn new(prog: &'a [Inst]) -> Self {
         let mut prog_len = prog.len();
         for (pc, inst) in prog.iter().enumerate() {
             match inst {
@@ -74,17 +74,18 @@ impl Cfg {
 
         let mut bbs = Vec::with_capacity(bbs_count);
         let mut curr_label = None;
-        let mut curr_block = Vec::new();
+        let mut block_start = 0;
         for (pc, inst) in prog.iter().enumerate() {
             let mut next_label = None;
             let term = match inst {
                 Inst::Label(l) => {
-                    if pc != 0 && !prog[pc - 1].is_control_flow() {
-                        next_label = Some(l.clone());
-                        TermInst::Jmp(get_label!(l))
-                    } else {
-                        curr_label = curr_label.or_else(|| Some(l.clone()));
+                    if block_start == pc {
+                        curr_label = curr_label.or_else(|| Some(l));
+                        block_start = pc + 1;
                         continue;
+                    } else {
+                        next_label = Some(l);
+                        TermInst::Jmp(get_label!(l))
                     }
                 }
                 Inst::Call(l) => TermInst::Call(get_label!(l), bbs.len() + 1),
@@ -94,25 +95,22 @@ impl Cfg {
                 Inst::Ret => TermInst::Ret,
                 Inst::End => TermInst::End,
                 Inst::ParseError(err) => TermInst::Error(err.clone()),
-                _ => {
-                    curr_block.push(inst.clone());
-                    continue;
-                }
+                _ => continue,
             };
             bbs.push(BasicBlock {
                 id: bbs.len(),
                 label: curr_label,
-                insts: curr_block,
+                insts: &prog[block_start..pc],
                 term,
             });
             curr_label = next_label;
-            curr_block = Vec::new();
+            block_start = pc + 1;
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {
             bbs.push(BasicBlock {
                 id: bbs.len(),
                 label: curr_label,
-                insts: curr_block,
+                insts: &prog[block_start..],
                 term: TermInst::Error(ParseError::ImplicitEnd),
             });
         }
@@ -127,20 +125,20 @@ impl Cfg {
     }
 }
 
-impl BasicBlock {
+impl<'a> BasicBlock<'a> {
     #[inline]
     pub fn id(&self) -> usize {
         self.id
     }
 
     #[inline]
-    pub fn label(&self) -> Option<&LabelLit> {
-        self.label.as_ref()
+    pub fn label(&self) -> Option<&'a LabelLit> {
+        self.label
     }
 
     #[inline]
-    pub fn insts(&self) -> &[Inst] {
-        &self.insts
+    pub fn insts(&self) -> &'a [Inst] {
+        self.insts
     }
 
     #[inline]
@@ -149,14 +147,14 @@ impl BasicBlock {
     }
 }
 
-impl Display for Cfg {
+impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (id, bb) in self.bbs.iter().enumerate() {
             if id != 0 {
                 writeln!(f)?;
             }
             writeln!(f, "{bb}:")?;
-            for inst in &bb.insts {
+            for inst in bb.insts {
                 writeln!(f, "    {inst}")?;
             }
             write!(f, "    ")?;
@@ -175,7 +173,7 @@ impl Display for Cfg {
     }
 }
 
-impl Display for BasicBlock {
+impl Display for BasicBlock<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.label {
             Some(l) => write!(f, "{l}"),
