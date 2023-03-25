@@ -85,11 +85,17 @@ impl BasicBlock {
             ExitInst::Call(l1, l2) => ExitStmt::Call(*l1, *l2),
             ExitInst::Jmp(l) => ExitStmt::Jmp(*l),
             ExitInst::Jz(l1, l2, inst) => match bb.stack.pop() {
-                Ok(top) => ExitStmt::Br(Cond::Zero, top, *l1, *l2),
+                Ok(top) => {
+                    bb.stmts.push(Stmt::Eval(top.clone()));
+                    ExitStmt::Br(Cond::Zero, top, *l1, *l2)
+                }
                 Err(err) => ExitStmt::Error(err.to_error(inst)),
             },
             ExitInst::Jn(l1, l2, inst) => match bb.stack.pop() {
-                Ok(top) => ExitStmt::Br(Cond::Neg, top, *l1, *l2),
+                Ok(top) => {
+                    bb.stmts.push(Stmt::Eval(top.clone()));
+                    ExitStmt::Br(Cond::Neg, top, *l1, *l2)
+                }
                 Err(err) => ExitStmt::Error(err.to_error(inst)),
             },
             ExitInst::Ret => ExitStmt::Ret,
@@ -138,18 +144,22 @@ impl BasicBlock {
             }
             Inst::Printc => {
                 let val = self.stack.pop()?;
+                self.stmts.push(Stmt::Eval(val.clone()));
                 self.stmts.push(Stmt::Print(IoKind::Char, val));
             }
             Inst::Printi => {
                 let val = self.stack.pop()?;
+                self.stmts.push(Stmt::Eval(val.clone()));
                 self.stmts.push(Stmt::Print(IoKind::Int, val));
             }
             Inst::Readc => {
                 let addr = self.stack.pop()?;
+                self.stmts.push(Stmt::Eval(addr.clone()));
                 self.stmts.push(Stmt::Read(IoKind::Char, addr));
             }
             Inst::Readi => {
                 let addr = self.stack.pop()?;
+                self.stmts.push(Stmt::Eval(addr.clone()));
                 self.stmts.push(Stmt::Read(IoKind::Int, addr));
             }
             Inst::Label(_)
