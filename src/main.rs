@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::{env, path::PathBuf};
 
-use lazy_wspace::ast::{self, Lexer, Parser};
+use lazy_wspace::ast::{self, Inst, Lexer, Parser};
 use lazy_wspace::error::Error;
 use lazy_wspace::ir::{self, DisplayCfgWithDag};
 
@@ -22,16 +22,28 @@ fn main() {
     let mut f = File::open(&filename).unwrap();
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
-    let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
 
-    let mut cfg = ast::Cfg::new(&prog);
-    print!("===== AST CFG =====\n\n{}", cfg);
-    cfg.eliminate_dead();
-    print!("\n\n===== After dead-code elimination =====\n\n{}", cfg);
-    let cfg = ir::Cfg::new(&cfg);
-    print!("\n\n===== CFG =====\n\n{}", cfg);
-    print!(
-        "\n\n===== CFG with DAG =====\n\n{}",
-        DisplayCfgWithDag(&cfg)
-    );
+    let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
+    println!("===== AST =====\n");
+    for inst in &prog {
+        if !matches!(inst, Inst::Label(_)) {
+            print!("    ");
+        }
+        println!("{inst}");
+    }
+
+    let mut ast_cfg = ast::Cfg::new(&prog);
+    println!("\n\n===== AST CFG =====\n");
+    print!("{ast_cfg}");
+
+    ast_cfg.eliminate_dead();
+    println!("\n\n===== AST CFG after dead-code elimination =====\n");
+    print!("{ast_cfg}");
+
+    let ir_cfg = ir::Cfg::new(&ast_cfg);
+    println!("\n\n===== IR =====\n");
+    print!("{ir_cfg}");
+
+    println!("\n\n===== IR with DAG =====\n");
+    print!("{}", DisplayCfgWithDag(&ir_cfg));
 }
