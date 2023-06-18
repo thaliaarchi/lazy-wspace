@@ -10,4 +10,6 @@ keywords = ["whitespace", "syntax", "parsing"]
 categories = ["parser-implementations"]
 
 [dependencies]
+aho-corasick = "1.0"
+memchr = "2.5"
 unicode-ident = "1.0"
