@@ -1,0 +1,13 @@
+[package]
+name = "wspace-syntax"
+version = "0.1.0"
+authors = ["Thalia Archibald <thalia@archibald.dev>"]
+edition = "2021"
+description = "Parsing and syntax trees for the Whitespace programming language and its various syntaxes"
+repository = "https://github.com/thaliaarchi/wspace-syntax"
+license = "MPL-2.0"
+keywords = ["whitespace", "syntax", "parsing"]
+categories = ["parser-implementations"]
+
+[dependencies]
+unicode-ident = "1.0"
