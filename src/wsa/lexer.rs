@@ -34,11 +34,11 @@ impl Token {
 /// ```bnf
 /// word           ::= (XID_Start | word_symbol) (XID_Continue | word_symbol)*
 /// word_symbol    ::= [!$%&*+-./<=>?@\\^_|~]
-/// integer        ::= dec_integer | bin_integer | oct_integer | hex_integer
-/// dec_integer    ::= [-+]?[1-9][0-9_]*|0*
-/// bin_integer    ::= [-+]?0[bB][01_]*
-/// oct_integer    ::= [-+]?0[oO]_*[0-7][0-7_]*
-/// hex_integer    ::= [-+]?0[xX]_*[0-9a-fA-F][0-9a-fA-F_]*
+/// integer        ::= [-+]? (dec_integer | bin_integer | oct_integer | hex_integer)
+/// dec_integer    ::= ([1-9] ("_"* [0-9])* | "0")
+/// bin_integer    ::= "0" [bB] ("_"* [01])*
+/// oct_integer    ::= "0" [oO] ("_"* [0-7])+
+/// hex_integer    ::= "0" [xX] ("_"* [0-9 a-f A-F])+
 /// char           ::= "'" … "'"
 /// string         ::= "\"" … "\""
 /// colon          ::= ":"
