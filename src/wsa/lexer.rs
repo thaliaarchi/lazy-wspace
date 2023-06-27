@@ -78,7 +78,7 @@ pub enum TokenKind {
     /// `#`, `//`, or `--` line comment
     LineComment,
     /// `/* */` non-nested or `{- -}` nested block comment
-    BlockComment,
+    BlockComment { terminated: bool },
     /// Unicode whitespace, excluding LF
     Space,
     /// LF or CRLF
@@ -187,32 +187,6 @@ impl<'a> Lexer<'a> {
         Token::new(kind, len)
     }
 
-    fn bump(&mut self) -> Option<char> {
-        self.chars.next()
-    }
-
-    fn peek(&self) -> char {
-        self.chars.clone().next().unwrap_or(EOF_CHAR)
-    }
-
-    fn is_eof(&self) -> bool {
-        self.chars.as_str().is_empty()
-    }
-
-    fn token_len(&self) -> u32 {
-        (self.len_remaining - self.chars.as_str().len()) as u32
-    }
-
-    fn reset_token_len(&mut self) {
-        self.len_remaining = self.chars.as_str().len();
-    }
-
-    fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
-        while predicate(self.peek()) && !self.is_eof() {
-            self.bump();
-        }
-    }
-
     fn word(&mut self) -> TokenKind {
         self.eat_while(is_word_continue);
         TokenKind::Word
@@ -287,12 +261,12 @@ impl<'a> Lexer<'a> {
             match c {
                 '*' if self.peek() == '/' => {
                     self.bump();
-                    break;
+                    return TokenKind::BlockComment { terminated: true };
                 }
                 _ => {}
             }
         }
-        TokenKind::BlockComment
+        TokenKind::BlockComment { terminated: false }
     }
 
     fn nested_block_comment(&mut self) -> TokenKind {
@@ -307,18 +281,44 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     depth -= 1;
                     if depth == 0 {
-                        break;
+                        return TokenKind::BlockComment { terminated: true };
                     }
                 }
                 _ => {}
             }
         }
-        TokenKind::BlockComment
+        TokenKind::BlockComment { terminated: false }
     }
 
     fn space(&mut self) -> TokenKind {
         self.eat_while(|ch| ch.is_whitespace() && ch != '\n');
         TokenKind::Space
+    }
+
+    fn bump(&mut self) -> Option<char> {
+        self.chars.next()
+    }
+
+    fn peek(&self) -> char {
+        self.chars.clone().next().unwrap_or(EOF_CHAR)
+    }
+
+    fn is_eof(&self) -> bool {
+        self.chars.as_str().is_empty()
+    }
+
+    fn token_len(&self) -> u32 {
+        (self.len_remaining - self.chars.as_str().len()) as u32
+    }
+
+    fn reset_token_len(&mut self) {
+        self.len_remaining = self.chars.as_str().len();
+    }
+
+    fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
+        while predicate(self.peek()) && !self.is_eof() {
+            self.bump();
+        }
     }
 }
 
