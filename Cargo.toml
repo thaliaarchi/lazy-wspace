@@ -13,5 +13,11 @@ categories = ["parser-implementations"]
 aho-corasick = "1.0"
 bitvec = "1.0"
 memchr = "2.5"
+phf = { version = "0.11", features = ["macros", "uncased"] }
 rug = "1.19"
+uncased = "0.9"
 unicode-ident = "1.0"
+
+[patch.crates-io]
+# Waiting on rust-phf/rust-phf#289
+phf = { git = "https://github.com/thaliaarchi/rust-phf" }
