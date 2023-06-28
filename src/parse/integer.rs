@@ -190,37 +190,37 @@ pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
     let b = s.as_bytes();
     let (digits, base) = match b {
         [b'0', b'o' | b'O', b @ ..] => {
-            let mut digits = Vec::with_capacity(b.len());
-            for &ch in b {
+            let mut digits = vec![0; b.len()];
+            for (i, &ch) in b.iter().enumerate() {
                 let digit = ch.wrapping_sub(b'0');
                 if digit >= 8 {
                     return Err(ReadIntegerError::InvalidDigit);
                 }
-                digits.push(digit);
+                digits[i] = digit;
             }
             (digits, 8)
         }
         [b'0', b'x' | b'X', b @ ..] => {
-            let mut digits = Vec::with_capacity(b.len());
-            for &ch in b {
+            let mut digits = vec![0; b.len()];
+            for (i, &ch) in b.iter().enumerate() {
                 let digit = match ch {
                     b'0'..=b'9' => ch - b'0',
                     b'a'..=b'f' => ch - b'a' + 10,
                     b'A'..=b'F' => ch - b'A' + 10,
                     _ => return Err(ReadIntegerError::InvalidDigit),
                 };
-                digits.push(digit);
+                digits[i] = digit;
             }
             (digits, 16)
         }
         _ => {
-            let mut digits = Vec::with_capacity(b.len());
-            for &ch in b {
+            let mut digits = vec![0; b.len()];
+            for (i, &ch) in b.iter().enumerate() {
                 let digit = ch.wrapping_sub(b'0');
                 if digit >= 10 {
                     return Err(ReadIntegerError::InvalidDigit);
                 }
-                digits.push(digit);
+                digits[i] = digit;
             }
             (digits, 10)
         }
