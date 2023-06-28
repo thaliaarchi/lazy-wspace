@@ -4,54 +4,68 @@ use phf::{phf_map, Map};
 use uncased::UncasedStr;
 
 macro_rules! opcodes {
-    (enum $Enum:ident
-            $([$mnemonic:literal $(, $mnemonic_alias:literal)*] => $Opcode:ident),* $(,)?) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub enum $Enum {
-            $($Opcode),*
+    ($(#[doc = $inst_doc:literal])? enum $Inst:ident
+            $(#[doc = $opcode_doc:literal])? enum $Opcode:ident
+            $([$mnemonic:literal $(, $mnemonic_alias:literal)*] =>
+            $Op:ident $($($param:ty)+)?),* $(,)?) => {
+        $(#[doc = $inst_doc])?
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub enum $Inst {
+            $($Op $(($($param),*))?),*
         }
 
-        impl FromStr for $Enum {
+        $(#[doc = $opcode_doc])?
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum $Opcode {
+            $($Op),*
+        }
+
+        impl FromStr for $Opcode {
             type Err = ();
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                static MNEMONICS: Map<&'static UncasedStr, $Enum> = phf_map! {
-                    $(UncasedStr::new($mnemonic) => $Enum::$Opcode,
-                        $(UncasedStr::new($mnemonic_alias) => $Enum::$Opcode,)*)*
+                static MNEMONICS: Map<&'static UncasedStr, $Opcode> = phf_map! {
+                    $(UncasedStr::new($mnemonic) => $Opcode::$Op,
+                        $(UncasedStr::new($mnemonic_alias) => $Opcode::$Op,)*)*
                 };
 
                 MNEMONICS.get(&UncasedStr::new(s)).copied().ok_or(())
             }
         }
 
-        impl AsRef<str> for $Enum {
+        impl AsRef<str> for $Opcode {
             fn as_ref(&self) -> &str {
                 match *self {
-                    $($Enum::$Opcode => $mnemonic,)*
+                    $($Opcode::$Op => $mnemonic,)*
                 }
             }
         }
     };
 }
 
-opcodes! { enum Opcode
+opcodes! {
+    /// Instruction in the Burghard Whitespace assembly dialect.
+    enum Inst
+    /// Instruction opcode in the Burghard Whitespace assembly dialect.
+    enum Opcode
+
     // Standard instructions
-    ["push"] => Push,
+    ["push"] => Push IntegerValue,
     ["doub"] => Doub,
     ["swap"] => Swap,
     ["pop"] => Pop,
-    ["add"] => Add,
-    ["sub"] => Sub,
-    ["mul"] => Mul,
-    ["div"] => Div,
-    ["mod"] => Mod,
-    ["store"] => Store,
-    ["retrive"] => Retrive,
-    ["label"] => Label,
-    ["call"] => Call,
-    ["jump"] => Jump,
-    ["jumpz"] => JumpZ,
-    ["jumpn"] => JumpN,
+    ["add"] => Add Option<IntegerValue>,
+    ["sub"] => Sub Option<IntegerValue>,
+    ["mul"] => Mul Option<IntegerValue>,
+    ["div"] => Div Option<IntegerValue>,
+    ["mod"] => Mod Option<IntegerValue>,
+    ["store"] => Store Option<IntegerValue>,
+    ["retrive"] => Retrive Option<IntegerValue>,
+    ["label"] => Label String,
+    ["call"] => Call String,
+    ["jump"] => Jump String,
+    ["jumpz"] => JumpZ String,
+    ["jumpn"] => JumpN String,
     ["ret"] => Ret,
     ["exit"] => Exit,
     ["outc"] => OutC,
@@ -62,13 +76,25 @@ opcodes! { enum Opcode
     ["debug_printstack"] => DebugPrintStack,
     ["debug_printheap"] => DebugPrintHeap,
     // Macro instructions
-    ["pushs"] => PushS,
-    ["jumpp"] => JumpP,
-    ["jumpnz"] => JumpNZ,
-    ["jumppz"] => JumpPZ,
+    ["pushs"] => PushS StringValue,
+    ["jumpp"] => JumpP String,
+    ["jumpnz"] => JumpNZ String,
+    ["jumppz"] => JumpPZ String,
     ["jumpnp", "jumppn"] => JumpNP,
-    ["include"] => Include,
-    ["test"] => Test,
-    ["valuestring"] => ValueS,
-    ["valueinteger"] => ValueI,
+    ["include"] => Include String,
+    ["test"] => Test IntegerValue,
+    ["valuestring"] => ValueS StringValue,
+    ["valueinteger"] => ValueI IntegerValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntegerValue {
+    Literal,
+    Variable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StringValue {
+    Literal,
+    Variable,
 }
