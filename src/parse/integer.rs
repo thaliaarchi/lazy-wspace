@@ -20,7 +20,7 @@ pub enum Sign {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ParseIntegerError {
     InvalidDigit(usize),
-    MissingDigits,
+    NoDigits,
     DecimalLeadingZero,
     LeadingUnderscore,
     TrailingUnderscore,
@@ -121,7 +121,7 @@ impl IntegerLit {
                 (10, digits, 0)
             }
 
-            None => return Err(ParseIntegerError::MissingDigits),
+            None => return Err(ParseIntegerError::NoDigits),
         };
 
         if s0.last() == Some(&b'_') {
@@ -135,7 +135,7 @@ impl IntegerLit {
                 value.assign_bytes_radix_unchecked(&digits, base, sign == Sign::Neg);
             }
         } else if leading_binary_zeros == 0 && base != 2 {
-            return Err(ParseIntegerError::MissingDigits);
+            return Err(ParseIntegerError::NoDigits);
         }
 
         Ok(IntegerLit {
@@ -150,12 +150,6 @@ impl IntegerLit {
 pub enum ReadIntegerError {
     InvalidDigit,
     NoDigits,
-    BinaryPrefix,
-    PositiveSign,
-    Underscore,
-    Exponent,
-    SpaceBetweenDigits,
-    UnicodeLineBreak,
 }
 
 /// Parse an integer like [`read :: String -> Integer`](https://hackage.haskell.org/package/base/docs/GHC-Read.html)
@@ -166,6 +160,9 @@ pub enum ReadIntegerError {
 /// zero is interpreted as decimal, not octal. Unicode space characters may
 /// occur before or after the number, or between the sign and digits. Positive
 /// signs, underscore digit separators, and exponents are not allowed.
+///
+/// Haskell's `String` must be UTF-8 and excludes surrogate halves, so
+/// validation happens outside of `read` and we can use Rust strings.
 ///
 /// It has been tested to match the behavior of at least GHC versions 8.8.4 and
 /// 9.4.4.
@@ -180,11 +177,64 @@ pub enum ReadIntegerError {
 /// space       ::= \p{White_Space} NOT (U+0085 | U+2028 | U+2029)
 /// ```
 pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
-    // Haskell's `String` must be UTF-8 and excludes surrogate halves, so
-    // validation happens outside of `read` and we can use Rust strings.
+    let is_whitespace =
+        |c: char| c.is_whitespace() && c != '\u{0085}' && c != '\u{2028}' && c != '\u{2029}';
+    let mut s = s.trim_matches(is_whitespace);
+    let neg = if !s.is_empty() && s.as_bytes()[0] == b'-' {
+        s = s[1..].trim_start_matches(is_whitespace);
+        true
+    } else {
+        false
+    };
 
-    _ = s;
-    todo!()
+    let b = s.as_bytes();
+    let (digits, base) = match b {
+        [b'0', b'o' | b'O', b @ ..] => {
+            let mut digits = Vec::with_capacity(b.len());
+            for &ch in b {
+                let digit = ch.wrapping_sub(b'0');
+                if digit >= 8 {
+                    return Err(ReadIntegerError::InvalidDigit);
+                }
+                digits.push(digit);
+            }
+            (digits, 8)
+        }
+        [b'0', b'x' | b'X', b @ ..] => {
+            let mut digits = Vec::with_capacity(b.len());
+            for &ch in b {
+                let digit = match ch {
+                    b'0'..=b'9' => ch - b'0',
+                    b'a'..=b'f' => ch - b'a' + 10,
+                    b'A'..=b'F' => ch - b'A' + 10,
+                    _ => return Err(ReadIntegerError::InvalidDigit),
+                };
+                digits.push(digit);
+            }
+            (digits, 16)
+        }
+        _ => {
+            let mut digits = Vec::with_capacity(b.len());
+            for &ch in b {
+                let digit = ch.wrapping_sub(b'0');
+                if digit >= 10 {
+                    return Err(ReadIntegerError::InvalidDigit);
+                }
+                digits.push(digit);
+            }
+            (digits, 10)
+        }
+    };
+    if digits.is_empty() {
+        return Err(ReadIntegerError::NoDigits);
+    }
+
+    let mut value = Integer::new();
+    // SAFETY: Digits have been verified to be in range for the base.
+    unsafe {
+        value.assign_bytes_radix_unchecked(&digits, base, neg);
+    }
+    Ok(value)
 }
 
 #[inline]

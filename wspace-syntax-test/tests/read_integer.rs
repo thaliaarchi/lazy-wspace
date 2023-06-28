@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use rug::Integer;
-use wspace_syntax::parse::ReadIntegerError;
+use wspace_syntax::parse::{read_integer_haskell, ReadIntegerError};
 
 struct Test {
     input: String,
@@ -38,8 +38,8 @@ fn get_tests() -> Vec<Test> {
         Test::ok("0xff", "255"),
         Test::ok("0Xff", "255"),
         Test::ok("0Xff", "255"),
-        Test::err("0b101", BinaryPrefix),
-        Test::err("0B101", BinaryPrefix),
+        Test::err("0b101", InvalidDigit),
+        Test::err("0B101", InvalidDigit),
         // Leading zeros
         Test::ok("042", "42"),
         Test::ok("00042", "42"),
@@ -52,19 +52,19 @@ fn get_tests() -> Vec<Test> {
         Test::err("&hff", InvalidDigit),
         // Signs
         Test::ok("-42", "-42"),
-        Test::err("+42", PositiveSign),
+        Test::err("+42", InvalidDigit),
         // Exponent
-        Test::err("1e3", Exponent),
+        Test::err("1e3", InvalidDigit),
         // Decimal point
         Test::err("3.14", InvalidDigit),
         // Digit separators
-        Test::err("1_000", Underscore),
-        Test::err("1 000", SpaceBetweenDigits),
+        Test::err("1_000", InvalidDigit),
+        Test::err("1 000", InvalidDigit),
         Test::err("1,000", InvalidDigit),
         Test::err("1'000", InvalidDigit),
-        Test::err("0o_42", Underscore),
-        Test::err("0Xf_f", Underscore),
-        Test::err("0O42_", Underscore),
+        Test::err("0o_42", InvalidDigit),
+        Test::err("0Xf_f", InvalidDigit),
+        Test::err("0O42_", InvalidDigit),
         // Larger than 128 bits
         Test::ok(
             "31415926535897932384626433832795028841971693993751",
@@ -106,13 +106,11 @@ fn get_tests() -> Vec<Test> {
         '\u{205F}', // Medium mathematical space
         '\u{3000}', // Ideographic space
     ];
-    let err_line_breaks = [
+    let err_spaces = [
         // Unicode White_Space
         '\u{0085}', // Next line
         '\u{2028}', // Line separator
         '\u{2029}', // Paragraph separator
-    ];
-    let err_other = [
         // Related Unicode characters
         '\u{180E}', // Mongolian vowel separator
         '\u{200B}', // Zero width space
@@ -127,17 +125,10 @@ fn get_tests() -> Vec<Test> {
         tests.push(Test::err(format!("{space}"), NoDigits));
         tests.push(Test::ok(format!("{space}-42"), "-42"));
         tests.push(Test::ok(format!("-{space}42"), "-42"));
-        tests.push(Test::err(format!("-4{space}2"), SpaceBetweenDigits));
+        tests.push(Test::err(format!("-4{space}2"), InvalidDigit));
         tests.push(Test::ok(format!("-42{space}"), "-42"));
     }
-    for space in err_line_breaks {
-        tests.push(Test::err(format!("{space}"), UnicodeLineBreak));
-        tests.push(Test::err(format!("{space}-42"), UnicodeLineBreak));
-        tests.push(Test::err(format!("-{space}42"), UnicodeLineBreak));
-        tests.push(Test::err(format!("-4{space}2"), UnicodeLineBreak));
-        tests.push(Test::err(format!("-42{space}"), UnicodeLineBreak));
-    }
-    for space in err_other {
+    for space in err_spaces {
         tests.push(Test::err(format!("{space}"), InvalidDigit));
         tests.push(Test::err(format!("{space}-42"), InvalidDigit));
         tests.push(Test::err(format!("-{space}42"), InvalidDigit));
@@ -146,6 +137,18 @@ fn get_tests() -> Vec<Test> {
     }
 
     tests
+}
+
+#[test]
+fn test_rust() {
+    for test in get_tests() {
+        assert_eq!(
+            test.output.ok(),
+            read_integer_haskell(&test.input).ok(),
+            "read_integer_haskell({:?})",
+            test.input,
+        );
+    }
 }
 
 #[test]
