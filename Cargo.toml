@@ -9,6 +9,9 @@ license = "MPL-2.0"
 keywords = ["whitespace", "syntax", "parsing"]
 categories = ["parser-implementations"]
 
+[workspace]
+members = ["wspace-syntax-test"]
+
 [dependencies]
 aho-corasick = "1.0"
 bitvec = "1.0"

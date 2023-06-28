@@ -1,0 +1,9 @@
+[package]
+name = "wspace-syntax-test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rug = "1.19"
+wspace-syntax = { path = ".." }

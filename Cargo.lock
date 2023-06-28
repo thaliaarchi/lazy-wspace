@@ -273,6 +273,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wspace-syntax-test"
+version = "0.1.0"
+dependencies = [
+ "rug",
+ "wspace-syntax",
+]
+
+[[package]]
 name = "wyz"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

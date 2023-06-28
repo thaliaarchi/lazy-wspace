@@ -146,6 +146,17 @@ impl IntegerLit {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReadIntegerError {
+    NoParse,
+}
+
+/// Parse an integer like `read s :: Integer` in Haskell.
+pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
+    _ = s;
+    todo!()
+}
+
 #[inline]
 fn skip_leading_zeros(mut s: &[u8]) -> (usize, &[u8]) {
     let mut leading_zeros = 0usize;
