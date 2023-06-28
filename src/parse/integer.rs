@@ -148,11 +148,41 @@ impl IntegerLit {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ReadIntegerError {
-    NoParse,
+    InvalidDigit,
+    NoDigits,
+    BinaryPrefix,
+    PositiveSign,
+    Underscore,
+    Exponent,
+    SpaceBetweenDigits,
+    UnicodeLineBreak,
 }
 
-/// Parse an integer like `read s :: Integer` in Haskell.
+/// Parse an integer like [`read :: String -> Integer`](https://hackage.haskell.org/package/base/docs/GHC-Read.html)
+/// in Haskell.
+///
+/// Octal literals are prefixed with `0o` or `0O` and hexadecimal literals with
+/// `0x` or `0X`. Binary literals with `0b` or `0B` are not supported. A leading
+/// zero is interpreted as decimal, not octal. Unicode space characters may
+/// occur before or after the number, or between the sign and digits. Positive
+/// signs, underscore digit separators, and exponents are not allowed.
+///
+/// It has been tested to match the behavior of at least GHC versions 8.8.4 and
+/// 9.4.4.
+///
+/// # Grammar
+///
+/// ```bnf
+/// integer     ::= space* "-"? space* (dec_integer | oct_integer | hex_integer) space*
+/// dec_integer ::= [0-9]+
+/// oct_integer ::= "0" [oO] [0-7]+
+/// hex_integer ::= "0" [xX] [0-9 a-f A-F]+
+/// space       ::= \p{White_Space} NOT (U+0085 | U+2028 | U+2029)
+/// ```
 pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
+    // Haskell's `String` must be UTF-8 and excludes surrogate halves, so
+    // validation happens outside of `read` and we can use Rust strings.
+
     _ = s;
     todo!()
 }

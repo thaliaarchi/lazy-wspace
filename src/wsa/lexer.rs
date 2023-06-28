@@ -32,7 +32,7 @@ impl Token {
 /// # Grammar
 ///
 /// ```bnf
-/// word           ::= (XID_Start | word_symbol) (XID_Continue | word_symbol)*
+/// word           ::= (\p{XID_Start} | word_symbol) (\p{XID_Continue} | word_symbol)*
 /// word_symbol    ::= [!$%&*+-./<=>?@\\^_|~]
 /// integer        ::= [-+]? (dec_integer | bin_integer | oct_integer | hex_integer)
 /// dec_integer    ::= ([1-9] ("_"* [0-9])* | "0")
