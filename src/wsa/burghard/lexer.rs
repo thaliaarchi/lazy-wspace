@@ -1,7 +1,12 @@
 use std::str::from_utf8_unchecked;
 
+pub struct Token<'a> {
+    pub token: TokenKind,
+    pub lexeme: &'a str,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum TokenKind {
+pub enum TokenKind {
     Word,
     String,
     UnterminatedString,
@@ -16,7 +21,7 @@ enum TokenKind {
 const EOF_BYTE: u8 = 0;
 
 #[derive(Clone, Debug)]
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     src: &'a [u8],
     offset: usize,
 }
@@ -31,9 +36,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Option<(TokenKind, &'a str)> {
+    pub fn next_token(&mut self) -> Option<Token<'a>> {
         let start = self.offset;
-        let tok = match self.bump()? {
+        let token = match self.bump()? {
             b' ' | b'\t' => {
                 self.eat_while(|b| b == b' ' || b == b'\t');
                 TokenKind::Space
@@ -55,8 +60,8 @@ impl<'a> Lexer<'a> {
             }
             _ => self.word(),
         };
-        let s = unsafe { from_utf8_unchecked(&self.src[start..self.offset]) };
-        Some((tok, s))
+        let lexeme = unsafe { from_utf8_unchecked(&self.src[start..self.offset]) };
+        Some(Token { token, lexeme })
     }
 
     fn word(&mut self) -> TokenKind {
