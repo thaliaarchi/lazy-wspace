@@ -53,6 +53,17 @@ fn get_tests() -> Vec<Test> {
         // Signs
         Test::ok("-42", "-42"),
         Test::err("+42", InvalidDigit),
+        // Parentheses
+        Test::ok("(42)", "42"),
+        Test::ok("((42))", "42"),
+        Test::ok("(((42)))", "42"),
+        Test::ok(" ( ( ( 42 ) ) ) ", "42"),
+        Test::ok("(-42)", "-42"),
+        Test::err("-(42)", InvalidDigit),
+        Test::err("-(-42)", InvalidDigit),
+        Test::err("(--42)", InvalidDigit),
+        Test::err("(- -42)", InvalidDigit),
+        Test::err("(-(-42))", InvalidDigit),
         // Exponent
         Test::err("1e3", InvalidDigit),
         // Decimal point
@@ -73,6 +84,12 @@ fn get_tests() -> Vec<Test> {
         // Empty
         Test::err("", NoDigits),
         Test::err("-", NoDigits),
+        // Operations
+        Test::err("1+2", InvalidDigit),
+        Test::err("1-2", InvalidDigit),
+        Test::err("1*2", InvalidDigit),
+        Test::err("1/2", InvalidDigit),
+        Test::err("1%2", InvalidDigit),
         // Non-digits
         Test::err("9000over", InvalidDigit),
         Test::err("invalid", InvalidDigit),

@@ -157,8 +157,9 @@ pub enum ReadIntegerError {
 ///
 /// Octal literals are prefixed with `0o` or `0O` and hexadecimal literals with
 /// `0x` or `0X`. Binary literals with `0b` or `0B` are not supported. A leading
-/// zero is interpreted as decimal, not octal. Unicode space characters may
-/// occur before or after the number, or between the sign and digits. Positive
+/// zero is interpreted as decimal, not octal. It may have a negative sign. It
+/// may be surrounded by any number of parentheses. Unicode whitespace
+/// characters may occur around the number, sign, or parentheses. Positive
 /// signs, underscore digit separators, and exponents are not allowed.
 ///
 /// Haskell's `String` must be UTF-8 and excludes surrogate halves, so
@@ -170,16 +171,31 @@ pub enum ReadIntegerError {
 /// # Grammar
 ///
 /// ```bnf
-/// integer     ::= space* "-"? space* (dec_integer | oct_integer | hex_integer) space*
+/// read        ::= space* "(" read ")" space* | negate
+/// negate      ::= space* "-"? space* integer space*
+/// integer     ::= dec_integer | oct_integer | hex_integer
 /// dec_integer ::= [0-9]+
 /// oct_integer ::= "0" [oO] [0-7]+
 /// hex_integer ::= "0" [xX] [0-9 a-f A-F]+
 /// space       ::= \p{White_Space} NOT (U+0085 | U+2028 | U+2029)
 /// ```
 pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
-    let is_whitespace =
-        |c: char| c.is_whitespace() && c != '\u{0085}' && c != '\u{2028}' && c != '\u{2029}';
-    let mut s = s.trim_matches(is_whitespace);
+    // `Read Integer` instance source: https://gitlab.haskell.org/ghc/ghc/-/blob/887dc4fc5ad033b4dd2537e914d6d4a574b7fe23/libraries/base/GHC/Read.hs#L616-619
+
+    #[inline]
+    fn is_whitespace(ch: char) -> bool {
+        ch.is_whitespace() && ch != '\u{0085}' && ch != '\u{2028}' && ch != '\u{2029}'
+    }
+
+    let mut s = s;
+    loop {
+        s = s.trim_matches(is_whitespace);
+        if s.len() >= 2 && s.as_bytes()[0] == b'(' && s.as_bytes()[s.len() - 1] == b')' {
+            s = &s[1..s.len() - 1];
+        } else {
+            break;
+        }
+    }
     let neg = if !s.is_empty() && s.as_bytes()[0] == b'-' {
         s = s[1..].trim_start_matches(is_whitespace);
         true
