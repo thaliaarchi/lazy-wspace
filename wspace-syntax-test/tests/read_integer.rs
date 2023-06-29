@@ -64,6 +64,10 @@ fn get_tests() -> Vec<Test> {
         Test::err("(--42)", InvalidDigit),
         Test::err("(- -42)", InvalidDigit),
         Test::err("(-(-42))", InvalidDigit),
+        Test::err("(42", UnpairedParen),
+        Test::err("42)", UnpairedParen),
+        Test::err("((42)", UnpairedParen),
+        Test::err("(42))", UnpairedParen),
         // Exponent
         Test::err("1e3", InvalidDigit),
         // Decimal point

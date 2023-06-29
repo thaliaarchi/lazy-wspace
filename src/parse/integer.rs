@@ -150,6 +150,7 @@ impl IntegerLit {
 pub enum ReadIntegerError {
     InvalidDigit,
     NoDigits,
+    UnpairedParen,
 }
 
 /// Parse an integer like [`read :: String -> Integer`](https://hackage.haskell.org/package/base/docs/GHC-Read.html)
@@ -190,11 +191,15 @@ pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
     let mut s = s;
     loop {
         s = s.trim_matches(is_whitespace);
-        if s.len() >= 2 && s.as_bytes()[0] == b'(' && s.as_bytes()[s.len() - 1] == b')' {
-            s = &s[1..s.len() - 1];
-        } else {
-            break;
+        if !s.is_empty() {
+            if s.as_bytes()[0] == b'(' && s.as_bytes()[s.len() - 1] == b')' {
+                s = &s[1..s.len() - 1];
+                continue;
+            } else if s.as_bytes()[0] == b'(' || s.as_bytes()[s.len() - 1] == b')' {
+                return Err(ReadIntegerError::UnpairedParen);
+            }
         }
+        break;
     }
     let neg = if !s.is_empty() && s.as_bytes()[0] == b'-' {
         s = s[1..].trim_start_matches(is_whitespace);
