@@ -7,7 +7,12 @@ use uncased::UncasedStr;
 
 use crate::parse::{read_integer_haskell, ReadIntegerError};
 
-macro_rules! opcodes {
+macro_rules! map(
+    ( , $then:tt) => {};
+    ($optional:tt, $then:tt) => { $then };
+);
+
+macro_rules! insts {
     (
         $(#[doc = $inst_doc:literal])* pub enum $Inst:ident
         $(#[doc = $opcode_doc:literal])* pub enum $Opcode:ident
@@ -24,6 +29,14 @@ macro_rules! opcodes {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         pub enum $Opcode {
             $($Op),*
+        }
+
+        impl Inst {
+            pub fn opcode(&self) -> Opcode {
+                match self {
+                    $($Inst::$Op $(($(map!($param, _)),+))? => $Opcode::$Op,)*
+                }
+            }
         }
 
         impl FromStr for $Opcode {
@@ -49,7 +62,7 @@ macro_rules! opcodes {
     };
 }
 
-opcodes! {
+insts! {
     /// Instruction in the Burghard Whitespace assembly dialect.
     pub enum Inst
 

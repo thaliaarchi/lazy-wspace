@@ -3,6 +3,8 @@ use std::iter::FusedIterator;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use memchr::memchr3;
 
+use crate::ws::MappingWriter;
+
 /// Whitespace token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Token {
@@ -12,6 +14,32 @@ pub enum Token {
     T,
     /// Line feed
     L,
+}
+
+pub struct Mapping {
+    pub s: Vec<u8>,
+    pub t: Vec<u8>,
+    pub l: Vec<u8>,
+}
+
+impl Mapping {
+    pub fn new(s: Vec<u8>, t: Vec<u8>, l: Vec<u8>) -> Self {
+        Mapping { s, t, l }
+    }
+
+    pub fn writer(&self) -> MappingWriter<'_> {
+        MappingWriter::new(self)
+    }
+}
+
+impl Default for Mapping {
+    fn default() -> Self {
+        Mapping {
+            s: b" ".to_vec(),
+            t: b"\t".to_vec(),
+            l: b"\n".to_vec(),
+        }
+    }
 }
 
 /// Trait for token scanning.
@@ -144,59 +172,3 @@ impl Iterator for StringScanner<'_> {
 }
 
 impl FusedIterator for StringScanner<'_> {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[rustfmt::skip]
-    const TUTORIAL_TOKENS: &[Token] = &[
-        Token::S, Token::S, Token::S, Token::T, Token::L,
-        Token::L, Token::S, Token::S, Token::S, Token::T, Token::S, Token::S, Token::S, Token::S, Token::T, Token::T, Token::L,
-        Token::S, Token::L, Token::S,
-        Token::T, Token::L, Token::S, Token::T,
-        Token::S, Token::S, Token::S, Token::T, Token::S, Token::T, Token::S, Token::L,
-        Token::T, Token::L, Token::S, Token::S,
-        Token::S, Token::S, Token::S, Token::T, Token::L,
-        Token::T, Token::S, Token::S, Token::S,
-        Token::S, Token::L, Token::S,
-        Token::S, Token::S, Token::S, Token::T, Token::S, Token::T, Token::T, Token::L,
-        Token::T, Token::S, Token::S, Token::T,
-        Token::L, Token::T, Token::S, Token::S, Token::T, Token::S, Token::S, Token::S, Token::T, Token::S, Token::T, Token::L,
-        Token::L, Token::S, Token::L, Token::S, Token::T, Token::S, Token::S, Token::S, Token::S, Token::T, Token::T, Token::L,
-        Token::L, Token::S, Token::S, Token::S, Token::T, Token::S, Token::S, Token::S, Token::T, Token::S, Token::T, Token::L,
-        Token::S, Token::L, Token::L,
-        Token::L, Token::L, Token::L,
-    ];
-
-    #[test]
-    fn tutorial_byte() {
-        let src = "   \t\n\n   \t    \t\t\n \n \t\n \t   \t \t \n\t\n     \t\n\t    \n    \t \t\t\n\t  \t\n\t  \t   \t \t\n\n \n \t    \t\t\n\n   \t   \t \t\n \n\n\n\n\n";
-        let scan = scan_default(src);
-        assert_eq!(TUTORIAL_TOKENS, scan.collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn tutorial_string() {
-        // https://web.archive.org/web/20150618184706/http://compsoc.dur.ac.uk/whitespace/tutorial.php
-        let src = "[Space][Space][Space][Tab][LF]                                            Put a 1 on the stack
-[LF][Space][Space][Space][Tab][Space][Space] [Space][Space][Tab][Tab][LF] Set a Label at this point
-[Space][LF][Space]                                                        Duplicate the top stack item
-[Tab][LF][Space][Tab]                                                     Output the current value
-[Space][Space][Space][Tab][Space][Tab][Space][LF]                         Put 10 (newline) on the stack...
-[Tab][LF][Space][Space]                                                   ...and output the newline
-[Space][Space][Space][Tab][LF]                                            Put a 1 on the stack
-[Tab][Space][Space][Space]                                                Addition. This increments our current value.
-[Space][LF][Space]                                                        Duplicate that value so we can test it
-[Space][Space][Space][Tab][Space][Tab][Tab][LF]                           Push 11 onto the stack
-[Tab][Space][Space][Tab]                                                  Subtraction. So if we've reached the end, we have a zero on the stack.
-[LF][Tab][Space][Space][Tab][Space][Space] [Space][Tab][Space][Tab][LF]   If we have a zero, jump to the end
-[LF][Space][LF][Space][Tab][Space] [Space][Space][Space][Tab][Tab][LF]    Jump to the start
-[LF][Space][Space][Space][Tab][Space] [Space][Space][Tab][Space][Tab][LF] Set the end label
-[Space][LF][LF]                                                           Discard our accumulator, to be tidy
-[LF][LF][LF]                                                              Finish
-";
-        let scan = StringScanner::new(b"[Space]", b"[Tab]", b"[LF]", src.as_bytes());
-        assert_eq!(TUTORIAL_TOKENS, scan.collect::<Vec<_>>());
-    }
-}

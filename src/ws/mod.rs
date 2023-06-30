@@ -4,7 +4,11 @@
 //! substitutions for the token patterns.
 
 mod ast;
+mod builder;
 mod scanner;
+#[cfg(test)]
+mod tests;
 
 pub use ast::*;
+pub use builder::*;
 pub use scanner::*;
