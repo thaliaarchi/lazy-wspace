@@ -14,20 +14,20 @@ macro_rules! map(
 
 macro_rules! insts {
     (
-        $(#[doc = $inst_doc:literal])* pub enum $Inst:ident
-        $(#[doc = $opcode_doc:literal])* pub enum $Opcode:ident
+        $(#[$inst_attr:meta])* $inst_vis:vis enum $Inst:ident
+        $(#[$opcode_attr:meta])* $opcode_vis:vis enum $Opcode:ident
         $([$mnemonic:literal $(, $mnemonic_alias:literal)*] =>
             $Op:ident $(($($param:ty),+))?),* $(,)?
     ) => {
-        $(#[doc = $inst_doc])*
+        $(#[$inst_attr])*
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-        pub enum $Inst {
+        $inst_vis enum $Inst {
             $($Op $(($($param),+))?),*
         }
 
-        $(#[doc = $opcode_doc])*
+        $(#[$opcode_attr])*
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub enum $Opcode {
+        $opcode_vis enum $Opcode {
             $($Op),*
         }
 
