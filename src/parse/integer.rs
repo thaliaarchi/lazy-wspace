@@ -151,6 +151,7 @@ pub enum ReadIntegerError {
     InvalidDigit,
     NoDigits,
     UnpairedParen,
+    IllegalNeg,
 }
 
 /// Parse an integer like [`read :: String -> Integer`](https://hackage.haskell.org/package/base/docs/GHC-Read.html)
@@ -192,10 +193,14 @@ pub fn read_integer_haskell(s: &str) -> Result<Integer, ReadIntegerError> {
     loop {
         s = s.trim_matches(is_whitespace);
         if !s.is_empty() {
-            if s.as_bytes()[0] == b'(' && s.as_bytes()[s.len() - 1] == b')' {
+            let (first, last) = (s.as_bytes()[0], s.as_bytes()[s.len() - 1]);
+            if first == b'(' && last == b')' {
                 s = &s[1..s.len() - 1];
                 continue;
-            } else if s.as_bytes()[0] == b'(' || s.as_bytes()[s.len() - 1] == b')' {
+            } else if first == b'(' || last == b')' {
+                if first == b'-' {
+                    return Err(ReadIntegerError::IllegalNeg);
+                }
                 return Err(ReadIntegerError::UnpairedParen);
             }
         }

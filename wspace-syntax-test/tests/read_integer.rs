@@ -59,11 +59,11 @@ fn get_tests() -> Vec<Test> {
         Test::ok("(((42)))", "42"),
         Test::ok(" ( ( ( 42 ) ) ) ", "42"),
         Test::ok("(-42)", "-42"),
-        Test::err("-(42)", InvalidDigit),
-        Test::err("-(-42)", InvalidDigit),
+        Test::err("-(42)", IllegalNeg),
+        Test::err("-(-42)", IllegalNeg),
         Test::err("(--42)", InvalidDigit),
         Test::err("(- -42)", InvalidDigit),
-        Test::err("(-(-42))", InvalidDigit),
+        Test::err("(-(-42))", IllegalNeg),
         Test::err("(42", UnpairedParen),
         Test::err("42)", UnpairedParen),
         Test::err("((42)", UnpairedParen),
@@ -164,8 +164,8 @@ fn get_tests() -> Vec<Test> {
 fn test_rust() {
     for test in get_tests() {
         assert_eq!(
-            test.output.ok(),
-            read_integer_haskell(&test.input).ok(),
+            test.output,
+            read_integer_haskell(&test.input),
             "read_integer_haskell({:?})",
             test.input,
         );
