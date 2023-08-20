@@ -4,7 +4,7 @@ use std::{env, path::PathBuf};
 
 use lazy_wspace::ast::{self, Inst, Lexer, Parser};
 use lazy_wspace::error::Error;
-use lazy_wspace::ir::{self, DisplayCfgWithDag};
+use lazy_wspace::ir;
 
 fn main() {
     let mut args = env::args_os();
@@ -43,7 +43,4 @@ fn main() {
     let ir_cfg = ir::Cfg::new(&ast_cfg);
     println!("\n\n===== IR =====\n");
     print!("{ir_cfg}");
-
-    println!("\n\n===== IR with DAG =====\n");
-    print!("{}", DisplayCfgWithDag(&ir_cfg));
 }

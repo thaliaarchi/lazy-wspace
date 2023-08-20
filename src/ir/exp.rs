@@ -1,6 +1,5 @@
-use std::cell::{Ref, RefCell, RefMut};
-use std::fmt::{self, Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::fmt::{self, Display, Formatter};
+use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
 use rug::Integer;
@@ -9,6 +8,17 @@ use crate::ast::NumberLit;
 use crate::error::NumberError;
 use crate::number::Op;
 
+/// Pool of IR expressions.
+///
+/// Expressions are uniquely numbered by [`ExpRef`] and [flattened](https://www.cs.cornell.edu/~asampson/blog/flattening.html).
+/// This enables easy common subexpression elimination and local value
+/// numbering. All `ExpRef`s within must be indices for this pool.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExpPool {
+    values: Vec<Exp>,
+}
+
+/// Expression in an [`ExpPool`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Exp {
     Value(Rc<Integer>),
@@ -19,34 +29,64 @@ pub enum Exp {
     Error(NumberError),
 }
 
+/// Reference to an [`Exp`] in an [`ExpPool`].
 #[repr(transparent)]
-#[derive(Clone, PartialEq, Eq)]
-pub struct ExpRef(Rc<RefCell<Exp>>);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ExpRef(u32);
 
-impl ExpRef {
+impl ExpPool {
     #[inline]
-    pub fn is_unique(&self) -> bool {
-        Rc::strong_count(&self.0) == 1
+    pub fn new() -> Self {
+        ExpPool { values: Vec::new() }
+    }
+
+    pub fn lookup(&self, e: &Exp) -> Option<ExpRef> {
+        let start = match e {
+            Exp::Op(_, l, r) => (l.0.max(r.0) + 1) as usize,
+            Exp::HeapRef(addr) => (addr.0 + 1) as usize,
+            _ => 0,
+        };
+        for (i, e2) in self.values[start..].iter().enumerate() {
+            if e2 == e {
+                return Some(ExpRef::new(i));
+            }
+        }
+        None
+    }
+
+    pub fn insert(&mut self, e: Exp) -> ExpRef {
+        if let Some(e) = self.lookup(&e) {
+            e
+        } else {
+            let index = ExpRef::new(self.values.len());
+            self.values.push(e);
+            index
+        }
     }
 
     #[inline]
-    pub fn same_ref(&self, other: &ExpRef) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+    pub fn values(&self) -> &[Exp] {
+        &self.values
     }
 
     #[inline]
-    pub fn as_ptr(&self) -> *const RefCell<Exp> {
-        Rc::as_ptr(&self.0)
+    pub fn iter_refs(&self) -> impl Iterator<Item = ExpRef> {
+        (0..self.values.len() as u32).map(ExpRef)
     }
 
     #[inline]
-    pub fn borrow(&self) -> Ref<'_, Exp> {
-        self.0.borrow()
+    pub fn iter_entries(&self) -> impl Iterator<Item = (ExpRef, &Exp)> {
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (ExpRef::new(i), e))
     }
+}
 
+impl Exp {
     #[inline]
-    pub fn borrow_mut(&self) -> RefMut<'_, Exp> {
-        self.0.borrow_mut()
+    pub fn value<T: Into<Integer>>(v: T) -> Self {
+        Exp::Value(Rc::new(v.into()))
     }
 }
 
@@ -60,13 +100,6 @@ impl From<&NumberLit> for Exp {
     }
 }
 
-impl<T: Into<Integer>> From<T> for Exp {
-    #[inline]
-    fn from(v: T) -> Self {
-        Exp::Value(Rc::new(v.into()))
-    }
-}
-
 impl From<NumberError> for Exp {
     #[inline]
     fn from(err: NumberError) -> Self {
@@ -74,50 +107,48 @@ impl From<NumberError> for Exp {
     }
 }
 
-impl<T: Into<Exp>> From<T> for ExpRef {
+impl ExpRef {
     #[inline]
-    fn from(v: T) -> Self {
-        ExpRef(Rc::new(RefCell::new(v.into())))
+    pub(crate) fn new(n: usize) -> Self {
+        ExpRef(n as u32)
     }
 }
 
-impl Debug for ExpRef {
+impl Index<ExpRef> for ExpPool {
+    type Output = Exp;
+
     #[inline]
+    fn index(&self, index: ExpRef) -> &Exp {
+        // SAFETY: The pool length is monotonically increasing, so the index
+        // will always be in bounds, as long as the index was created by this
+        // pool. Branding `ExpRef` with a lifetime like [`BrandedVec`](https://matyama.github.io/rust-examples/rust_examples/brands/struct.BrandedVec.html)
+        // in the MPI-SWS `GhostCell` paper does not seem worth it.
+        unsafe { self.values.get_unchecked(index.0 as usize) }
+    }
+}
+
+impl IndexMut<ExpRef> for ExpPool {
+    #[inline]
+    fn index_mut(&mut self, index: ExpRef) -> &mut Self::Output {
+        unsafe { self.values.get_unchecked_mut(index.0 as usize) }
+    }
+}
+
+impl Display for Exp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(&*self.borrow(), f)
-    }
-}
-
-impl PartialEq<ExpRef> for Exp {
-    #[inline]
-    fn eq(&self, other: &ExpRef) -> bool {
-        self == &*other.borrow()
-    }
-}
-
-impl PartialEq<Exp> for ExpRef {
-    #[inline]
-    fn eq(&self, other: &Exp) -> bool {
-        &*self.borrow() == other
-    }
-}
-
-impl Hash for ExpRef {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.borrow().hash(state);
-    }
-}
-
-impl Display for ExpRef {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match &*self.borrow() {
+        match self {
             Exp::Value(n) => write!(f, "value {n}"),
-            Exp::Op(op, l, r) => write!(f, "{op} ({l}) ({r})"),
+            Exp::Op(op, l, r) => write!(f, "{op} {l} {r}"),
             Exp::StackRef(n) => write!(f, "stack_ref {n}"),
             Exp::LazyStackRef(n) => write!(f, "lazy_stack_ref {n}"),
             Exp::HeapRef(addr) => write!(f, "heap_ref {addr}"),
             Exp::Error(err) => write!(f, "error {err:?}"),
         }
+    }
+}
+
+impl Display for ExpRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "%{}", self.0)
     }
 }

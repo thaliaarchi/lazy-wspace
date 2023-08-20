@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::ast::{self, ExitInst, Inst, LabelLit};
 use crate::error::{Error, UnderflowError};
-use crate::ir::{AbstractHeap, AbstractStack, Dag, ExpRef, LazySize};
+use crate::ir::{AbstractHeap, AbstractStack, ExpPool, ExpRef, LazySize};
 use crate::number::Op;
 
 /// Control-flow graph of IR basic blocks.
@@ -11,17 +11,18 @@ pub struct Cfg {
     bbs: Vec<Option<BasicBlock>>,
 }
 
+/// Sequence of non-branching instructions, followed by a branch.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BasicBlock {
     id: usize,
     label: Option<LabelLit>,
     stmts: Vec<Stmt>,
     exit: ExitStmt,
+    exps: ExpPool,
     stack: AbstractStack,
     heap: AbstractHeap,
 }
 
-// TODO move
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
     GuardStack(usize),
@@ -71,6 +72,7 @@ impl BasicBlock {
             label: ast_bb.label().cloned(),
             stmts: Vec::new(),
             exit: ExitStmt::Jmp(usize::MAX), // Placeholder
+            exps: ExpPool::new(),
             stack: AbstractStack::new(),
             heap: AbstractHeap::new(),
         };
@@ -85,16 +87,16 @@ impl BasicBlock {
         bb.exit = match ast_bb.exit() {
             ExitInst::Call(l1, l2) => ExitStmt::Call(*l1, *l2),
             ExitInst::Jmp(l) => ExitStmt::Jmp(*l),
-            ExitInst::Jz(l1, l2, inst) => match bb.stack.pop() {
+            ExitInst::Jz(l1, l2, inst) => match bb.stack.pop(&mut bb.exps) {
                 Ok(top) => {
-                    bb.stmts.push(Stmt::Eval(top.clone()));
+                    bb.stmts.push(Stmt::Eval(top));
                     ExitStmt::Br(Cond::Zero, top, *l1, *l2)
                 }
                 Err(err) => ExitStmt::Error(err.to_error(inst)),
             },
-            ExitInst::Jn(l1, l2, inst) => match bb.stack.pop() {
+            ExitInst::Jn(l1, l2, inst) => match bb.stack.pop(&mut bb.exps) {
                 Ok(top) => {
-                    bb.stmts.push(Stmt::Eval(top.clone()));
+                    bb.stmts.push(Stmt::Eval(top));
                     ExitStmt::Br(Cond::Neg, top, *l1, *l2)
                 }
                 Err(err) => ExitStmt::Error(err.to_error(inst)),
@@ -154,44 +156,44 @@ impl BasicBlock {
     #[inline]
     fn push_inst_underflow(&mut self, inst: &Inst) -> Result<Result<(), Error>, UnderflowError> {
         match inst {
-            Inst::Push(n) => self.stack.push(n.into()),
-            Inst::Dup => self.stack.dup()?,
-            Inst::Copy(n) => self.stack.copy(n.into()),
-            Inst::Swap => self.stack.swap()?,
+            Inst::Push(n) => self.stack.push(self.exps.insert(n.into())),
+            Inst::Dup => self.stack.dup(&mut self.exps)?,
+            Inst::Copy(n) => self.stack.copy(n.into(), &mut self.exps),
+            Inst::Swap => self.stack.swap(&mut self.exps)?,
             Inst::Drop => self.stack.drop_eager(1)?,
-            Inst::Slide(n) => self.stack.slide(n.into())?,
-            Inst::Add => self.stack.apply_op(Op::Add)?,
-            Inst::Sub => self.stack.apply_op(Op::Sub)?,
-            Inst::Mul => self.stack.apply_op(Op::Mul)?,
-            Inst::Div => self.stack.apply_op(Op::Div)?,
-            Inst::Mod => self.stack.apply_op(Op::Mod)?,
+            Inst::Slide(n) => self.stack.slide(n.into(), &mut self.exps)?,
+            Inst::Add => self.stack.apply_op(Op::Add, &mut self.exps)?,
+            Inst::Sub => self.stack.apply_op(Op::Sub, &mut self.exps)?,
+            Inst::Mul => self.stack.apply_op(Op::Mul, &mut self.exps)?,
+            Inst::Div => self.stack.apply_op(Op::Div, &mut self.exps)?,
+            Inst::Mod => self.stack.apply_op(Op::Mod, &mut self.exps)?,
             Inst::Store => {
-                let (addr, val) = self.stack.pop2()?;
-                self.stmts.push(Stmt::Store(addr.clone(), val.clone())); // TODO: cache
-                return Ok(self.heap.store(addr, val));
+                let (addr, val) = self.stack.pop2(&mut self.exps)?;
+                self.stmts.push(Stmt::Store(addr, val)); // TODO: cache
+                return Ok(self.heap.store(addr, val, &mut self.exps));
             }
             Inst::Retrieve => {
-                let addr = self.stack.pop()?;
-                self.stack.push(self.heap.retrieve(addr));
+                let addr = self.stack.pop(&mut self.exps)?;
+                self.stack.push(self.heap.retrieve(addr, &mut self.exps));
             }
             Inst::Printc => {
-                let val = self.stack.pop()?;
-                self.stmts.push(Stmt::Eval(val.clone()));
+                let val = self.stack.pop(&mut self.exps)?;
+                self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Char, val));
             }
             Inst::Printi => {
-                let val = self.stack.pop()?;
-                self.stmts.push(Stmt::Eval(val.clone()));
+                let val = self.stack.pop(&mut self.exps)?;
+                self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Int, val));
             }
             Inst::Readc => {
-                let addr = self.stack.pop()?;
-                self.stmts.push(Stmt::Eval(addr.clone()));
+                let addr = self.stack.pop(&mut self.exps)?;
+                self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Char, addr));
             }
             Inst::Readi => {
-                let addr = self.stack.pop()?;
-                self.stmts.push(Stmt::Eval(addr.clone()));
+                let addr = self.stack.pop(&mut self.exps)?;
+                self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Int, addr));
             }
             Inst::Label(_)
@@ -217,6 +219,9 @@ impl Display for Cfg {
                 }
                 first = false;
                 writeln!(f, "{bb}:")?;
+                for (i, val) in bb.exps.iter_entries() {
+                    writeln!(f, "    {i} = {val}")?;
+                }
                 for stmt in &bb.stmts {
                     writeln!(f, "    {stmt}")?;
                 }
@@ -237,61 +242,7 @@ impl Display for Cfg {
                     ExitStmt::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
                     ExitStmt::Jmp(l) => write!(f, "jmp {}", bb!(l)),
                     ExitStmt::Br(cond, val, l1, l2) => {
-                        write!(f, "br {cond:?} {val:?} {} {}", bb!(l1), bb!(l2))
-                    }
-                    ExitStmt::Ret => write!(f, "ret"),
-                    ExitStmt::End => write!(f, "end"),
-                    ExitStmt::Error(err) => write!(f, "error {err:?}"),
-                }?;
-                writeln!(f)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-#[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DisplayCfgWithDag<'a>(pub &'a Cfg);
-
-impl<'a> Display for DisplayCfgWithDag<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut first = true;
-        for bb in &self.0.bbs {
-            if let Some(bb) = bb {
-                if !first {
-                    writeln!(f)?;
-                }
-                first = false;
-                writeln!(f, "{bb}:")?;
-                for stmt in &bb.stmts {
-                    writeln!(f, "    {stmt}")?;
-                }
-                if bb.stack.drop_count() != 0 {
-                    writeln!(f, "    drop_eager {}", bb.stack.drop_count())?;
-                }
-                if bb.stack.slide_count() != LazySize::Finite(0) {
-                    writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
-                }
-
-                let dag = Dag::from_block(&bb);
-                for (i, val) in dag.values().iter().enumerate() {
-                    writeln!(f, "    %{i} = {val}")?;
-                }
-                for val in bb.stack.values_pushed() {
-                    writeln!(f, "    push %{}", dag.lookup(val).unwrap())?;
-                }
-
-                macro_rules! bb(($l:ident) => {
-                    self.0.bbs[*$l].as_ref().expect("undefined label")
-                });
-                write!(f, "    ")?;
-                match &bb.exit {
-                    ExitStmt::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
-                    ExitStmt::Jmp(l) => write!(f, "jmp {}", bb!(l)),
-                    ExitStmt::Br(cond, val, l1, l2) => {
-                        let val = dag.lookup(val).unwrap();
-                        write!(f, "br {cond:?} %{} {} {}", val, bb!(l1), bb!(l2))
+                        write!(f, "br {cond:?} {val} {} {}", bb!(l1), bb!(l2))
                     }
                     ExitStmt::Ret => write!(f, "ret"),
                     ExitStmt::End => write!(f, "end"),
@@ -317,10 +268,10 @@ impl Display for Stmt {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Stmt::GuardStack(n) => write!(f, "guard_stack {n}"),
-            Stmt::Eval(v) => write!(f, "eval {v:?}"),
-            Stmt::Store(addr, val) => write!(f, "store {addr:?} {val:?}"),
-            Stmt::Print(kind, val) => write!(f, "print {kind:?} {val:?}"),
-            Stmt::Read(kind, addr) => write!(f, "read {kind:?} {addr:?}"),
+            Stmt::Eval(v) => write!(f, "eval {v}"),
+            Stmt::Store(addr, val) => write!(f, "store {addr} {val}"),
+            Stmt::Print(kind, val) => write!(f, "print {kind:?} {val}"),
+            Stmt::Read(kind, addr) => write!(f, "read {kind:?} {addr}"),
         }
     }
 }
