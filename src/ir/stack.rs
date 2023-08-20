@@ -158,7 +158,7 @@ impl AbstractStack {
     #[inline]
     pub fn apply_op(&mut self, op: Op, pool: &mut ExpPool) -> Result<(), UnderflowError> {
         let (x, y) = self.pop2(pool)?;
-        self.push(pool.insert(Exp::Op(op, x, y)));
+        self.push(pool.insert_op(op, x, y));
         Ok(())
     }
 

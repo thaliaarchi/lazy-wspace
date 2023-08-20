@@ -1,7 +1,9 @@
+use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
-use std::ops::{Index, IndexMut};
+use std::ops::{Add, Index, IndexMut, Mul, Sub};
 use std::rc::Rc;
 
+use rug::ops::{DivRounding, RemRounding};
 use rug::Integer;
 
 use crate::ast::NumberLit;
@@ -61,6 +63,47 @@ impl ExpPool {
             let index = ExpRef::new(self.values.len());
             self.values.push(e);
             index
+        }
+    }
+
+    pub fn insert_op(&mut self, op: Op, lhs: ExpRef, rhs: ExpRef) -> ExpRef {
+        // Replacing, for example, `x * 0` with `0` is unsound, because `x`
+        // could evaluate to an error.
+
+        match (op, &self[lhs], &self[rhs]) {
+            (_, Exp::Value(lhs), Exp::Value(rhs)) => {
+                let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
+                let res = match op {
+                    Op::Add => Ok(lhs.add(rhs).into()),
+                    Op::Sub => Ok(lhs.sub(rhs).into()),
+                    Op::Mul => Ok(lhs.mul(rhs).into()),
+                    Op::Div if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Op::Div => Ok(lhs.div_floor(rhs).into()),
+                    Op::Mod if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Op::Mod => Ok(lhs.rem_floor(rhs).into()),
+                };
+                let e = match res {
+                    Ok(v) => Exp::Value(Rc::new(v)),
+                    Err(err) => Exp::Error(err),
+                };
+                self.insert(e)
+            }
+
+            (Op::Add | Op::Sub | Op::Div | Op::Mod, _, Exp::Error(_)) => rhs,
+            (Op::Add | Op::Sub | Op::Div | Op::Mod, Exp::Error(_), Exp::Value(_)) => lhs,
+            (Op::Mul, Exp::Error(_), _) => lhs,
+            (Op::Mul, Exp::Value(_), Exp::Error(_)) => rhs,
+
+            (Op::Add, Exp::Value(lhs), _) if lhs.cmp0() == Ordering::Equal => rhs,
+            (Op::Add | Op::Sub, _, Exp::Value(rhs)) if rhs.cmp0() == Ordering::Equal => lhs,
+            (Op::Mul | Op::Div, Exp::Value(lhs), _) if **lhs == 1 => rhs,
+            (Op::Mul | Op::Div, _, Exp::Value(rhs)) if **rhs == 1 => lhs,
+
+            (Op::Div | Op::Mod, _, Exp::Value(rhs)) if rhs.cmp0() == Ordering::Equal => {
+                self.insert(Exp::Error(NumberError::DivModZero))
+            }
+
+            _ => self.insert(Exp::Op(op, lhs, rhs)),
         }
     }
 

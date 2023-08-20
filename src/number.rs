@@ -124,14 +124,42 @@ impl Number {
         Ok(n.into())
     }
 
-    #[inline]
-    fn eval_op(op: Op, x: NumberRef, y: NumberRef) -> Result<Rc<Integer>, NumberError> {
-        let x = x.eval()?;
-        let y = y.eval()?;
-        match op.eval(x, y) {
-            Some(z) => Ok(Rc::new(z)),
-            None => Err(NumberError::DivModZero),
-        }
+    fn eval_op(op: Op, lhs: NumberRef, rhs: NumberRef) -> Result<Rc<Integer>, NumberError> {
+        // Matches the evaluation order of the reference interpreter.
+        let v = match op {
+            Op::Add => {
+                let rhs = rhs.eval()?;
+                let lhs = lhs.eval()?;
+                lhs.add_rc(rhs)
+            }
+            Op::Sub => {
+                let rhs = rhs.eval()?;
+                let lhs = lhs.eval()?;
+                lhs.sub_rc(rhs)
+            }
+            Op::Mul => {
+                let lhs = lhs.eval()?;
+                let rhs = rhs.eval()?;
+                lhs.mul_rc(rhs)
+            }
+            Op::Div => {
+                let rhs = rhs.eval()?;
+                if rhs.cmp0() == Ordering::Equal {
+                    return Err(NumberError::DivModZero);
+                }
+                let lhs = lhs.eval()?;
+                lhs.div_floor_rc(rhs)
+            }
+            Op::Mod => {
+                let rhs = rhs.eval()?;
+                if rhs.cmp0() == Ordering::Equal {
+                    return Err(NumberError::DivModZero);
+                }
+                let lhs = lhs.eval()?;
+                lhs.div_floor_rc(rhs)
+            }
+        };
+        Ok(Rc::new(v))
     }
 }
 
@@ -146,7 +174,7 @@ impl NumberRef {
         let cell = self.0;
         let n = cell.replace(Number::Error(NumberError::Internal));
         let res = match n {
-            Number::Op(op, x, y) => Number::eval_op(op, x, y),
+            Number::Op(op, lhs, rhs) => Number::eval_op(op, lhs, rhs),
             _ => unreachable!(),
         };
         let inner = cell.replace(match &res {
@@ -168,24 +196,12 @@ impl NumberRef {
     }
 }
 
-impl Op {
-    pub fn eval(self, lhs: Rc<Integer>, rhs: Rc<Integer>) -> Option<Integer> {
-        match self {
-            Op::Add => Some(lhs.add_rc(rhs)),
-            Op::Sub => Some(lhs.sub_rc(rhs)),
-            Op::Mul => Some(lhs.mul_rc(rhs)),
-            Op::Div => lhs.div_floor_rc(rhs),
-            Op::Mod => lhs.rem_floor_rc(rhs),
-        }
-    }
-}
-
 pub trait IntegerExt {
     fn add_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
     fn sub_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
     fn mul_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer>;
-    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer>;
+    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
+    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
     fn to_haskell_show(&self) -> String;
 }
 
@@ -231,32 +247,12 @@ impl IntegerExt for Integer {
         arith_op!(self, rhs, mul, mul_assign, mul_from)
     }
 
-    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer> {
-        if rhs.cmp0() == Ordering::Equal {
-            None
-        } else {
-            Some(arith_op!(
-                self,
-                rhs,
-                div_floor,
-                div_floor_assign,
-                div_floor_from
-            ))
-        }
+    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
+        arith_op!(self, rhs, div_floor, div_floor_assign, div_floor_from)
     }
 
-    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Option<Integer> {
-        if rhs.cmp0() == Ordering::Equal {
-            None
-        } else {
-            Some(arith_op!(
-                self,
-                rhs,
-                rem_floor,
-                rem_floor_assign,
-                rem_floor_from
-            ))
-        }
+    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
+        arith_op!(self, rhs, rem_floor, rem_floor_assign, rem_floor_from)
     }
 
     fn to_haskell_show(&self) -> String {
@@ -307,12 +303,14 @@ impl Debug for NumberRef {
 }
 
 impl PartialEq<NumberRef> for Number {
+    #[inline]
     fn eq(&self, other: &NumberRef) -> bool {
         self == &*other.borrow()
     }
 }
 
 impl PartialEq<Number> for NumberRef {
+    #[inline]
     fn eq(&self, other: &Number) -> bool {
         &*self.borrow() == other
     }
@@ -327,10 +325,9 @@ mod tests {
         let x = NumberRef::from(1);
         let y = NumberRef::from(2);
         let z = NumberRef::from(Number::Op(Op::Add, x, y));
-        let z1 = z.clone();
-        let z2 = z.eval().unwrap();
-        assert_eq!(Integer::from(3), *z2);
-        assert_eq!(NumberRef::from(3), z1);
+        let z1 = z.clone().eval().unwrap();
+        assert_eq!(Integer::from(3), *z1);
+        assert_eq!(NumberRef::from(3), z);
     }
 
     #[test]
@@ -338,9 +335,8 @@ mod tests {
         let x = NumberError::CopyLarge.into();
         let y = NumberError::EmptyLit.into();
         let z = NumberRef::from(Number::Op(Op::Add, x, y));
-        let z1 = z.clone();
-        let err = z.eval().unwrap_err();
-        assert_eq!(NumberError::CopyLarge, err);
-        assert_eq!(NumberRef::from(NumberError::CopyLarge), z1);
+        let err = z.clone().eval().unwrap_err();
+        assert_eq!(NumberError::EmptyLit, err);
+        assert_eq!(NumberRef::from(NumberError::EmptyLit), z);
     }
 }
