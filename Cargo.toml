@@ -12,6 +12,7 @@ categories = ["compilers"]
 [dependencies]
 arrayvec = "0.7"
 bitvec = "1.0"
+hashbrown = { version = "0.14", features = ["raw"] }
 rug = "1.19"
 simdutf8 = "0.1"
 strum = { version = "0.24", features = ["derive"] }

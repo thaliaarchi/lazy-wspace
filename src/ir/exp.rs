@@ -1,8 +1,10 @@
 use std::cmp::Ordering;
-use std::fmt::{self, Display, Formatter};
-use std::ops::{Add, Index, IndexMut, Mul, Sub};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::hash::{BuildHasher, Hash, Hasher};
+use std::ops::{Add, Index, Mul, Sub};
 use std::rc::Rc;
 
+use hashbrown::{hash_map::DefaultHashBuilder, raw::RawTable};
 use rug::ops::{DivRounding, RemRounding};
 use rug::Integer;
 
@@ -15,9 +17,12 @@ use crate::number::Op;
 /// Expressions are uniquely numbered by [`ExpRef`] and [flattened](https://www.cs.cornell.edu/~asampson/blog/flattening.html).
 /// This enables easy common subexpression elimination and local value
 /// numbering. All `ExpRef`s within must be indices for this pool.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct ExpPool {
-    values: Vec<Exp>,
+    exps: Vec<Exp>,
+    // Essentially a `HashMap<Exp, ExpRef>`, that doesn't store a redundant
+    // `Exp` key, instead referencing it in `exps` using the `ExpRef` value.
+    table: RawTable<ExpRef>,
 }
 
 /// Expression in an [`ExpPool`].
@@ -38,31 +43,37 @@ pub struct ExpRef(u32);
 
 impl ExpPool {
     #[inline]
-    pub fn new() -> Self {
-        ExpPool { values: Vec::new() }
+    pub const fn new() -> Self {
+        ExpPool {
+            exps: Vec::new(),
+            table: RawTable::new(),
+        }
     }
 
     pub fn lookup(&self, e: &Exp) -> Option<ExpRef> {
-        let start = match e {
-            Exp::Op(_, l, r) => (l.0.max(r.0) + 1) as usize,
-            Exp::HeapRef(addr) => (addr.0 + 1) as usize,
-            _ => 0,
-        };
-        for (i, e2) in self.values[start..].iter().enumerate() {
-            if e2 == e {
-                return Some(ExpRef::new(i));
-            }
+        let hash = e.make_hash();
+        match self.table.find(hash, |key| &self.exps[key.as_usize()] == e) {
+            Some(bucket) => Some(*unsafe { bucket.as_ref() }),
+            None => None,
         }
-        None
     }
 
     pub fn insert(&mut self, e: Exp) -> ExpRef {
-        if let Some(e) = self.lookup(&e) {
-            e
-        } else {
-            let index = ExpRef::new(self.values.len());
-            self.values.push(e);
-            index
+        let hash = e.make_hash();
+        match self.table.find_or_find_insert_slot(
+            hash,
+            |key| &self.exps[key.as_usize()] == &e,
+            |key| self.exps[key.as_usize()].make_hash(),
+        ) {
+            Ok(bucket) => *unsafe { bucket.as_ref() },
+            Err(slot) => {
+                let i = ExpRef::new(self.exps.len());
+                self.exps.push(e);
+                unsafe {
+                    self.table.insert_in_slot(hash, slot, i);
+                }
+                i
+            }
         }
     }
 
@@ -108,21 +119,27 @@ impl ExpPool {
     }
 
     #[inline]
-    pub fn values(&self) -> &[Exp] {
-        &self.values
+    pub fn exps(&self) -> &[Exp] {
+        &self.exps
     }
 
     #[inline]
     pub fn iter_refs(&self) -> impl Iterator<Item = ExpRef> {
-        (0..self.values.len() as u32).map(ExpRef)
+        (0..self.exps.len() as u32).map(ExpRef)
     }
 
     #[inline]
     pub fn iter_entries(&self) -> impl Iterator<Item = (ExpRef, &Exp)> {
-        self.values
+        self.exps
             .iter()
             .enumerate()
             .map(|(i, e)| (ExpRef::new(i), e))
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.table.len(), self.exps.len());
+        self.exps.len()
     }
 }
 
@@ -130,6 +147,12 @@ impl Exp {
     #[inline]
     pub fn value<T: Into<Integer>>(v: T) -> Self {
         Exp::Value(Rc::new(v.into()))
+    }
+
+    fn make_hash(&self) -> u64 {
+        let mut state = DefaultHashBuilder::default().build_hasher();
+        self.hash(&mut state);
+        state.finish()
     }
 }
 
@@ -155,6 +178,11 @@ impl ExpRef {
     pub(crate) fn new(n: usize) -> Self {
         ExpRef(n as u32)
     }
+
+    #[inline]
+    pub const fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
 }
 
 impl Index<ExpRef> for ExpPool {
@@ -166,14 +194,21 @@ impl Index<ExpRef> for ExpPool {
         // will always be in bounds, as long as the index was created by this
         // pool. Branding `ExpRef` with a lifetime like [`BrandedVec`](https://matyama.github.io/rust-examples/rust_examples/brands/struct.BrandedVec.html)
         // in the MPI-SWS `GhostCell` paper does not seem worth it.
-        unsafe { self.values.get_unchecked(index.0 as usize) }
+        unsafe { self.exps.get_unchecked(index.as_usize()) }
     }
 }
 
-impl IndexMut<ExpRef> for ExpPool {
-    #[inline]
-    fn index_mut(&mut self, index: ExpRef) -> &mut Self::Output {
-        unsafe { self.values.get_unchecked_mut(index.0 as usize) }
+impl PartialEq for ExpPool {
+    fn eq(&self, other: &Self) -> bool {
+        self.exps == other.exps
+    }
+}
+
+impl Eq for ExpPool {}
+
+impl Debug for ExpPool {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.exps.iter().enumerate()).finish()
     }
 }
 
@@ -193,5 +228,25 @@ impl Display for Exp {
 impl Display for ExpRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "%{}", self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique() {
+        let mut pool = ExpPool::new();
+        let x = pool.insert(Exp::value(1));
+        let y = pool.insert(Exp::value(2));
+        let z = pool.insert(Exp::Op(Op::Add, x, y));
+        let y2 = pool.insert(Exp::value(2));
+        let x2 = pool.insert(Exp::value(1));
+        let z2 = pool.insert(Exp::Op(Op::Add, x2, y2));
+        assert_eq!(3, pool.len());
+        assert_eq!(x, x2);
+        assert_eq!(y, y2);
+        assert_eq!(z, z2);
     }
 }
