@@ -1,11 +1,11 @@
 [package]
 name = "lazy-wspace"
 version = "0.1.0"
-authors = ["Thalia Archibald"]
+authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
 description = "A Whitespace compiler and interpreter with lazy semantics"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
-license = "GPL-3.0-or-later"
+license = "MPL-2.0"
 keywords = ["whitespace", "compiler", "interpreter"]
 categories = ["compilers"]
 
