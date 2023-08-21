@@ -135,7 +135,7 @@ impl AbstractStack {
             if i < self.under.len() {
                 Ok(*self.under[i].get_or_insert_with(|| exps.insert(Exp::StackRef(n))))
             } else {
-                Ok(exps.insert(Exp::LazyStackRef(i)))
+                Ok(exps.insert(Exp::CheckedStackRef(i)))
             }
         }
     }
@@ -338,8 +338,8 @@ mod tests {
         }
         {
             let mut exps = ExpPool::new();
-            let v0 = exps.insert(Exp::value(1));
-            let v1 = exps.insert(Exp::value(2));
+            let v0 = exps.insert(Exp::number(1));
+            let v1 = exps.insert(Exp::number(2));
             let exps1 = exps.clone();
 
             let mut s = stack!([v0, v1], [], 0, Finite(0));

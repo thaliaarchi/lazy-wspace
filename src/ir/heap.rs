@@ -24,7 +24,7 @@ impl AbstractHeap {
     /// unless a potentially-aliasing address has been written to.
     pub fn retrieve(&mut self, addr: ExpRef, pool: &mut ExpPool) -> ExpRef {
         match &pool[addr] {
-            Exp::Value(n) => {
+            Exp::Number(n) => {
                 if let Some(n) = n.to_u32() {
                     *self
                         .consts
@@ -46,7 +46,7 @@ impl AbstractHeap {
     /// values at addresses that may alias with `addr`.
     pub fn store(&mut self, addr: ExpRef, val: ExpRef, pool: &mut ExpPool) -> Result<(), Error> {
         match &pool[addr] {
-            Exp::Value(n) => {
+            Exp::Number(n) => {
                 if let Some(n) = n.to_u32() {
                     // A constant address may alias computed addresses, but not
                     // other constant addresses

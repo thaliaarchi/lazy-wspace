@@ -28,12 +28,43 @@ pub struct ExpPool {
 /// Expression in an [`ExpPool`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Exp {
-    Value(Rc<Integer>),
-    Op(Op, ExpRef, ExpRef),
-    StackRef(usize),
-    LazyStackRef(usize),
-    HeapRef(ExpRef),
+    /// A constant number.
+    ///
+    /// ```ir
+    /// %val = value {number}
+    /// ```
+    Number(Rc<Integer>),
+    /// A lazy unevaluated error.
+    ///
+    /// ```ir
+    /// %val = error {kind}
+    /// ```
     Error(NumberError),
+    /// A lazy binary arithmetic operation.
+    ///
+    /// ```ir
+    /// %val = {op} %lhs %rhs
+    /// ```
+    Op(Op, ExpRef, ExpRef),
+    /// Unchecked stack reference, that must be first guarded with
+    /// `guard_stack`.
+    ///
+    /// ```ir
+    /// %val = stack_ref {index}
+    /// ```
+    StackRef(usize),
+    /// Checked stack reference.
+    ///
+    /// ```ir
+    /// %val = checked_stack_ref {index}
+    /// ```
+    CheckedStackRef(usize),
+    /// Heap reference.
+    ///
+    /// ```ir
+    /// %val = heap_ref %addr
+    /// ```
+    HeapRef(ExpRef),
 }
 
 /// Reference to an [`Exp`] in an [`ExpPool`].
@@ -82,7 +113,7 @@ impl ExpPool {
         // could evaluate to an error.
 
         match (op, &self[lhs], &self[rhs]) {
-            (_, Exp::Value(lhs), Exp::Value(rhs)) => {
+            (_, Exp::Number(lhs), Exp::Number(rhs)) => {
                 let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
                 let res = match op {
                     Op::Add => Ok(lhs.add(rhs).into()),
@@ -94,23 +125,23 @@ impl ExpPool {
                     Op::Mod => Ok(lhs.rem_floor(rhs).into()),
                 };
                 let e = match res {
-                    Ok(v) => Exp::Value(Rc::new(v)),
+                    Ok(v) => Exp::Number(Rc::new(v)),
                     Err(err) => Exp::Error(err),
                 };
                 self.insert(e)
             }
 
             (Op::Add | Op::Sub | Op::Div | Op::Mod, _, Exp::Error(_)) => rhs,
-            (Op::Add | Op::Sub | Op::Div | Op::Mod, Exp::Error(_), Exp::Value(_)) => lhs,
+            (Op::Add | Op::Sub | Op::Div | Op::Mod, Exp::Error(_), Exp::Number(_)) => lhs,
             (Op::Mul, Exp::Error(_), _) => lhs,
-            (Op::Mul, Exp::Value(_), Exp::Error(_)) => rhs,
+            (Op::Mul, Exp::Number(_), Exp::Error(_)) => rhs,
 
-            (Op::Add, Exp::Value(lhs), _) if lhs.cmp0() == Ordering::Equal => rhs,
-            (Op::Add | Op::Sub, _, Exp::Value(rhs)) if rhs.cmp0() == Ordering::Equal => lhs,
-            (Op::Mul | Op::Div, Exp::Value(lhs), _) if **lhs == 1 => rhs,
-            (Op::Mul | Op::Div, _, Exp::Value(rhs)) if **rhs == 1 => lhs,
+            (Op::Add, Exp::Number(lhs), _) if lhs.cmp0() == Ordering::Equal => rhs,
+            (Op::Add | Op::Sub, _, Exp::Number(rhs)) if rhs.cmp0() == Ordering::Equal => lhs,
+            (Op::Mul | Op::Div, Exp::Number(lhs), _) if **lhs == 1 => rhs,
+            (Op::Mul | Op::Div, _, Exp::Number(rhs)) if **rhs == 1 => lhs,
 
-            (Op::Div | Op::Mod, _, Exp::Value(rhs)) if rhs.cmp0() == Ordering::Equal => {
+            (Op::Div | Op::Mod, _, Exp::Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
                 self.insert(Exp::Error(NumberError::DivModZero))
             }
 
@@ -138,15 +169,14 @@ impl ExpPool {
 
     #[inline]
     pub fn len(&self) -> usize {
-        debug_assert_eq!(self.table.len(), self.exps.len());
         self.exps.len()
     }
 }
 
 impl Exp {
     #[inline]
-    pub fn value<T: Into<Integer>>(v: T) -> Self {
-        Exp::Value(Rc::new(v.into()))
+    pub fn number<T: Into<Integer>>(v: T) -> Self {
+        Exp::Number(Rc::new(v.into()))
     }
 
     fn make_hash(&self) -> u64 {
@@ -160,7 +190,7 @@ impl From<&NumberLit> for Exp {
     #[inline]
     fn from(n: &NumberLit) -> Self {
         match n {
-            NumberLit::Number(n) => Exp::Value(n.clone()),
+            NumberLit::Number(n) => Exp::Number(n.clone()),
             NumberLit::Empty => Exp::Error(NumberError::EmptyLit),
         }
     }
@@ -215,12 +245,12 @@ impl Debug for ExpPool {
 impl Display for Exp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Exp::Value(n) => write!(f, "value {n}"),
+            Exp::Number(n) => write!(f, "number {n}"),
+            Exp::Error(err) => write!(f, "error {err:?}"),
             Exp::Op(op, l, r) => write!(f, "{op} {l} {r}"),
             Exp::StackRef(n) => write!(f, "stack_ref {n}"),
-            Exp::LazyStackRef(n) => write!(f, "lazy_stack_ref {n}"),
+            Exp::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Exp::HeapRef(addr) => write!(f, "heap_ref {addr}"),
-            Exp::Error(err) => write!(f, "error {err:?}"),
         }
     }
 }
@@ -238,11 +268,11 @@ mod tests {
     #[test]
     fn unique() {
         let mut pool = ExpPool::new();
-        let x = pool.insert(Exp::value(1));
-        let y = pool.insert(Exp::value(2));
+        let x = pool.insert(Exp::number(1));
+        let y = pool.insert(Exp::number(2));
         let z = pool.insert(Exp::Op(Op::Add, x, y));
-        let y2 = pool.insert(Exp::value(2));
-        let x2 = pool.insert(Exp::value(1));
+        let y2 = pool.insert(Exp::number(2));
+        let x2 = pool.insert(Exp::number(1));
         let z2 = pool.insert(Exp::Op(Op::Add, x2, y2));
         assert_eq!(3, pool.len());
         assert_eq!(x, x2);
