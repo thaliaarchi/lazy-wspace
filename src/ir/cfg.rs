@@ -69,6 +69,12 @@ impl Cfg {
     pub fn get(&self, id: usize) -> Option<&BasicBlock> {
         self.bbs[id].as_ref()
     }
+
+    pub fn simplify(&mut self) {
+        for bb in &mut self.bbs {
+            bb.as_mut().map(|bb| bb.simplify());
+        }
+    }
 }
 
 impl BasicBlock {
@@ -212,6 +218,11 @@ impl BasicBlock {
             | Inst::ParseError(_) => panic!("terminator in block body"),
         }
         Ok(Ok(()))
+    }
+
+    #[inline]
+    pub fn simplify(&mut self) {
+        self.stack.simplify();
     }
 }
 
