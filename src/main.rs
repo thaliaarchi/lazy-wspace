@@ -26,10 +26,10 @@ fn main() {
     let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
     println!("===== AST =====\n");
     for inst in &prog {
-        if !matches!(inst, Inst::Label(_)) {
-            print!("    ");
+        match inst {
+            Inst::Label(l) => println!("{l}:"),
+            _ => println!("    {inst}"),
         }
-        println!("{inst}");
     }
 
     let mut ast_cfg = ast::Cfg::new(&prog);
