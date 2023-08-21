@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::fmt::{self, Display, Formatter};
+use std::ops::{Index, IndexMut};
 
 use bitvec::prelude::*;
 
@@ -10,7 +12,7 @@ use crate::number::Op;
 /// Control-flow graph of IR basic blocks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg {
-    bbs: Vec<Option<BBlock>>,
+    bbs: Vec<BBlock>,
 }
 
 /// A basic block, i.e., a sequence of non-branching instructions, followed by a
@@ -77,13 +79,37 @@ impl Cfg {
     pub fn from_ast(ast_cfg: &ast::Cfg<'_>) -> Self {
         let mut bbs = Vec::with_capacity(ast_cfg.bbs().len());
         for bb in ast_cfg.bbs() {
-            bbs.push(bb.as_ref().map(|bb| BBlock::from_ast(bb)));
+            bbs.push(BBlock::from_ast(bb));
         }
         Cfg { bbs }
     }
 
-    pub fn get(&self, id: BBlockId) -> Option<&BBlock> {
-        self.bbs[id.0 as usize].as_ref()
+    pub fn reachable(&self) -> BitBox {
+        let mut visited = bitbox![0; self.bbs.len()];
+        let mut queue = VecDeque::new();
+        queue.push_back(self.bbs[0].id);
+        while let Some(id) = queue.pop_front() {
+            visited.set(id.as_usize(), true);
+            let bb = &self[id];
+            // TODO: Call and ret are not paired
+            match bb.exit {
+                ExitStmt::Jmp(l) => {
+                    if !visited[l.as_usize()] {
+                        queue.push_back(l)
+                    }
+                }
+                ExitStmt::Call(l1, l2) | ExitStmt::Br(_, _, l1, l2) => {
+                    if !visited[l1.as_usize()] {
+                        queue.push_back(l1);
+                    }
+                    if !visited[l2.as_usize()] {
+                        queue.push_back(l2);
+                    }
+                }
+                _ => {}
+            }
+        }
+        visited
     }
 }
 
@@ -256,8 +282,26 @@ impl BBlockBuilder {
 }
 
 impl BBlockId {
-    fn new(id: usize) -> Self {
+    const fn new(id: usize) -> Self {
         BBlockId(id as u32)
+    }
+
+    pub const fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Index<BBlockId> for Cfg {
+    type Output = BBlock;
+
+    fn index(&self, index: BBlockId) -> &BBlock {
+        &self.bbs[index.0 as usize]
+    }
+}
+
+impl IndexMut<BBlockId> for Cfg {
+    fn index_mut(&mut self, index: BBlockId) -> &mut BBlock {
+        &mut self.bbs[index.0 as usize]
     }
 }
 
@@ -281,75 +325,75 @@ impl Display for Cfg {
             }
         }
 
+        let reachable = self.reachable();
+
         let mut first = true;
         for bb in &self.bbs {
-            if let Some(bb) = bb {
-                if !first {
-                    writeln!(f)?;
-                }
-                first = false;
-                writeln!(f, "{bb}:")?;
-
-                let mut visited = bitbox![0; bb.exps.len()];
-
-                for stmt in &bb.stmts {
-                    let mut new_visited = bitbox![0; bb.exps.len()];
-                    match stmt {
-                        Stmt::GuardStack(_) => {}
-                        Stmt::Eval(val) | Stmt::Print(_, val) | Stmt::Read(_, val) => {
-                            visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
-                        }
-                        Stmt::Store(addr, val) => {
-                            visit_exp(*addr, &bb.exps, &mut visited, &mut new_visited);
-                            visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
-                        }
-                    }
-                    for i in new_visited.iter_ones() {
-                        let i = ExpRef::new(i);
-                        writeln!(f, "    {i} = {}", bb.exps[i])?;
-                    }
-                    writeln!(f, "    {stmt}")?;
-                }
-
-                if bb.stack.drop_count() != 0 {
-                    writeln!(f, "    drop_eager {}", bb.stack.drop_count())?;
-                }
-                if bb.stack.slide_count() != LazySize::Finite(0) {
-                    writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
-                }
-
-                for &val in bb.stack.values_pushed() {
-                    let mut new_visited = bitbox![0; bb.exps.len()];
-                    visit_exp(val, &bb.exps, &mut visited, &mut new_visited);
-                    for i in new_visited.iter_ones() {
-                        let i = ExpRef::new(i);
-                        writeln!(f, "    {i} = {}", bb.exps[i])?;
-                    }
-                    writeln!(f, "    push {val}")?;
-                }
-
-                macro_rules! bb(($l:ident) => {
-                    self.get(*$l).expect("undefined label")
-                });
-                write!(f, "    ")?;
-                match &bb.exit {
-                    ExitStmt::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
-                    ExitStmt::Jmp(l) => write!(f, "jmp {}", bb!(l)),
-                    ExitStmt::Br(cond, val, l1, l2) => {
-                        let mut new_visited = bitbox![0; bb.exps.len()];
-                        visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
-                        for i in new_visited.iter_ones() {
-                            let i = ExpRef::new(i);
-                            writeln!(f, "    {i} = {}", bb.exps[i])?;
-                        }
-                        write!(f, "br {cond:?} {val} {} {}", bb!(l1), bb!(l2))
-                    }
-                    ExitStmt::Ret => write!(f, "ret"),
-                    ExitStmt::End => write!(f, "end"),
-                    ExitStmt::Error(err) => write!(f, "error {err:?}"),
-                }?;
+            if !first {
                 writeln!(f)?;
             }
+            first = false;
+            if !reachable[bb.id.as_usize()] {
+                writeln!(f, "# unreachable")?;
+            }
+            writeln!(f, "{bb}:")?;
+
+            let mut visited = bitbox![0; bb.exps.len()];
+
+            for stmt in &bb.stmts {
+                let mut new_visited = bitbox![0; bb.exps.len()];
+                match stmt {
+                    Stmt::GuardStack(_) => {}
+                    Stmt::Eval(val) | Stmt::Print(_, val) | Stmt::Read(_, val) => {
+                        visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                    }
+                    Stmt::Store(addr, val) => {
+                        visit_exp(*addr, &bb.exps, &mut visited, &mut new_visited);
+                        visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                    }
+                }
+                for i in new_visited.iter_ones() {
+                    let i = ExpRef::new(i);
+                    writeln!(f, "    {i} = {}", bb.exps[i])?;
+                }
+                writeln!(f, "    {stmt}")?;
+            }
+
+            if bb.stack.drop_count() != 0 {
+                writeln!(f, "    drop_eager {}", bb.stack.drop_count())?;
+            }
+            if bb.stack.slide_count() != LazySize::Finite(0) {
+                writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
+            }
+
+            for &val in bb.stack.values_pushed() {
+                let mut new_visited = bitbox![0; bb.exps.len()];
+                visit_exp(val, &bb.exps, &mut visited, &mut new_visited);
+                for i in new_visited.iter_ones() {
+                    let i = ExpRef::new(i);
+                    writeln!(f, "    {i} = {}", bb.exps[i])?;
+                }
+                writeln!(f, "    push {val}")?;
+            }
+
+            write!(f, "    ")?;
+            match &bb.exit {
+                ExitStmt::Call(l1, l2) => write!(f, "call {} {}", self[*l1], self[*l2]),
+                ExitStmt::Jmp(l) => write!(f, "jmp {}", self[*l]),
+                ExitStmt::Br(cond, val, l1, l2) => {
+                    let mut new_visited = bitbox![0; bb.exps.len()];
+                    visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                    for i in new_visited.iter_ones() {
+                        let i = ExpRef::new(i);
+                        writeln!(f, "    {i} = {}", bb.exps[i])?;
+                    }
+                    write!(f, "br {cond:?} {val} {} {}", self[*l1], self[*l2])
+                }
+                ExitStmt::Ret => write!(f, "ret"),
+                ExitStmt::End => write!(f, "end"),
+                ExitStmt::Error(err) => write!(f, "error {err:?}"),
+            }?;
+            writeln!(f)?;
         }
         Ok(())
     }

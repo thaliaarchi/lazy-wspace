@@ -1,4 +1,4 @@
-use std::collections::{vec_deque::VecDeque, HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
 use crate::ast::{Inst, LabelLit};
@@ -7,7 +7,7 @@ use crate::error::ParseError;
 /// Control-flow graph of AST basic blocks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg<'a> {
-    bbs: Vec<Option<BBlock<'a>>>,
+    bbs: Vec<BBlock<'a>>,
 }
 
 /// Basic block for AST instructions.
@@ -97,22 +97,22 @@ impl<'a> Cfg<'a> {
                 Inst::ParseError(err) => ExitInst::Error(err.clone()),
                 _ => continue,
             };
-            bbs.push(Some(BBlock {
+            bbs.push(BBlock {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..pc],
                 exit,
-            }));
+            });
             curr_label = next_label;
             block_start = pc + 1;
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {
-            bbs.push(Some(BBlock {
+            bbs.push(BBlock {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..],
                 exit: ExitInst::Error(ParseError::ImplicitEnd),
-            }));
+            });
         }
         assert_eq!(bbs_count, bbs.len());
 
@@ -120,45 +120,8 @@ impl<'a> Cfg<'a> {
     }
 
     #[inline]
-    pub fn bbs(&self) -> &[Option<BBlock>] {
+    pub fn bbs(&self) -> &[BBlock] {
         &self.bbs
-    }
-
-    pub fn reachable(&self) -> HashSet<usize> {
-        let mut visited = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(self.bbs[0].as_ref().expect("undefined entry").id);
-        while let Some(id) = queue.pop_front() {
-            visited.insert(id);
-            let bb = self.bbs[id].as_ref().expect("undefined block");
-            // TODO: Call and ret are not paired
-            match bb.exit {
-                ExitInst::Jmp(l) => {
-                    if !visited.contains(&l) {
-                        queue.push_back(l)
-                    }
-                }
-                ExitInst::Call(l1, l2) | ExitInst::Jz(l1, l2, _) | ExitInst::Jn(l1, l2, _) => {
-                    if !visited.contains(&l1) {
-                        queue.push_back(l1);
-                    }
-                    if !visited.contains(&l2) {
-                        queue.push_back(l2);
-                    }
-                }
-                _ => {}
-            }
-        }
-        visited
-    }
-
-    pub fn eliminate_dead(&mut self) {
-        let reachable = self.reachable();
-        for bb in self.bbs.iter_mut().filter(|bb| bb.is_some()) {
-            if !reachable.contains(&bb.as_ref().unwrap().id) {
-                *bb = None;
-            }
-        }
     }
 }
 
@@ -188,30 +151,26 @@ impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut first = true;
         for bb in &self.bbs {
-            if let Some(bb) = bb {
-                if !first {
-                    writeln!(f)?;
-                }
-                first = false;
-                writeln!(f, "{bb}:")?;
-                for inst in bb.insts {
-                    writeln!(f, "    {inst}")?;
-                }
-                macro_rules! bb(($l:ident) => {
-                    self.bbs[*$l].as_ref().expect("undefined label")
-                });
-                write!(f, "    ")?;
-                match &bb.exit {
-                    ExitInst::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
-                    ExitInst::Jmp(l) => write!(f, "jmp {}", bb!(l)),
-                    ExitInst::Jz(l1, l2, _) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
-                    ExitInst::Jn(l1, l2, _) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
-                    ExitInst::Ret => write!(f, "ret"),
-                    ExitInst::End => write!(f, "end"),
-                    ExitInst::Error(err) => write!(f, "error {err:?}"),
-                }?;
+            if !first {
                 writeln!(f)?;
             }
+            first = false;
+            writeln!(f, "{bb}:")?;
+            for inst in bb.insts {
+                writeln!(f, "    {inst}")?;
+            }
+            macro_rules! bb(($l:ident) => { self.bbs[*$l] });
+            write!(f, "    ")?;
+            match &bb.exit {
+                ExitInst::Call(l1, l2) => write!(f, "call {} {}", bb!(l1), bb!(l2)),
+                ExitInst::Jmp(l) => write!(f, "jmp {}", bb!(l)),
+                ExitInst::Jz(l1, l2, _) => write!(f, "jz {} {}", bb!(l1), bb!(l2)),
+                ExitInst::Jn(l1, l2, _) => write!(f, "jn {} {}", bb!(l1), bb!(l2)),
+                ExitInst::Ret => write!(f, "ret"),
+                ExitInst::End => write!(f, "end"),
+                ExitInst::Error(err) => write!(f, "error {err:?}"),
+            }?;
+            writeln!(f)?;
         }
         Ok(())
     }

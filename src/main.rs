@@ -32,12 +32,8 @@ fn main() {
         }
     }
 
-    let mut ast_cfg = ast::Cfg::new(&prog);
+    let ast_cfg = ast::Cfg::new(&prog);
     println!("\n\n===== AST CFG =====\n");
-    print!("{ast_cfg}");
-
-    ast_cfg.eliminate_dead();
-    println!("\n\n===== AST CFG after dead-code elimination =====\n");
     print!("{ast_cfg}");
 
     let ir_cfg = ir::Cfg::from_ast(&ast_cfg);

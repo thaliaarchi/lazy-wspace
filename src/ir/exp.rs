@@ -175,7 +175,7 @@ impl From<NumberError> for Exp {
 
 impl ExpRef {
     #[inline]
-    pub(crate) fn new(n: usize) -> Self {
+    pub(crate) const fn new(n: usize) -> Self {
         ExpRef(n as u32)
     }
 
