@@ -7,12 +7,12 @@ use crate::error::ParseError;
 /// Control-flow graph of AST basic blocks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg<'a> {
-    bbs: Vec<Option<BasicBlock<'a>>>,
+    bbs: Vec<Option<BBlock<'a>>>,
 }
 
 /// Basic block for AST instructions.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BasicBlock<'a> {
+pub struct BBlock<'a> {
     id: usize,
     label: Option<&'a LabelLit>,
     insts: &'a [Inst],
@@ -97,7 +97,7 @@ impl<'a> Cfg<'a> {
                 Inst::ParseError(err) => ExitInst::Error(err.clone()),
                 _ => continue,
             };
-            bbs.push(Some(BasicBlock {
+            bbs.push(Some(BBlock {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..pc],
@@ -107,7 +107,7 @@ impl<'a> Cfg<'a> {
             block_start = pc + 1;
         }
         if prog.len() == 0 || !prog[prog.len() - 1].can_end_program() {
-            bbs.push(Some(BasicBlock {
+            bbs.push(Some(BBlock {
                 id: bbs.len(),
                 label: curr_label,
                 insts: &prog[block_start..],
@@ -120,7 +120,7 @@ impl<'a> Cfg<'a> {
     }
 
     #[inline]
-    pub fn bbs(&self) -> &[Option<BasicBlock>] {
+    pub fn bbs(&self) -> &[Option<BBlock>] {
         &self.bbs
     }
 
@@ -162,7 +162,7 @@ impl<'a> Cfg<'a> {
     }
 }
 
-impl<'a> BasicBlock<'a> {
+impl<'a> BBlock<'a> {
     #[inline]
     pub fn id(&self) -> usize {
         self.id
@@ -217,7 +217,7 @@ impl Display for Cfg<'_> {
     }
 }
 
-impl Display for BasicBlock<'_> {
+impl Display for BBlock<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.label {
             Some(l) => write!(f, "{l}"),

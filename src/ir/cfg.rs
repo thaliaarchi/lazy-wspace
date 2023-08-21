@@ -10,21 +10,36 @@ use crate::number::Op;
 /// Control-flow graph of IR basic blocks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cfg {
-    bbs: Vec<Option<BasicBlock>>,
+    bbs: Vec<Option<BBlock>>,
 }
 
-/// Sequence of non-branching instructions, followed by a branch.
+/// A basic block, i.e., a sequence of non-branching instructions, followed by a
+/// branch.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BasicBlock {
-    id: usize,
+pub struct BBlock {
+    id: BBlockId,
     label: Option<LabelLit>,
     stmts: Vec<Stmt>,
     exit: ExitStmt,
     exps: ExpPool,
     stack: AbstractStack,
-    stack_accessed: usize,
     heap: AbstractHeap,
 }
+
+#[derive(Clone, Debug)]
+pub struct BBlockBuilder {
+    id: BBlockId,
+    label: Option<LabelLit>,
+    stmts: Vec<Stmt>,
+    exit: Option<ExitStmt>,
+    exps: ExpPool,
+    stack: AbstractStack,
+    heap: AbstractHeap,
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BBlockId(u32);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
@@ -38,9 +53,9 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExitStmt {
-    Call(usize, usize),
-    Jmp(usize),
-    Br(Cond, ExpRef, usize, usize),
+    Call(BBlockId, BBlockId),
+    Jmp(BBlockId),
+    Br(Cond, ExpRef, BBlockId, BBlockId),
     Ret,
     End,
     Error(Error),
@@ -59,71 +74,36 @@ pub enum IoKind {
 }
 
 impl Cfg {
-    pub fn new(ast_cfg: &ast::Cfg<'_>) -> Self {
+    pub fn from_ast(ast_cfg: &ast::Cfg<'_>) -> Self {
         let mut bbs = Vec::with_capacity(ast_cfg.bbs().len());
         for bb in ast_cfg.bbs() {
-            bbs.push(bb.as_ref().map(|bb| BasicBlock::new(bb)));
+            bbs.push(bb.as_ref().map(|bb| BBlock::from_ast(bb)));
         }
         Cfg { bbs }
     }
 
-    pub fn get(&self, id: usize) -> Option<&BasicBlock> {
-        self.bbs[id].as_ref()
-    }
-
-    pub fn simplify(&mut self) {
-        for bb in &mut self.bbs {
-            bb.as_mut().map(|bb| bb.simplify());
-        }
+    pub fn get(&self, id: BBlockId) -> Option<&BBlock> {
+        self.bbs[id.0 as usize].as_ref()
     }
 }
 
-impl BasicBlock {
-    pub fn new(ast_bb: &ast::BasicBlock<'_>) -> Self {
-        let mut bb = BasicBlock {
-            id: ast_bb.id(),
-            label: ast_bb.label().cloned(),
-            stmts: Vec::new(),
-            exit: ExitStmt::Jmp(usize::MAX), // Placeholder
-            exps: ExpPool::new(),
-            stack: AbstractStack::new(),
-            stack_accessed: 0,
-            heap: AbstractHeap::new(),
-        };
-
-        for inst in ast_bb.insts() {
-            if let Err(err) = bb.push_inst(inst) {
-                bb.exit = ExitStmt::Error(err);
-                return bb;
+impl BBlock {
+    pub fn from_ast(bb: &ast::BBlock<'_>) -> Self {
+        let mut b = BBlockBuilder::new(BBlockId(bb.id() as u32), bb.label().cloned());
+        for inst in bb.insts() {
+            if let Err(err) = b.push_inst(inst) {
+                b.exit = Some(ExitStmt::Error(err));
+                break;
             }
         }
-
-        bb.exit = match ast_bb.exit() {
-            ExitInst::Call(l1, l2) => ExitStmt::Call(*l1, *l2),
-            ExitInst::Jmp(l) => ExitStmt::Jmp(*l),
-            ExitInst::Jz(l1, l2, inst) => match bb.stack.pop(&mut bb.exps) {
-                Ok(top) => {
-                    bb.stmts.push(Stmt::Eval(top));
-                    ExitStmt::Br(Cond::Zero, top, *l1, *l2)
-                }
-                Err(err) => ExitStmt::Error(err.to_error(inst)),
-            },
-            ExitInst::Jn(l1, l2, inst) => match bb.stack.pop(&mut bb.exps) {
-                Ok(top) => {
-                    bb.stmts.push(Stmt::Eval(top));
-                    ExitStmt::Br(Cond::Neg, top, *l1, *l2)
-                }
-                Err(err) => ExitStmt::Error(err.to_error(inst)),
-            },
-            ExitInst::Ret => ExitStmt::Ret,
-            ExitInst::End => ExitStmt::End,
-            ExitInst::Error(err) => ExitStmt::Error(err.clone().into()),
-        };
-        bb
+        if b.exit.is_none() {
+            b.set_exit(bb.exit());
+        }
+        b.finish()
     }
 
     #[inline]
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> BBlockId {
         self.id
     }
 
@@ -151,62 +131,60 @@ impl BasicBlock {
     pub fn heap(&self) -> &AbstractHeap {
         &self.heap
     }
+}
 
-    fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
-        let res = match self.push_inst_underflow(inst) {
-            Ok(res) => res,
-            Err(err) => Err(err.to_error(inst)),
-        };
-        self.guard_stack();
-        res
+impl BBlockBuilder {
+    pub fn new(id: BBlockId, label: Option<LabelLit>) -> Self {
+        BBlockBuilder {
+            id,
+            label,
+            stmts: Vec::new(),
+            exit: None,
+            exps: ExpPool::new(),
+            stack: AbstractStack::new(),
+            heap: AbstractHeap::new(),
+        }
     }
 
-    #[inline]
-    fn push_inst_underflow(&mut self, inst: &Inst) -> Result<Result<(), Error>, UnderflowError> {
-        self.stack_accessed = self.stack.accessed();
+    pub fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
         match inst {
-            Inst::Push(n) => self.stack.push(self.exps.insert(n.into())),
-            Inst::Dup => self.stack.dup(&mut self.exps)?,
-            Inst::Copy(n) => self.stack.copy(n.into(), &mut self.exps),
-            Inst::Swap => self.stack.swap(&mut self.exps)?,
-            Inst::Drop => self.stack.drop_eager(1)?,
-            Inst::Slide(n) => self.stack.slide(n.into(), &mut self.exps)?,
-            Inst::Add => self.stack.apply_op(Op::Add, &mut self.exps)?,
-            Inst::Sub => self.stack.apply_op(Op::Sub, &mut self.exps)?,
-            Inst::Mul => self.stack.apply_op(Op::Mul, &mut self.exps)?,
-            Inst::Div => self.stack.apply_op(Op::Div, &mut self.exps)?,
-            Inst::Mod => self.stack.apply_op(Op::Mod, &mut self.exps)?,
+            Inst::Push(n) => self.do_stack(inst, |s, exps| Ok(s.push(exps.insert(n.into()))))?,
+            Inst::Dup => self.do_stack(inst, |s, exps| s.dup(exps))?,
+            Inst::Copy(n) => self.do_stack(inst, |s, exps| Ok(s.copy(n.into(), exps)))?,
+            Inst::Swap => self.do_stack(inst, |s, exps| s.swap(exps))?,
+            Inst::Drop => self.do_stack(inst, |s, _| s.drop_eager(1))?,
+            Inst::Slide(n) => self.do_stack(inst, |s, exps| s.slide(n.into(), exps))?,
+            Inst::Add => self.do_stack(inst, |s, exps| s.apply_op(Op::Add, exps))?,
+            Inst::Sub => self.do_stack(inst, |s, exps| s.apply_op(Op::Sub, exps))?,
+            Inst::Mul => self.do_stack(inst, |s, exps| s.apply_op(Op::Mul, exps))?,
+            Inst::Div => self.do_stack(inst, |s, exps| s.apply_op(Op::Div, exps))?,
+            Inst::Mod => self.do_stack(inst, |s, exps| s.apply_op(Op::Mod, exps))?,
             Inst::Store => {
-                let (addr, val) = self.stack.pop2(&mut self.exps)?;
-                self.guard_stack();
+                let (addr, val) = self.do_stack(inst, |s, exps| s.pop2(exps))?;
                 self.stmts.push(Stmt::Store(addr, val)); // TODO: cache
-                return Ok(self.heap.store(addr, val, &mut self.exps));
+                self.heap.store(addr, val, &mut self.exps)?;
             }
             Inst::Retrieve => {
-                let addr = self.stack.pop(&mut self.exps)?;
+                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
                 self.stack.push(self.heap.retrieve(addr, &mut self.exps));
             }
             Inst::Printc => {
-                let val = self.stack.pop(&mut self.exps)?;
-                self.guard_stack();
+                let val = self.do_stack(inst, |s, exps| s.pop(exps))?;
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Char, val));
             }
             Inst::Printi => {
-                let val = self.stack.pop(&mut self.exps)?;
-                self.guard_stack();
+                let val = self.do_stack(inst, |s, exps| s.pop(exps))?;
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Int, val));
             }
             Inst::Readc => {
-                let addr = self.stack.pop(&mut self.exps)?;
-                self.guard_stack();
+                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Char, addr));
             }
             Inst::Readi => {
-                let addr = self.stack.pop(&mut self.exps)?;
-                self.guard_stack();
+                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Int, addr));
             }
@@ -219,19 +197,67 @@ impl BasicBlock {
             | Inst::End
             | Inst::ParseError(_) => panic!("terminator in basic block body"),
         }
-        Ok(Ok(()))
+        Ok(())
     }
 
-    fn guard_stack(&mut self) {
-        let accessed = self.stack.accessed();
-        if accessed > self.stack_accessed {
-            self.stmts.push(Stmt::GuardStack(accessed));
+    pub fn set_exit(&mut self, exit: &ExitInst) {
+        assert!(self.exit.is_none());
+        let res = (|| {
+            let exit: ExitStmt = match exit {
+                ExitInst::Call(l1, l2) => ExitStmt::Call(BBlockId::new(*l1), BBlockId::new(*l2)),
+                ExitInst::Jmp(l) => ExitStmt::Jmp(BBlockId::new(*l)),
+                ExitInst::Jz(l1, l2, inst) => {
+                    let top = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                    self.stmts.push(Stmt::Eval(top));
+                    ExitStmt::Br(Cond::Zero, top, BBlockId::new(*l1), BBlockId::new(*l2))
+                }
+                ExitInst::Jn(l1, l2, inst) => {
+                    let top = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                    self.stmts.push(Stmt::Eval(top));
+                    ExitStmt::Br(Cond::Neg, top, BBlockId::new(*l1), BBlockId::new(*l2))
+                }
+                ExitInst::Ret => ExitStmt::Ret,
+                ExitInst::End => ExitStmt::End,
+                ExitInst::Error(err) => ExitStmt::Error(err.clone().into()),
+            };
+            Ok(exit)
+        })();
+        self.exit = Some(match res {
+            Ok(exit) => exit,
+            Err(err) => ExitStmt::Error(err),
+        });
+    }
+
+    fn do_stack<T, F>(&mut self, inst: &Inst, f: F) -> Result<T, Error>
+    where
+        F: FnOnce(&mut AbstractStack, &mut ExpPool) -> Result<T, UnderflowError>,
+    {
+        let pre = self.stack.accessed();
+        let res = f(&mut self.stack, &mut self.exps);
+        let post = self.stack.accessed();
+        if post > pre {
+            self.stmts.push(Stmt::GuardStack(post));
+        }
+        res.map_err(|err| err.to_error(inst))
+    }
+
+    pub fn finish(mut self) -> BBlock {
+        self.stack.simplify();
+        BBlock {
+            id: self.id,
+            label: self.label,
+            stmts: self.stmts,
+            exit: self.exit.expect("missing exit"),
+            exps: self.exps,
+            stack: self.stack,
+            heap: self.heap,
         }
     }
+}
 
-    #[inline]
-    pub fn simplify(&mut self) {
-        self.stack.simplify();
+impl BBlockId {
+    fn new(id: usize) -> Self {
+        BBlockId(id as u32)
     }
 }
 
@@ -329,12 +355,18 @@ impl Display for Cfg {
     }
 }
 
-impl Display for BasicBlock {
+impl Display for BBlock {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.label {
-            Some(l) => write!(f, "{l}"),
-            None => write!(f, "bb{}", self.id),
+            Some(l) => Display::fmt(l, f),
+            None => Display::fmt(&self.id, f),
         }
+    }
+}
+
+impl Display for BBlockId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "bb{}", self.0)
     }
 }
 

@@ -40,8 +40,7 @@ fn main() {
     println!("\n\n===== AST CFG after dead-code elimination =====\n");
     print!("{ast_cfg}");
 
-    let mut ir_cfg = ir::Cfg::new(&ast_cfg);
-    ir_cfg.simplify();
+    let ir_cfg = ir::Cfg::from_ast(&ast_cfg);
     println!("\n\n===== IR =====\n");
     print!("{ir_cfg}");
 }
