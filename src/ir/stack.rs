@@ -15,11 +15,10 @@ pub struct AbstractStack {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LazySize {
     Finite(usize),
-    /// A slide amount larger than `usize::MAX`, that always underflows when
-    /// evaluated.
+    /// A stack index (for `copy`) or size (for `slide`) larger than
+    /// `usize::MAX`, that always underflows when evaluated.
     Overflow,
-    /// Represents `Slide(NumberLit::Empty)`. When it is evaluated, it produces
-    /// `UnderflowError::SlideEmpty`.
+    /// An empty number literal, that errors when evaluated.
     EmptyLit,
 }
 
@@ -52,6 +51,11 @@ impl AbstractStack {
     #[inline]
     pub fn slide_count(&self) -> LazySize {
         self.slide
+    }
+
+    #[inline]
+    pub fn accessed(&self) -> usize {
+        self.drops.max(self.under.len())
     }
 
     /// Pushes a value to the stack.
@@ -261,8 +265,8 @@ impl LazySize {
                 .checked_add(m)
                 .map(LazySize::Finite)
                 .unwrap_or(LazySize::Overflow),
-            (LazySize::EmptyLit, _) | (_, LazySize::EmptyLit) => LazySize::EmptyLit,
-            (LazySize::Overflow, _) | (_, LazySize::Overflow) => LazySize::Overflow,
+            (LazySize::Overflow | LazySize::EmptyLit, _) => self,
+            (_, LazySize::Overflow | LazySize::EmptyLit) => rhs,
         }
     }
 

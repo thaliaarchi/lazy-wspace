@@ -22,6 +22,7 @@ pub struct BasicBlock {
     exit: ExitStmt,
     exps: ExpPool,
     stack: AbstractStack,
+    stack_accessed: usize,
     heap: AbstractHeap,
 }
 
@@ -86,6 +87,7 @@ impl BasicBlock {
             exit: ExitStmt::Jmp(usize::MAX), // Placeholder
             exps: ExpPool::new(),
             stack: AbstractStack::new(),
+            stack_accessed: 0,
             heap: AbstractHeap::new(),
         };
 
@@ -151,22 +153,17 @@ impl BasicBlock {
     }
 
     fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
-        let pre = self.stack.drop_count().max(self.stack.values_under().len());
-        match self.push_inst_underflow(inst) {
-            Ok(Ok(())) => {
-                let post = self.stack.drop_count().max(self.stack.values_under().len());
-                if post > pre {
-                    self.stmts.push(Stmt::GuardStack(post));
-                }
-                Ok(())
-            }
-            Ok(Err(err)) => Err(err),
+        let res = match self.push_inst_underflow(inst) {
+            Ok(res) => res,
             Err(err) => Err(err.to_error(inst)),
-        }
+        };
+        self.guard_stack();
+        res
     }
 
     #[inline]
     fn push_inst_underflow(&mut self, inst: &Inst) -> Result<Result<(), Error>, UnderflowError> {
+        self.stack_accessed = self.stack.accessed();
         match inst {
             Inst::Push(n) => self.stack.push(self.exps.insert(n.into())),
             Inst::Dup => self.stack.dup(&mut self.exps)?,
@@ -181,6 +178,7 @@ impl BasicBlock {
             Inst::Mod => self.stack.apply_op(Op::Mod, &mut self.exps)?,
             Inst::Store => {
                 let (addr, val) = self.stack.pop2(&mut self.exps)?;
+                self.guard_stack();
                 self.stmts.push(Stmt::Store(addr, val)); // TODO: cache
                 return Ok(self.heap.store(addr, val, &mut self.exps));
             }
@@ -190,21 +188,25 @@ impl BasicBlock {
             }
             Inst::Printc => {
                 let val = self.stack.pop(&mut self.exps)?;
+                self.guard_stack();
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Char, val));
             }
             Inst::Printi => {
                 let val = self.stack.pop(&mut self.exps)?;
+                self.guard_stack();
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Int, val));
             }
             Inst::Readc => {
                 let addr = self.stack.pop(&mut self.exps)?;
+                self.guard_stack();
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Char, addr));
             }
             Inst::Readi => {
                 let addr = self.stack.pop(&mut self.exps)?;
+                self.guard_stack();
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Int, addr));
             }
@@ -215,9 +217,16 @@ impl BasicBlock {
             | Inst::Jn(_)
             | Inst::Ret
             | Inst::End
-            | Inst::ParseError(_) => panic!("terminator in block body"),
+            | Inst::ParseError(_) => panic!("terminator in basic block body"),
         }
         Ok(Ok(()))
+    }
+
+    fn guard_stack(&mut self) {
+        let accessed = self.stack.accessed();
+        if accessed > self.stack_accessed {
+            self.stmts.push(Stmt::GuardStack(accessed));
+        }
     }
 
     #[inline]
