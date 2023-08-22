@@ -29,7 +29,7 @@ impl AbstractHeap {
                     *self
                         .consts
                         .entry(n)
-                        .or_insert_with(|| pool.insert(Exp::HeapRef(addr)))
+                        .or_insert_with(|| pool.insert_unique(Exp::HeapRef(addr)))
                 } else {
                     pool.insert(Exp::Error(NumberError::RetrieveLarge))
                 }
@@ -38,7 +38,7 @@ impl AbstractHeap {
             _ => *self
                 .vars
                 .entry(addr)
-                .or_insert_with(|| pool.insert(Exp::HeapRef(addr))),
+                .or_insert_with(|| pool.insert_unique(Exp::HeapRef(addr))),
         }
     }
 
@@ -49,7 +49,7 @@ impl AbstractHeap {
             Exp::Number(n) => {
                 if let Some(n) = n.to_u32() {
                     // A constant address may alias computed addresses, but not
-                    // other constant addresses
+                    // other constant addresses.
                     self.vars.clear();
 
                     self.consts.insert(n, val);
@@ -60,7 +60,7 @@ impl AbstractHeap {
             }
             Exp::Error(err) => Err(err.clone().into()),
             _ => {
-                // A non-constant address may alias any other address
+                // A non-constant address may alias any other address.
                 self.vars.clear();
                 self.consts.clear();
 

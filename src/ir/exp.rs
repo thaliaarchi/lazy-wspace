@@ -98,14 +98,17 @@ impl ExpPool {
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
-                let i = ExpRef::new(self.exps.len());
-                self.exps.push(e);
-                unsafe {
-                    self.table.insert_in_slot(hash, slot, i);
-                }
+                let i = self.insert_unique(e);
+                unsafe { self.table.insert_in_slot(hash, slot, i) };
                 i
             }
         }
+    }
+
+    pub fn insert_unique(&mut self, e: Exp) -> ExpRef {
+        let i = ExpRef::new(self.exps.len());
+        self.exps.push(e);
+        i
     }
 
     pub fn insert_op(&mut self, op: Op, lhs: ExpRef, rhs: ExpRef) -> ExpRef {
