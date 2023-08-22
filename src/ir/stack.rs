@@ -7,9 +7,9 @@ use crate::number::Op;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbstractStack {
     values: Vec<ExpRef>,
-    under: Vec<Option<ExpRef>>,
-    drops: usize,
-    slide: LazySize,
+    accessed: usize, // accessed >= dropped
+    dropped: usize,
+    lazy_dropped: LazySize,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -27,35 +27,30 @@ impl AbstractStack {
     pub fn new() -> Self {
         AbstractStack {
             values: Vec::new(),
-            under: Vec::new(),
-            drops: 0,
-            slide: LazySize::Finite(0),
+            accessed: 0,
+            dropped: 0,
+            lazy_dropped: LazySize::Finite(0),
         }
     }
 
     #[inline]
-    pub fn values_pushed(&self) -> &[ExpRef] {
+    pub fn values(&self) -> &[ExpRef] {
         &self.values
     }
 
     #[inline]
-    pub fn values_under(&self) -> &[Option<ExpRef>] {
-        &self.under
-    }
-
-    #[inline]
-    pub fn drop_count(&self) -> usize {
-        self.drops
-    }
-
-    #[inline]
-    pub fn slide_count(&self) -> LazySize {
-        self.slide
-    }
-
-    #[inline]
     pub fn accessed(&self) -> usize {
-        self.drops.max(self.under.len())
+        self.accessed
+    }
+
+    #[inline]
+    pub fn dropped(&self) -> usize {
+        self.dropped
+    }
+
+    #[inline]
+    pub fn lazy_dropped(&self) -> LazySize {
+        self.lazy_dropped
     }
 
     /// Pushes a value to the stack.
@@ -110,33 +105,36 @@ impl AbstractStack {
     /// Eagerly accesses the nth element from the top of the stack and returns
     /// it.
     pub fn at_eager(&mut self, n: usize, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
-        if n < self.values.len() {
-            Ok(self.values[self.values.len() - n - 1])
-        } else {
-            let n = n - self.values.len();
-            self.eval_slide()?;
-            let i = self.drops.checked_add(n).ok_or(UnderflowError::Normal)?;
-            if i >= self.under.len() {
-                self.under.resize(i + 1, None);
-            }
-            Ok(*self.under[i].get_or_insert_with(|| exps.insert(Exp::StackRef(i))))
-        }
+        self.at(n, false, exps)
     }
 
     /// Lazily accesses the nth element from the top of the stack and returns
     /// it.
     pub fn at_lazy(&mut self, n: usize, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
+        self.at(n, true, exps)
+    }
+
+    #[inline]
+    fn at(&mut self, n: usize, lazy: bool, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1])
         } else {
             let n = n - self.values.len();
-            let slide_and_drops = add_or_underflow(self.slide.as_usize()?, self.drops)?;
-            let i = add_or_underflow(slide_and_drops, n)?;
-            if i < self.under.len() {
-                Ok(*self.under[i].get_or_insert_with(|| exps.insert(Exp::StackRef(n))))
+            let drops = if lazy {
+                add_or_underflow(self.dropped, self.lazy_dropped.as_usize()?)?
             } else {
-                Ok(exps.insert(Exp::CheckedStackRef(i)))
-            }
+                self.eval_slide(0)?;
+                self.dropped
+            };
+            let i = add_or_underflow(drops, n)?;
+            let size = add_or_underflow(i, 1)?;
+            let e = if i >= self.accessed && lazy {
+                Exp::CheckedStackRef(i)
+            } else {
+                self.accessed = self.accessed.max(size);
+                Exp::StackRef(i)
+            };
+            Ok(exps.insert(e))
         }
     }
 
@@ -174,8 +172,7 @@ impl AbstractStack {
         } else {
             let n = n - self.values.len();
             self.values.clear();
-            self.eval_slide()?;
-            self.drops = add_or_underflow(self.drops, n)?;
+            self.eval_slide(n)?;
         }
         Ok(())
     }
@@ -193,19 +190,19 @@ impl AbstractStack {
                     self.values.clear();
 
                     // Eagerly drop already-accessed values
-                    let nu = n.min(self.under.len().saturating_sub(self.drops));
-                    self.drops -= nu;
-                    let n = n - nu;
+                    let accessed = (self.accessed - self.dropped).min(n);
+                    self.dropped += accessed;
+                    let n = n - accessed;
 
                     // Lazily drop the rest
-                    self.slide = self.slide.combine(LazySize::Finite(n));
+                    self.lazy_dropped = self.lazy_dropped.combine(LazySize::Finite(n));
                 }
             }
             LazySize::Overflow | LazySize::EmptyLit => {
                 // Eagerly drop all values and underflow on further accesses
                 self.values.clear();
-                self.drops = self.drops.max(self.under.len());
-                self.slide = self.slide.combine(n);
+                self.dropped = self.accessed;
+                self.lazy_dropped = self.lazy_dropped.combine(n);
             }
         }
     }
@@ -220,32 +217,35 @@ impl AbstractStack {
     }
 
     /// Forces evaluation of slide, to perform an eager operation.
-    fn eval_slide(&mut self) -> Result<(), UnderflowError> {
-        self.drops = add_or_underflow(self.slide.as_usize()?, self.drops)?;
-        self.slide = LazySize::Finite(0);
+    fn eval_slide(&mut self, eager_drops: usize) -> Result<(), UnderflowError> {
+        self.dropped = add_or_underflow(self.dropped, self.lazy_dropped.as_usize()?)?;
+        self.dropped = add_or_underflow(self.dropped, eager_drops)?;
+        self.accessed = self.accessed.max(self.dropped);
+        self.lazy_dropped = LazySize::Finite(0);
         Ok(())
     }
 
-    /// Simplifies pushed values that do not change the contents of the stack.
-    pub fn simplify(&mut self) {
+    /// Simplifies pushed values, that do not change the contents of the stack.
+    pub fn simplify(&mut self, exps: &ExpPool) {
         // Simplify pop-push identities
-        if let Ok(drops_and_slide) =
-            (self.slide.as_usize()).and_then(|s| add_or_underflow(s, self.drops))
+        if let Ok(drops) = (self.lazy_dropped.as_usize())
+            .and_then(|lazy_drops| add_or_underflow(self.dropped, lazy_drops))
         {
-            if drops_and_slide <= self.under.len() {
+            if drops <= self.accessed {
                 let mut shift = 0;
-                for i in 0..drops_and_slide.min(self.values.len()) {
-                    if let Some(u) = self.under[drops_and_slide - i - 1] {
-                        if u == self.values[i] {
-                            shift += 1;
-                            continue;
-                        }
+                for &v in &self.values[0..drops.min(self.values.len())] {
+                    let i = drops - (shift + 1);
+                    if exps[v] == Exp::StackRef(i)
+                        || (i < self.accessed && exps[v] == Exp::CheckedStackRef(i))
+                    {
+                        shift += 1;
+                    } else {
+                        break;
                     }
-                    break;
                 }
                 if shift != 0 {
                     self.values.drain(0..shift);
-                    self.drops -= shift;
+                    self.dropped -= shift;
                 }
             }
         }
@@ -301,12 +301,12 @@ mod tests {
     use super::*;
     use LazySize::*;
 
-    macro_rules! stack(([$($value:expr),*], [$($under:expr),*], $drops:expr, $slide:expr$(,)?) => {
+    macro_rules! stack(([$($value:expr),*], $accessed:expr, $dropped:expr, $lazy_dropped:expr$(,)?) => {
         AbstractStack {
             values: vec![$($value),*],
-            under: vec![$($under),*],
-            drops: $drops,
-            slide: $slide,
+            accessed: $accessed,
+            dropped: $dropped,
+            lazy_dropped: $lazy_dropped,
         }
     });
 
@@ -314,9 +314,9 @@ mod tests {
     fn push() {
         let v0 = ExpRef::new(0);
 
-        let mut s = stack!([], [], 0, Finite(0));
+        let mut s = stack!([], 0, 0, Finite(0));
         s.push(v0);
-        let s1 = stack!([v0], [], 0, Finite(0));
+        let s1 = stack!([v0], 0, 0, Finite(0));
         assert_eq!(s1, s);
     }
 
@@ -325,12 +325,12 @@ mod tests {
         {
             let mut exps = ExpPool::new();
             let mut exps1 = ExpPool::new();
-            let u0 = exps1.insert(Exp::StackRef(0));
+            let r1 = exps1.insert(Exp::StackRef(0));
 
-            let mut s = stack!([], [], 0, Finite(0));
+            let mut s = stack!([], 0, 0, Finite(0));
             let top = s.pop(&mut exps).unwrap();
-            let s1 = stack!([], [Some(u0)], 1, Finite(0));
-            let top1 = u0;
+            let s1 = stack!([], 1, 1, Finite(0));
+            let top1 = r1;
 
             assert_eq!(s1, s);
             assert_eq!(top1, top);
@@ -342,9 +342,9 @@ mod tests {
             let v1 = exps.insert(Exp::number(2));
             let exps1 = exps.clone();
 
-            let mut s = stack!([v0, v1], [], 0, Finite(0));
+            let mut s = stack!([v0, v1], 0, 0, Finite(0));
             let top = s.pop(&mut exps).unwrap();
-            let s1 = stack!([v0], [], 0, Finite(0));
+            let s1 = stack!([v0], 0, 0, Finite(0));
             let top1 = v1;
 
             assert_eq!(s1, s);
@@ -353,14 +353,14 @@ mod tests {
         }
         {
             let mut exps = ExpPool::new();
-            let u1 = exps.insert(Exp::StackRef(1));
+            exps.insert(Exp::StackRef(1));
             let mut exps1 = exps.clone();
-            let u3 = exps1.insert(Exp::StackRef(3));
+            let r1 = exps1.insert(Exp::StackRef(3));
 
-            let mut s = stack!([], [None, Some(u1), None], 3, Finite(0));
+            let mut s = stack!([], 3, 3, Finite(0));
             let top = s.pop(&mut exps).unwrap();
-            let s1 = stack!([], [None, Some(u1), None, Some(u3)], 4, Finite(0));
-            let top1 = u3;
+            let s1 = stack!([], 4, 4, Finite(0));
+            let top1 = r1;
 
             assert_eq!(s1, s);
             assert_eq!(top1, top);
@@ -373,35 +373,34 @@ mod tests {
         let v0 = ExpRef::new(0);
         let v1 = ExpRef::new(1);
         let v2 = ExpRef::new(2);
-        let v3 = ExpRef::new(3);
 
-        let mut s = stack!([v0, v1, v2], [], 5, Finite(3));
+        let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_eager(2).unwrap();
-        let s1 = stack!([v0], [], 5, Finite(3));
+        let s1 = stack!([v0], 6, 5, Finite(3));
         assert_eq!(s1, s);
 
-        let mut s = stack!([v0, v1, v2], [], 5, Finite(3));
+        let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_eager(5).unwrap();
-        let s1 = stack!([], [], 10, Finite(0));
+        let s1 = stack!([], 10, 10, Finite(0));
         assert_eq!(s1, s);
 
-        let mut s = stack!([], [None, Some(v0), None], 5, Finite(3));
+        let mut s = stack!([], 6, 5, Finite(3));
         s.drop_eager(1).unwrap();
-        let s1 = stack!([], [None, Some(v0), None], 9, Finite(0));
+        let s1 = stack!([], 9, 9, Finite(0));
         assert_eq!(s1, s);
 
-        let mut s = stack!([], [], 5, Finite(3));
+        let mut s = stack!([], 6, 5, Finite(3));
         s.drop_eager(2).unwrap();
-        let s1 = stack!([], [], 10, Finite(0));
+        let s1 = stack!([], 10, 10, Finite(0));
         assert_eq!(s1, s);
 
-        let mut s = stack!([v0, v1, v2], [Some(v3)], 5, Overflow);
+        let mut s = stack!([v0, v1, v2], 6, 5, Overflow);
         assert_eq!(Err(UnderflowError::Normal), s.drop_eager(5));
 
-        let mut s = stack!([v0, v1, v2], [Some(v3)], 5, EmptyLit);
+        let mut s = stack!([v0, v1, v2], 6, 5, EmptyLit);
         assert_eq!(Err(UnderflowError::SlideEmpty), s.drop_eager(5));
 
-        let mut s = stack!([v0], [], 3, Finite(usize::MAX - 3));
+        let mut s = stack!([v0], 5, 3, Finite(usize::MAX - 3));
         assert_eq!(Err(UnderflowError::Normal), s.drop_eager(5));
     }
 
@@ -410,41 +409,75 @@ mod tests {
         let v0 = ExpRef::new(0);
         let v1 = ExpRef::new(1);
         let v2 = ExpRef::new(2);
-        let v3 = ExpRef::new(3);
 
-        let mut s = stack!([v0, v1, v2], [], 5, Finite(3));
+        let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_lazy(Finite(2));
-        let s1 = stack!([v0], [], 5, Finite(3));
+        let s1 = stack!([v0], 6, 5, Finite(3));
         assert_eq!(s1, s);
 
-        let mut s = stack!([v0, v1, v2], [], 5, Finite(3));
+        let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_lazy(Finite(5));
-        let s1 = stack!([], [], 5, Finite(5));
+        let s1 = stack!([], 6, 6, Finite(4));
         assert_eq!(s1, s);
 
-        let mut s = stack!([], [None, Some(v0), None], 5, Finite(3));
-        s.drop_lazy(Finite(1));
-        let s1 = stack!([], [None, Some(v0), None], 5, Finite(4));
-        assert_eq!(s1, s);
-
-        let mut s = stack!([], [], 5, Finite(3));
-        s.drop_lazy(Finite(2));
-        let s1 = stack!([], [], 5, Finite(5));
-        assert_eq!(s1, s);
-
-        let mut s = stack!([v0, v1, v2], [Some(v3)], 5, Overflow);
+        let mut s = stack!([v0, v1, v2], 6, 5, Overflow);
         s.drop_lazy(Finite(5));
-        let s1 = stack!([], [Some(v3)], 5, Overflow);
+        let s1 = stack!([], 6, 6, Overflow);
         assert_eq!(s1, s);
 
-        let mut s = stack!([v0, v1, v2], [Some(v3)], 5, EmptyLit);
+        let mut s = stack!([v0, v1, v2], 6, 5, EmptyLit);
         s.drop_lazy(Finite(5));
-        let s1 = stack!([], [Some(v3)], 5, EmptyLit);
+        let s1 = stack!([], 6, 6, EmptyLit);
         assert_eq!(s1, s);
 
-        let mut s = stack!([v0], [], 3, Finite(usize::MAX - 3));
+        let mut s = stack!([v0], 5, 3, Finite(usize::MAX - 2));
         s.drop_lazy(Finite(5));
-        let s1 = stack!([], [], 3, Overflow);
+        let s1 = stack!([], 5, 5, Finite(usize::MAX));
         assert_eq!(s1, s);
+
+        let mut s = stack!([v0], 4, 3, Finite(usize::MAX - 2));
+        s.drop_lazy(Finite(5));
+        let s1 = stack!([], 4, 4, Overflow);
+        assert_eq!(s1, s);
+    }
+
+    #[test]
+    fn simplify_swap_swap() {
+        let mut exps = ExpPool::new();
+        let mut s = stack!([], 0, 0, Finite(0));
+        s.swap(&mut exps).unwrap();
+        s.swap(&mut exps).unwrap();
+        s.simplify(&exps);
+
+        let mut exps1 = ExpPool::new();
+        exps1.insert(Exp::StackRef(0));
+        exps1.insert(Exp::StackRef(1));
+        let s1 = stack!([], 2, 0, Finite(0));
+
+        assert_eq!(s1, s);
+        assert_eq!(exps1, exps);
+    }
+
+    #[test]
+    fn simplify_copy() {
+        let mut exps = ExpPool::new();
+        let mut s = stack!([], 0, 0, Finite(0));
+        let r1 = s.at_lazy(1, &mut exps).unwrap();
+        let r2 = s.at_lazy(2, &mut exps).unwrap();
+        let r0 = s.at_eager(0, &mut exps).unwrap();
+        s.drop_eager(3).unwrap();
+        s.push(r2);
+        s.push(r1);
+        s.push(r0);
+        s.simplify(&exps);
+
+        let mut exps1 = ExpPool::new();
+        exps1.insert(Exp::CheckedStackRef(1));
+        exps1.insert(Exp::CheckedStackRef(2));
+        exps1.insert(Exp::StackRef(0));
+        let s1 = stack!([], 3, 0, Finite(0));
+
+        assert_eq!(s1, s);
+        assert_eq!(exps1, exps);
     }
 }

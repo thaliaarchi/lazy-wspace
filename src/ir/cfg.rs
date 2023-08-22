@@ -268,7 +268,7 @@ impl BBlockBuilder {
     }
 
     pub fn finish(mut self) -> BBlock {
-        self.stack.simplify();
+        self.stack.simplify(&self.exps);
         BBlock {
             id: self.id,
             label: self.label,
@@ -359,14 +359,14 @@ impl Display for Cfg {
                 writeln!(f, "    {stmt}")?;
             }
 
-            if bb.stack.drop_count() != 0 {
-                writeln!(f, "    drop_eager {}", bb.stack.drop_count())?;
+            if bb.stack.dropped() != 0 {
+                writeln!(f, "    drop_eager {}", bb.stack.dropped())?;
             }
-            if bb.stack.slide_count() != LazySize::Finite(0) {
-                writeln!(f, "    drop_lazy {:?}", bb.stack.slide_count())?;
+            if bb.stack.lazy_dropped() != LazySize::Finite(0) {
+                writeln!(f, "    drop_lazy {:?}", bb.stack.lazy_dropped())?;
             }
 
-            for &val in bb.stack.values_pushed() {
+            for &val in bb.stack.values() {
                 let mut new_visited = bitbox![0; bb.exps.len()];
                 visit_exp(val, &bb.exps, &mut visited, &mut new_visited);
                 for i in new_visited.iter_ones() {
