@@ -1,11 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Index, IndexMut};
 
 use bitvec::prelude::*;
 
-use crate::ast::{self, ExitInst, Inst, LabelLit};
-use crate::error::{Error, UnderflowError};
+use crate::ast::{Inst, LabelLit};
+use crate::error::{Error, ParseError, UnderflowError};
 use crate::ir::{AbstractHeap, AbstractStack, Exp, ExpPool, ExpRef, LazySize};
 use crate::number::Op;
 
@@ -21,26 +21,27 @@ pub struct Cfg {
 pub struct BBlock {
     id: BBlockId,
     label: Option<LabelLit>,
+    exps: ExpPool,
     stmts: Vec<Stmt>,
     exit: ExitStmt,
-    exps: ExpPool,
     stack: AbstractStack,
     heap: AbstractHeap,
 }
 
 #[derive(Clone, Debug)]
-pub struct BBlockBuilder {
+struct BBlockBuilder {
     id: BBlockId,
     label: Option<LabelLit>,
+    exps: ExpPool,
     stmts: Vec<Stmt>,
     exit: Option<ExitStmt>,
-    exps: ExpPool,
+    exit_pc: Option<usize>,
     stack: AbstractStack,
     heap: AbstractHeap,
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BBlockId(u32);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,12 +77,88 @@ pub enum IoKind {
 }
 
 impl Cfg {
-    pub fn from_ast(ast_cfg: &ast::Cfg<'_>) -> Self {
-        let mut bbs = Vec::with_capacity(ast_cfg.bbs().len());
-        for bb in ast_cfg.bbs() {
-            bbs.push(BBlock::from_ast(bb));
+    pub fn new(prog: &[Inst]) -> Self {
+        let mut bbs = Vec::new();
+        let mut labels = HashMap::new();
+        let mut first_parse_error = None;
+
+        // Build basic block bodies and collect labels:
+        let mut pc = 0;
+        while pc < prog.len() {
+            let id = BBlockId::new(bbs.len());
+            let mut bb = BBlockBuilder::new(id);
+            if let Inst::Label(l) = &prog[pc] {
+                if !first_parse_error.is_some_and(|err_id| id >= err_id) {
+                    labels.insert(l.clone(), id);
+                }
+                bb.label = Some(l.clone());
+                pc += 1;
+            }
+            while pc < prog.len() {
+                let curr_pc = pc;
+                let inst = &prog[curr_pc];
+                pc += 1;
+                if inst.is_control_flow() {
+                    bb.exit_pc = Some(curr_pc);
+                    match inst {
+                        Inst::Label(_) => pc -= 1,
+                        Inst::ParseError(_) => first_parse_error = first_parse_error.or(Some(id)),
+                        _ => {}
+                    }
+                    break;
+                } else if let Err(err) = bb.push_inst(inst) {
+                    bb.exit = Some(ExitStmt::Error(err));
+                    break;
+                }
+            }
+            bbs.push(bb);
         }
-        Cfg { bbs }
+
+        // Add block for implicit end:
+        if first_parse_error.is_none() {
+            let id = BBlockId::new(bbs.len());
+            let mut bb = BBlockBuilder::new(id);
+            bb.exit = Some(ExitStmt::Error(ParseError::ImplicitEnd.into()));
+            bbs.push(bb);
+            first_parse_error = Some(id);
+        }
+        let first_parse_error = first_parse_error.unwrap();
+
+        // Connect exits:
+        for (id, bb) in bbs.iter_mut().enumerate() {
+            if let Some(exit_pc) = bb.exit_pc {
+                macro_rules! get_label(($l:expr) => {
+                    labels.get($l).copied().unwrap_or(first_parse_error)
+                });
+                let next = BBlockId::new(id + 1);
+                let inst = &prog[exit_pc];
+                let exit = match &inst {
+                    Inst::Label(_) => ExitStmt::Jmp(next),
+                    Inst::Call(l) => ExitStmt::Call(get_label!(l), next),
+                    Inst::Jmp(l) => ExitStmt::Jmp(get_label!(l)),
+                    Inst::Jz(l) | Inst::Jn(l) => match bb.do_stack(inst, |s, exps| s.pop(exps)) {
+                        Ok(top) => {
+                            bb.stmts.push(Stmt::Eval(top));
+                            let cond = match inst {
+                                Inst::Jz(_) => Cond::Zero,
+                                _ => Cond::Neg,
+                            };
+                            ExitStmt::Br(cond, top, get_label!(l), next)
+                        }
+                        Err(err) => ExitStmt::Error(err),
+                    },
+                    Inst::Ret => ExitStmt::Ret,
+                    Inst::End => ExitStmt::End,
+                    Inst::ParseError(err) => ExitStmt::Error(err.clone().into()),
+                    _ => panic!("not a terminator"),
+                };
+                bb.exit = Some(exit);
+            }
+        }
+
+        Cfg {
+            bbs: bbs.into_iter().map(|bb| bb.finish()).collect(),
+        }
     }
 
     pub fn reachable(&self) -> BitBox {
@@ -114,20 +191,6 @@ impl Cfg {
 }
 
 impl BBlock {
-    pub fn from_ast(bb: &ast::BBlock<'_>) -> Self {
-        let mut b = BBlockBuilder::new(BBlockId(bb.id() as u32), bb.label().cloned());
-        for inst in bb.insts() {
-            if let Err(err) = b.push_inst(inst) {
-                b.exit = Some(ExitStmt::Error(err));
-                break;
-            }
-        }
-        if b.exit.is_none() {
-            b.set_exit(bb.exit());
-        }
-        b.finish()
-    }
-
     #[inline]
     pub fn id(&self) -> BBlockId {
         self.id
@@ -160,19 +223,20 @@ impl BBlock {
 }
 
 impl BBlockBuilder {
-    pub fn new(id: BBlockId, label: Option<LabelLit>) -> Self {
+    fn new(id: BBlockId) -> Self {
         BBlockBuilder {
             id,
-            label,
+            label: None,
+            exps: ExpPool::new(),
             stmts: Vec::new(),
             exit: None,
-            exps: ExpPool::new(),
+            exit_pc: None,
             stack: AbstractStack::new(),
             heap: AbstractHeap::new(),
         }
     }
 
-    pub fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
+    fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
         match inst {
             Inst::Push(n) => self.do_stack(inst, |s, exps| Ok(s.push(exps.insert(n.into()))))?,
             Inst::Dup => self.do_stack(inst, |s, exps| s.dup(exps))?,
@@ -226,34 +290,6 @@ impl BBlockBuilder {
         Ok(())
     }
 
-    pub fn set_exit(&mut self, exit: &ExitInst) {
-        assert!(self.exit.is_none());
-        let res = (|| {
-            let exit: ExitStmt = match exit {
-                ExitInst::Call(l1, l2) => ExitStmt::Call(BBlockId::new(*l1), BBlockId::new(*l2)),
-                ExitInst::Jmp(l) => ExitStmt::Jmp(BBlockId::new(*l)),
-                ExitInst::Jz(l1, l2, inst) => {
-                    let top = self.do_stack(inst, |s, exps| s.pop(exps))?;
-                    self.stmts.push(Stmt::Eval(top));
-                    ExitStmt::Br(Cond::Zero, top, BBlockId::new(*l1), BBlockId::new(*l2))
-                }
-                ExitInst::Jn(l1, l2, inst) => {
-                    let top = self.do_stack(inst, |s, exps| s.pop(exps))?;
-                    self.stmts.push(Stmt::Eval(top));
-                    ExitStmt::Br(Cond::Neg, top, BBlockId::new(*l1), BBlockId::new(*l2))
-                }
-                ExitInst::Ret => ExitStmt::Ret,
-                ExitInst::End => ExitStmt::End,
-                ExitInst::Error(err) => ExitStmt::Error(err.clone().into()),
-            };
-            Ok(exit)
-        })();
-        self.exit = Some(match res {
-            Ok(exit) => exit,
-            Err(err) => ExitStmt::Error(err),
-        });
-    }
-
     fn do_stack<T, F>(&mut self, inst: &Inst, f: F) -> Result<T, Error>
     where
         F: FnOnce(&mut AbstractStack, &mut ExpPool) -> Result<T, UnderflowError>,
@@ -267,14 +303,14 @@ impl BBlockBuilder {
         res.map_err(|err| err.to_error(inst))
     }
 
-    pub fn finish(mut self) -> BBlock {
+    fn finish(mut self) -> BBlock {
         self.stack.simplify(&self.exps);
         BBlock {
             id: self.id,
             label: self.label,
             stmts: self.stmts,
-            exit: self.exit.expect("missing exit"),
             exps: self.exps,
+            exit: self.exit.expect("missing exit"),
             stack: self.stack,
             heap: self.heap,
         }

@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::Read;
 use std::{env, path::PathBuf};
 
-use lazy_wspace::ast::{self, Inst, Lexer, Parser};
+use lazy_wspace::ast::{Inst, Lexer, Parser};
 use lazy_wspace::error::Error;
-use lazy_wspace::ir;
+use lazy_wspace::ir::Cfg;
 
 fn main() {
     let mut args = env::args_os();
@@ -32,11 +32,7 @@ fn main() {
         }
     }
 
-    let ast_cfg = ast::Cfg::new(&prog);
-    println!("\n\n===== AST CFG =====\n");
-    print!("{ast_cfg}");
-
-    let ir_cfg = ir::Cfg::from_ast(&ast_cfg);
+    let ir = Cfg::new(&prog);
     println!("\n\n===== IR =====\n");
-    print!("{ir_cfg}");
+    print!("{ir}");
 }
