@@ -1,7 +1,6 @@
 use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::ir::{Node, NodeRef, NodeTable};
-use crate::number::Op;
+use crate::ir::{Node, NodeRef, NodeTable, Op2};
 
 /// Abstract stack for stack operations in a basic block.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,9 +173,9 @@ impl AbstractStack {
     /// Eagerly applies an arithmetic operation to the the top two elements on
     /// the stack.
     #[inline]
-    pub fn apply_op(&mut self, op: Op, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
+    pub fn apply_op(&mut self, op: Op2, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
         let (x, y) = self.pop2(table)?;
-        self.push(table.insert_op(op, x, y));
+        self.push(table.insert_peephole(Node::Op2(op, x, y)));
         Ok(())
     }
 

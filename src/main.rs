@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::{env, path::PathBuf};
 
-use lazy_wspace::ast::{Inst, Lexer, Parser};
+use lazy_wspace::ast::{Lexer, Parser};
 use lazy_wspace::error::Error;
 use lazy_wspace::ir::{Cfg, Graph};
 
@@ -24,16 +24,7 @@ fn main() {
     f.read_to_end(&mut src).unwrap();
 
     let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
-    println!("===== AST =====\n");
-    for inst in &prog {
-        match inst {
-            Inst::Label(l) => println!("{l}:"),
-            _ => println!("    {inst}"),
-        }
-    }
-
     let graph = Graph::new();
     let ir = Cfg::new(&prog, &graph);
-    println!("\n\n===== IR =====\n");
     print!("{ir}");
 }

@@ -1,18 +1,13 @@
-use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
-use std::ops::{Add, Index, Mul, Sub};
-use std::rc::Rc;
+use std::ops::Index;
 
 use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
-use rug::ops::{DivRounding, RemRounding};
 
-use crate::error::NumberError;
 use crate::ir::{Graph, Node, NodeRef};
-use crate::number::Op;
 
 pub struct NodeTable<'g> {
     // Essentially a `HashMap<Node, NodeRef>`, that doesn't store a redundant
@@ -65,47 +60,6 @@ impl<'g> NodeTable<'g> {
     #[inline]
     pub fn insert_unique(&mut self, node: Node) -> NodeRef {
         self.graph.push(node)
-    }
-
-    pub fn insert_op(&mut self, op: Op, lhs: NodeRef, rhs: NodeRef) -> NodeRef {
-        // Replacing, for example, `x * 0` with `0` is unsound, because `x`
-        // could evaluate to an error.
-
-        match (op, &self.graph[lhs], &self.graph[rhs]) {
-            (_, Node::Number(lhs), Node::Number(rhs)) => {
-                let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
-                let res = match op {
-                    Op::Add => Ok(lhs.add(rhs).into()),
-                    Op::Sub => Ok(lhs.sub(rhs).into()),
-                    Op::Mul => Ok(lhs.mul(rhs).into()),
-                    Op::Div if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Op::Div => Ok(lhs.div_floor(rhs).into()),
-                    Op::Mod if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Op::Mod => Ok(lhs.rem_floor(rhs).into()),
-                };
-                let node = match res {
-                    Ok(v) => Node::Number(Rc::new(v)),
-                    Err(err) => Node::Error(err),
-                };
-                self.insert(node)
-            }
-
-            (Op::Add | Op::Sub | Op::Div | Op::Mod, _, Node::Error(_)) => rhs,
-            (Op::Add | Op::Sub | Op::Div | Op::Mod, Node::Error(_), Node::Number(_)) => lhs,
-            (Op::Mul, Node::Error(_), _) => lhs,
-            (Op::Mul, Node::Number(_), Node::Error(_)) => rhs,
-
-            (Op::Add, Node::Number(lhs), _) if lhs.cmp0() == Ordering::Equal => rhs,
-            (Op::Add | Op::Sub, _, Node::Number(rhs)) if rhs.cmp0() == Ordering::Equal => lhs,
-            (Op::Mul | Op::Div, Node::Number(lhs), _) if **lhs == 1 => rhs,
-            (Op::Mul | Op::Div, _, Node::Number(rhs)) if **rhs == 1 => lhs,
-
-            (Op::Div | Op::Mod, _, Node::Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
-                self.insert(Node::Error(NumberError::DivModZero))
-            }
-
-            _ => self.insert(Node::Op(op, lhs, rhs)),
-        }
     }
 
     #[inline]
@@ -196,7 +150,7 @@ impl Debug for NodeTableIter<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::number::Op;
+    use crate::ir::Op2;
 
     use super::*;
 
@@ -206,10 +160,10 @@ mod tests {
         let mut table = NodeTable::new(&mut graph);
         let x = table.insert(Node::number(1));
         let y = table.insert(Node::number(2));
-        let z = table.insert(Node::Op(Op::Add, x, y));
+        let z = table.insert(Node::Op2(Op2::Add, x, y));
         let y2 = table.insert(Node::number(2));
         let x2 = table.insert(Node::number(1));
-        let z2 = table.insert(Node::Op(Op::Add, x2, y2));
+        let z2 = table.insert(Node::Op2(Op2::Add, x2, y2));
         assert_eq!(3, table.len());
         assert_eq!(x, x2);
         assert_eq!(y, y2);

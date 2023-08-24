@@ -2,51 +2,85 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::rc::Rc;
 
 use rug::Integer;
+use strum::Display;
 
 use crate::ast::NumberLit;
 use crate::error::NumberError;
 use crate::ir::NodeRef;
-use crate::number::Op;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Node {
     /// A constant number.
     ///
     /// ```ir
-    /// %val = value {number}
+    /// %r = value {number}
     /// ```
     Number(Rc<Integer>),
     /// A lazy unevaluated error.
     ///
     /// ```ir
-    /// %val = error {kind}
+    /// %r = error {kind}
     /// ```
     Error(NumberError),
     /// A lazy binary arithmetic operation.
     ///
     /// ```ir
-    /// %val = {op} %lhs %rhs
+    /// %r = {op} %lhs %rhs
     /// ```
-    Op(Op, NodeRef, NodeRef),
+    Op2(Op2, NodeRef, NodeRef),
+    /// A lazy unary arithmetic operation.
+    ///
+    /// ```ir
+    /// %r = {op} %v
+    /// ```
+    Op1(Op1, NodeRef),
     /// Unchecked stack reference, that must be first guarded with
     /// `guard_stack`.
     ///
     /// ```ir
-    /// %val = stack_ref {index}
+    /// %r = stack_ref {index}
     /// ```
     StackRef(usize),
     /// Checked stack reference.
     ///
     /// ```ir
-    /// %val = checked_stack_ref {index}
+    /// %r = checked_stack_ref {index}
     /// ```
     CheckedStackRef(usize),
     /// Heap reference.
     ///
     /// ```ir
-    /// %val = heap_ref %addr
+    /// %r = heap_ref %addr
     /// ```
     HeapRef(NodeRef),
+}
+
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "lowercase")]
+pub enum Op2 {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    And,
+    Or,
+    Xor,
+    AndNot,
+    Nand,
+    Nor,
+    Xnor,
+    NandNot,
+    Shl,
+    Shr,
+}
+
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "lowercase")]
+pub enum Op1 {
+    Neg,
+    Popcnt,
+    Lsb,
 }
 
 impl Node {
@@ -78,7 +112,8 @@ impl Display for Node {
         match self {
             Node::Number(n) => write!(f, "number {n}"),
             Node::Error(err) => write!(f, "error {err:?}"),
-            Node::Op(op, l, r) => write!(f, "{op} {l} {r}"),
+            Node::Op2(op, l, r) => write!(f, "{op} {l} {r}"),
+            Node::Op1(op, v) => write!(f, "{op} {v}"),
             Node::StackRef(n) => write!(f, "stack_ref {n}"),
             Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Node::HeapRef(addr) => write!(f, "heap_ref {addr}"),
