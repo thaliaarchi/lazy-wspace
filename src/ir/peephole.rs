@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use rug::ops::{DivRounding, RemRounding};
-use rug::Complete;
+use rug::{Complete, Integer};
 
 use crate::error::NumberError;
 use crate::ir::{Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef, NodeTable};
@@ -127,34 +127,13 @@ impl NodeTable<'_> {
             // Single-bit NOR
             // !x * !y == !x & !y == !(x | y)
             (Mul(..), NotGetBit(x, bx), NotGetBit(y, by)) if bx == by => {
-                let (y, by) = (*y, *by);
-                let x = self.insert_peephole(Node::GetBit(*x, *bx));
-                let y = self.insert_peephole(Node::GetBit(y, by));
+                let (x, y, bits) = (*x, *y, *bx);
+                let x = self.insert_peephole(Node::GetBit(x, bits));
+                let y = self.insert_peephole(Node::GetBit(y, bits));
                 Insert(Nor(x, y))
             }
-            // (1 - (x + y)) - (x & y) == !(x | y)
-            (Sub(..), Sub(a, b), And(x2, y2)) => match (&self[*a], &self[*b]) {
-                (Number(one), Add(x, y))
-                    if **one == 1 && (x == x2 && y == y2 || x == y2 && y == x2) =>
-                {
-                    is_getbit!(x, y, Nor(*x, *y))
-                }
-                _ => New,
-            },
 
             // Negation
-            (Sub(..), Number(one), Nand(x, y)) if **one == 1 => {
-                is_getbit!(x, y, And(*x, *y))
-            }
-            (Sub(..), Number(one), Nor(x, y)) if **one == 1 => {
-                is_getbit!(x, y, Or(*x, *y))
-            }
-            (Sub(..), Number(one), Xnor(x, y)) if **one == 1 => {
-                is_getbit!(x, y, Xor(*x, *y))
-            }
-            (Sub(..), Number(one), NandNot(x, y)) if **one == 1 => {
-                is_getbit!(x, y, AndNot(*x, *y))
-            }
             (Sub(..), Number(one), And(x, y)) if **one == 1 => {
                 is_getbit!(x, y, Nand(*x, *y))
             }
@@ -168,6 +147,53 @@ impl NodeTable<'_> {
                 is_getbit!(x, y, NandNot(*x, *y))
             }
             (Sub(..), Number(one), GetBit(v, bit)) if **one == 1 => Insert(NotGetBit(*v, *bit)),
+            (Sub(..), Number(one), Nand(x, y)) if **one == 1 => {
+                is_getbit!(x, y, And(*x, *y))
+            }
+            (Sub(..), Number(one), Nor(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Or(*x, *y))
+            }
+            (Sub(..), Number(one), Xnor(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Xor(*x, *y))
+            }
+            (Sub(..), Number(one), NandNot(x, y)) if **one == 1 => {
+                is_getbit!(x, y, AndNot(*x, *y))
+            }
+            (Sub(..), Number(one), NotGetBit(v, bit)) if **one == 1 => Insert(GetBit(*v, *bit)),
+
+            // Distributive
+            (And(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(And(*x, *y)), bits))
+            }
+            (Or(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(Or(*x, *y)), bits))
+            }
+            (Xor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(Xor(*x, *y)), bits))
+            }
+            (AndNot(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(AndNot(*x, *y)), bits))
+            }
+            (Nand(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(Nand(*x, *y)), bits))
+            }
+            (Nor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(Nor(*x, *y)), bits))
+            }
+            (Xnor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(Xnor(*x, *y)), bits))
+            }
+            (NandNot(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                let bits = *bx;
+                Insert(GetBit(self.insert_peephole(NandNot(*x, *y)), bits))
+            }
 
             // Get LSB
             (And(..), _, Number(rhs)) if **rhs == 1 => Insert(GetBit(lhs, 0)),
@@ -187,6 +213,27 @@ impl NodeTable<'_> {
             // Masking
             (Mod(..), _, Number(rhs)) if rhs.is_power_of_two() => {
                 Insert(And(lhs, self.insert(Node::number(&**rhs - 1))))
+            }
+            (Add(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&self[*m1], &self[*m2]) {
+                (Number(m1), Number(m2))
+                    if (&**m1 & &**m2).complete().cmp0() == Ordering::Equal =>
+                {
+                    Insert(And(
+                        *x1,
+                        self.insert(Node::number((&**m1 | &**m2).complete())),
+                    ))
+                }
+                _ => New,
+            },
+            (Add(..), GetBit(x1, 0), And(x2, m)) | (Add(..), And(x2, m), GetBit(x1, 0))
+                if x1 == x2 =>
+            {
+                match &self[*m] {
+                    Number(m) if m.cmp0() != Ordering::Equal => {
+                        Insert(And(*x1, self.insert(Node::number(&**m | 1))))
+                    }
+                    _ => New,
+                }
             }
 
             _ => New,
@@ -211,7 +258,9 @@ impl NodeTable<'_> {
             (GetBit(_, bit), Number(lhs)) => Insert(Node::number(lhs.get_bit(*bit))),
             (GetBit(_, 0), GetBit(..)) => Use(lhs),
             (GetBit(_, 0), Shr(v, bit)) => Insert(Node::GetBit(*v, *bit)),
-            (Shl(_, bit), GetBit(v, bit1)) if bit == bit1 => Insert(GetBit(*v, *bit)),
+            (Shl(_, bit), GetBit(v, bit1)) if bit == bit1 => {
+                Insert(And(*v, self.insert(Node::number(Integer::ONE << bit1))))
+            }
 
             _ => New,
         };
