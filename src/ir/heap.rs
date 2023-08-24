@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use crate::error::{EagerError, Error, NumberError};
-use crate::ir::{Exp, ExpPool, ExpRef};
+use crate::ir::{Node, NodeRef, NodeTable};
 
 /// Abstract heap for heap operations in a basic block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbstractHeap {
-    consts: HashMap<u32, ExpRef>,
-    vars: HashMap<ExpRef, ExpRef>,
+    consts: HashMap<u32, NodeRef>,
+    vars: HashMap<NodeRef, NodeRef>,
 }
 
 impl AbstractHeap {
@@ -22,31 +22,36 @@ impl AbstractHeap {
     /// Get the value at address `addr` in the heap. It will return the same
     /// value as previous calls to `retrieve` with the same value for `addr`,
     /// unless a potentially-aliasing address has been written to.
-    pub fn retrieve(&mut self, addr: ExpRef, pool: &mut ExpPool) -> ExpRef {
-        match &pool[addr] {
-            Exp::Number(n) => {
+    pub fn retrieve(&mut self, addr: NodeRef, table: &mut NodeTable) -> NodeRef {
+        match &table[addr] {
+            Node::Number(n) => {
                 if let Some(n) = n.to_u32() {
                     *self
                         .consts
                         .entry(n)
-                        .or_insert_with(|| pool.insert_unique(Exp::HeapRef(addr)))
+                        .or_insert_with(|| table.insert_unique(Node::HeapRef(addr)))
                 } else {
-                    pool.insert(Exp::Error(NumberError::RetrieveLarge))
+                    table.insert(Node::Error(NumberError::RetrieveLarge))
                 }
             }
-            Exp::Error(_) => addr,
+            Node::Error(_) => addr,
             _ => *self
                 .vars
                 .entry(addr)
-                .or_insert_with(|| pool.insert_unique(Exp::HeapRef(addr))),
+                .or_insert_with(|| table.insert_unique(Node::HeapRef(addr))),
         }
     }
 
     /// Write a value to address `addr` in the heap. It invalidates any known
     /// values at addresses that may alias with `addr`.
-    pub fn store(&mut self, addr: ExpRef, val: ExpRef, pool: &mut ExpPool) -> Result<(), Error> {
-        match &pool[addr] {
-            Exp::Number(n) => {
+    pub fn store(
+        &mut self,
+        addr: NodeRef,
+        val: NodeRef,
+        table: &mut NodeTable,
+    ) -> Result<(), Error> {
+        match &table[addr] {
+            Node::Number(n) => {
                 if let Some(n) = n.to_u32() {
                     // A constant address may alias computed addresses, but not
                     // other constant addresses.
@@ -58,7 +63,7 @@ impl AbstractHeap {
                     Err(EagerError::StoreOverflow.into())
                 }
             }
-            Exp::Error(err) => Err(err.clone().into()),
+            Node::Error(err) => Err(err.clone().into()),
             _ => {
                 // A non-constant address may alias any other address.
                 self.vars.clear();

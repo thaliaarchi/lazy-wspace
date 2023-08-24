@@ -1,12 +1,12 @@
 use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::ir::{Exp, ExpPool, ExpRef};
+use crate::ir::{Node, NodeRef, NodeTable};
 use crate::number::Op;
 
 /// Abstract stack for stack operations in a basic block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbstractStack {
-    values: Vec<ExpRef>,
+    values: Vec<NodeRef>,
     accessed: usize, // accessed >= dropped
     dropped: usize,
     lazy_dropped: LazySize,
@@ -34,7 +34,7 @@ impl AbstractStack {
     }
 
     #[inline]
-    pub fn values(&self) -> &[ExpRef] {
+    pub fn values(&self) -> &[NodeRef] {
         &self.values
     }
 
@@ -55,23 +55,23 @@ impl AbstractStack {
 
     /// Pushes a value to the stack.
     #[inline]
-    pub fn push(&mut self, n: ExpRef) {
+    pub fn push(&mut self, n: NodeRef) {
         self.values.push(n);
     }
 
     /// Eagerly pushes a reference to the top element on the stack.
     #[inline]
-    pub fn dup(&mut self, exps: &mut ExpPool) -> Result<(), UnderflowError> {
-        let top = self.top(exps)?;
+    pub fn dup(&mut self, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
+        let top = self.top(table)?;
         self.push(top);
         Ok(())
     }
 
     /// Eagerly pushes a lazy reference to the nth element on the stack.
     #[inline]
-    pub fn copy(&mut self, n: LazySize, exps: &mut ExpPool) {
+    pub fn copy(&mut self, n: LazySize, table: &mut NodeTable<'_>) {
         let res = match n {
-            LazySize::Finite(n) => match self.at_lazy(n, exps) {
+            LazySize::Finite(n) => match self.at_lazy(n, table) {
                 Ok(nth) => Ok(nth),
                 Err(UnderflowError::Normal) => Err(NumberError::CopyLarge),
                 Err(UnderflowError::SlideEmpty) => Err(NumberError::EmptyLit),
@@ -81,16 +81,16 @@ impl AbstractStack {
         };
         let nth = match res {
             Ok(nth) => nth,
-            Err(err) => exps.insert(err.into()),
+            Err(err) => table.insert(err.into()),
         };
         self.push(nth);
     }
 
     /// Eagerly swaps the top two elements on the stack.
     #[inline]
-    pub fn swap(&mut self, exps: &mut ExpPool) -> Result<(), UnderflowError> {
-        let x = self.pop(exps)?;
-        let y = self.pop(exps)?;
+    pub fn swap(&mut self, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
+        let x = self.pop(table)?;
+        let y = self.pop(table)?;
         self.push(x);
         self.push(y);
         Ok(())
@@ -98,24 +98,37 @@ impl AbstractStack {
 
     /// Eagerly accesses the top element of the stack and returns it.
     #[inline]
-    pub fn top(&mut self, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
-        self.at_eager(0, exps)
+    pub fn top(&mut self, table: &mut NodeTable<'_>) -> Result<NodeRef, UnderflowError> {
+        self.at_eager(0, table)
     }
 
     /// Eagerly accesses the nth element from the top of the stack and returns
     /// it.
-    pub fn at_eager(&mut self, n: usize, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
-        self.at(n, false, exps)
+    pub fn at_eager(
+        &mut self,
+        n: usize,
+        table: &mut NodeTable<'_>,
+    ) -> Result<NodeRef, UnderflowError> {
+        self.at(n, false, table)
     }
 
     /// Lazily accesses the nth element from the top of the stack and returns
     /// it.
-    pub fn at_lazy(&mut self, n: usize, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
-        self.at(n, true, exps)
+    pub fn at_lazy(
+        &mut self,
+        n: usize,
+        table: &mut NodeTable<'_>,
+    ) -> Result<NodeRef, UnderflowError> {
+        self.at(n, true, table)
     }
 
     #[inline]
-    fn at(&mut self, n: usize, lazy: bool, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
+    fn at(
+        &mut self,
+        n: usize,
+        lazy: bool,
+        table: &mut NodeTable<'_>,
+    ) -> Result<NodeRef, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1])
         } else {
@@ -128,29 +141,32 @@ impl AbstractStack {
             };
             let i = add_or_underflow(drops, n)?;
             let size = add_or_underflow(i, 1)?;
-            let e = if i >= self.accessed && lazy {
-                Exp::CheckedStackRef(i)
+            let node = if i >= self.accessed && lazy {
+                Node::CheckedStackRef(i)
             } else {
                 self.accessed = self.accessed.max(size);
-                Exp::StackRef(i)
+                Node::StackRef(i)
             };
-            Ok(exps.insert(e))
+            Ok(table.insert(node))
         }
     }
 
     /// Eagerly removes the top element from the stack and returns it.
     #[inline]
-    pub fn pop(&mut self, exps: &mut ExpPool) -> Result<ExpRef, UnderflowError> {
-        let top = self.top(exps)?;
+    pub fn pop(&mut self, table: &mut NodeTable<'_>) -> Result<NodeRef, UnderflowError> {
+        let top = self.top(table)?;
         self.drop_eager(1)?;
         Ok(top)
     }
 
     /// Eagerly removes the top two elements from the stack and returns them.
     #[inline]
-    pub fn pop2(&mut self, exps: &mut ExpPool) -> Result<(ExpRef, ExpRef), UnderflowError> {
-        let v1 = self.at_eager(1, exps)?;
-        let v0 = self.at_eager(0, exps)?;
+    pub fn pop2(
+        &mut self,
+        table: &mut NodeTable<'_>,
+    ) -> Result<(NodeRef, NodeRef), UnderflowError> {
+        let v1 = self.at_eager(1, table)?;
+        let v0 = self.at_eager(0, table)?;
         self.drop_eager(2)?;
         Ok((v1, v0))
     }
@@ -158,9 +174,9 @@ impl AbstractStack {
     /// Eagerly applies an arithmetic operation to the the top two elements on
     /// the stack.
     #[inline]
-    pub fn apply_op(&mut self, op: Op, exps: &mut ExpPool) -> Result<(), UnderflowError> {
-        let (x, y) = self.pop2(exps)?;
-        self.push(exps.insert_op(op, x, y));
+    pub fn apply_op(&mut self, op: Op, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
+        let (x, y) = self.pop2(table)?;
+        self.push(table.insert_op(op, x, y));
         Ok(())
     }
 
@@ -209,8 +225,8 @@ impl AbstractStack {
 
     /// Lazily removes `n` elements from the top of the stack, keeping the
     /// topmost element.
-    pub fn slide(&mut self, n: LazySize, exps: &mut ExpPool) -> Result<(), UnderflowError> {
-        let top = self.pop(exps)?;
+    pub fn slide(&mut self, n: LazySize, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
+        let top = self.pop(table)?;
         self.drop_lazy(n);
         self.push(top);
         Ok(())
@@ -226,7 +242,7 @@ impl AbstractStack {
     }
 
     /// Simplifies pushed values, that do not change the contents of the stack.
-    pub fn simplify(&mut self, exps: &ExpPool) {
+    pub fn simplify(&mut self, table: &NodeTable<'_>) {
         // Simplify pop-push identities
         if let Ok(drops) = (self.lazy_dropped.as_usize())
             .and_then(|lazy_drops| add_or_underflow(self.dropped, lazy_drops))
@@ -235,8 +251,8 @@ impl AbstractStack {
                 let mut shift = 0;
                 for &v in &self.values[0..drops.min(self.values.len())] {
                     let i = drops - (shift + 1);
-                    if exps[v] == Exp::StackRef(i)
-                        || (i < self.accessed && exps[v] == Exp::CheckedStackRef(i))
+                    if table[v] == Node::StackRef(i)
+                        || (i < self.accessed && table[v] == Node::CheckedStackRef(i))
                     {
                         shift += 1;
                     } else {
@@ -298,6 +314,8 @@ impl From<&NumberLit> for LazySize {
 
 #[cfg(test)]
 mod tests {
+    use crate::ir::Graph;
+
     use super::*;
     use LazySize::*;
 
@@ -312,7 +330,7 @@ mod tests {
 
     #[test]
     fn push() {
-        let v0 = ExpRef::new(0);
+        let v0 = NodeRef::new(0);
 
         let mut s = stack!([], 0, 0, Finite(0));
         s.push(v0);
@@ -323,56 +341,62 @@ mod tests {
     #[test]
     fn pop() {
         {
-            let mut exps = ExpPool::new();
-            let mut exps1 = ExpPool::new();
-            let r1 = exps1.insert(Exp::StackRef(0));
-
+            let graph = Graph::new();
+            let mut table = NodeTable::new(&graph);
             let mut s = stack!([], 0, 0, Finite(0));
-            let top = s.pop(&mut exps).unwrap();
+            let top = s.pop(&mut table).unwrap();
+
+            let graph1 = Graph::new();
+            let r1 = graph1.push(Node::StackRef(0));
             let s1 = stack!([], 1, 1, Finite(0));
             let top1 = r1;
 
             assert_eq!(s1, s);
             assert_eq!(top1, top);
-            assert_eq!(exps1, exps);
+            assert_eq!(graph1, graph);
         }
         {
-            let mut exps = ExpPool::new();
-            let v0 = exps.insert(Exp::number(1));
-            let v1 = exps.insert(Exp::number(2));
-            let exps1 = exps.clone();
-
+            let graph = Graph::new();
+            let mut table = NodeTable::new(&graph);
+            let v0 = table.insert(Node::number(1));
+            let v1 = table.insert(Node::number(2));
             let mut s = stack!([v0, v1], 0, 0, Finite(0));
-            let top = s.pop(&mut exps).unwrap();
+            let top = s.pop(&mut table).unwrap();
+
+            let graph1 = Graph::new();
+            let v0 = graph1.push(Node::number(1));
+            let v1 = graph1.push(Node::number(2));
             let s1 = stack!([v0], 0, 0, Finite(0));
             let top1 = v1;
 
             assert_eq!(s1, s);
             assert_eq!(top1, top);
-            assert_eq!(exps1, exps);
+            assert_eq!(graph1, graph);
         }
         {
-            let mut exps = ExpPool::new();
-            exps.insert(Exp::StackRef(1));
-            let mut exps1 = exps.clone();
-            let r1 = exps1.insert(Exp::StackRef(3));
-
+            let graph = Graph::new();
+            let mut table = NodeTable::new(&graph);
+            table.insert(Node::StackRef(1));
             let mut s = stack!([], 3, 3, Finite(0));
-            let top = s.pop(&mut exps).unwrap();
+            let top = s.pop(&mut table).unwrap();
+
+            let graph1 = Graph::new();
+            graph1.push(Node::StackRef(1));
+            let r1 = graph1.push(Node::StackRef(3));
             let s1 = stack!([], 4, 4, Finite(0));
             let top1 = r1;
 
             assert_eq!(s1, s);
             assert_eq!(top1, top);
-            assert_eq!(exps1, exps);
+            assert_eq!(graph1, graph);
         }
     }
 
     #[test]
     fn drop_eager() {
-        let v0 = ExpRef::new(0);
-        let v1 = ExpRef::new(1);
-        let v2 = ExpRef::new(2);
+        let v0 = NodeRef::new(0);
+        let v1 = NodeRef::new(1);
+        let v2 = NodeRef::new(2);
 
         let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_eager(2).unwrap();
@@ -406,9 +430,9 @@ mod tests {
 
     #[test]
     fn drop_lazy() {
-        let v0 = ExpRef::new(0);
-        let v1 = ExpRef::new(1);
-        let v2 = ExpRef::new(2);
+        let v0 = NodeRef::new(0);
+        let v1 = NodeRef::new(1);
+        let v2 = NodeRef::new(2);
 
         let mut s = stack!([v0, v1, v2], 6, 5, Finite(3));
         s.drop_lazy(Finite(2));
@@ -443,41 +467,43 @@ mod tests {
 
     #[test]
     fn simplify_swap_swap() {
-        let mut exps = ExpPool::new();
+        let graph = Graph::new();
+        let mut table = NodeTable::new(&graph);
         let mut s = stack!([], 0, 0, Finite(0));
-        s.swap(&mut exps).unwrap();
-        s.swap(&mut exps).unwrap();
-        s.simplify(&exps);
+        s.swap(&mut table).unwrap();
+        s.swap(&mut table).unwrap();
+        s.simplify(&table);
 
-        let mut exps1 = ExpPool::new();
-        exps1.insert(Exp::StackRef(0));
-        exps1.insert(Exp::StackRef(1));
+        let graph1 = Graph::new();
+        graph1.push(Node::StackRef(0));
+        graph1.push(Node::StackRef(1));
         let s1 = stack!([], 2, 0, Finite(0));
 
         assert_eq!(s1, s);
-        assert_eq!(exps1, exps);
+        assert_eq!(graph1, graph);
     }
 
     #[test]
     fn simplify_copy() {
-        let mut exps = ExpPool::new();
+        let graph = Graph::new();
+        let mut table = NodeTable::new(&graph);
         let mut s = stack!([], 0, 0, Finite(0));
-        let r1 = s.at_lazy(1, &mut exps).unwrap();
-        let r2 = s.at_lazy(2, &mut exps).unwrap();
-        let r0 = s.at_eager(0, &mut exps).unwrap();
+        let r1 = s.at_lazy(1, &mut table).unwrap();
+        let r2 = s.at_lazy(2, &mut table).unwrap();
+        let r0 = s.at_eager(0, &mut table).unwrap();
         s.drop_eager(3).unwrap();
         s.push(r2);
         s.push(r1);
         s.push(r0);
-        s.simplify(&exps);
+        s.simplify(&table);
 
-        let mut exps1 = ExpPool::new();
-        exps1.insert(Exp::CheckedStackRef(1));
-        exps1.insert(Exp::CheckedStackRef(2));
-        exps1.insert(Exp::StackRef(0));
+        let graph1 = Graph::new();
+        graph1.push(Node::CheckedStackRef(1));
+        graph1.push(Node::CheckedStackRef(2));
+        graph1.push(Node::StackRef(0));
         let s1 = stack!([], 3, 0, Finite(0));
 
         assert_eq!(s1, s);
-        assert_eq!(exps1, exps);
+        assert_eq!(graph1, graph);
     }
 }

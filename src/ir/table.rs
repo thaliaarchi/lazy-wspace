@@ -1,18 +1,24 @@
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
+use std::ops::{Add, Index, Mul, Sub};
+use std::rc::Rc;
 
 use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
+use rug::ops::{DivRounding, RemRounding};
 
+use crate::error::NumberError;
 use crate::ir::{Graph, Node, NodeRef};
+use crate::number::Op;
 
-pub struct NodeTable<'graph> {
+pub struct NodeTable<'g> {
     // Essentially a `HashMap<Node, NodeRef>`, that doesn't store a redundant
     // `Node` key, instead referencing it in `graph` using the `NodeRef` value.
     table: RawTable<NodeRef>,
-    graph: &'graph Graph,
+    graph: &'g Graph,
 }
 
 #[derive(Clone)]
@@ -21,9 +27,9 @@ pub struct NodeTableIter<'a> {
     marker: PhantomData<&'a NodeRef>,
 }
 
-impl<'graph> NodeTable<'graph> {
+impl<'g> NodeTable<'g> {
     #[inline]
-    pub fn new(graph: &'graph Graph) -> Self {
+    pub fn new(graph: &'g Graph) -> Self {
         NodeTable {
             table: RawTable::new(),
             graph,
@@ -57,6 +63,52 @@ impl<'graph> NodeTable<'graph> {
     }
 
     #[inline]
+    pub fn insert_unique(&mut self, node: Node) -> NodeRef {
+        self.graph.push(node)
+    }
+
+    pub fn insert_op(&mut self, op: Op, lhs: NodeRef, rhs: NodeRef) -> NodeRef {
+        // Replacing, for example, `x * 0` with `0` is unsound, because `x`
+        // could evaluate to an error.
+
+        match (op, &self.graph[lhs], &self.graph[rhs]) {
+            (_, Node::Number(lhs), Node::Number(rhs)) => {
+                let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
+                let res = match op {
+                    Op::Add => Ok(lhs.add(rhs).into()),
+                    Op::Sub => Ok(lhs.sub(rhs).into()),
+                    Op::Mul => Ok(lhs.mul(rhs).into()),
+                    Op::Div if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Op::Div => Ok(lhs.div_floor(rhs).into()),
+                    Op::Mod if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Op::Mod => Ok(lhs.rem_floor(rhs).into()),
+                };
+                let node = match res {
+                    Ok(v) => Node::Number(Rc::new(v)),
+                    Err(err) => Node::Error(err),
+                };
+                self.insert(node)
+            }
+
+            (Op::Add | Op::Sub | Op::Div | Op::Mod, _, Node::Error(_)) => rhs,
+            (Op::Add | Op::Sub | Op::Div | Op::Mod, Node::Error(_), Node::Number(_)) => lhs,
+            (Op::Mul, Node::Error(_), _) => lhs,
+            (Op::Mul, Node::Number(_), Node::Error(_)) => rhs,
+
+            (Op::Add, Node::Number(lhs), _) if lhs.cmp0() == Ordering::Equal => rhs,
+            (Op::Add | Op::Sub, _, Node::Number(rhs)) if rhs.cmp0() == Ordering::Equal => lhs,
+            (Op::Mul | Op::Div, Node::Number(lhs), _) if **lhs == 1 => rhs,
+            (Op::Mul | Op::Div, _, Node::Number(rhs)) if **rhs == 1 => lhs,
+
+            (Op::Div | Op::Mod, _, Node::Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
+                self.insert(Node::Error(NumberError::DivModZero))
+            }
+
+            _ => self.insert(Node::Op(op, lhs, rhs)),
+        }
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.table.len()
     }
@@ -68,6 +120,11 @@ impl<'graph> NodeTable<'graph> {
             marker: PhantomData,
         }
     }
+
+    #[inline]
+    pub fn graph(&self) -> &'g Graph {
+        self.graph
+    }
 }
 
 #[inline]
@@ -75,6 +132,15 @@ fn hash_node(node: &Node) -> u64 {
     let mut state = DefaultHashBuilder::default().build_hasher();
     node.hash(&mut state);
     state.finish()
+}
+
+impl Index<NodeRef> for NodeTable<'_> {
+    type Output = Node;
+
+    #[inline]
+    fn index(&self, index: NodeRef) -> &Node {
+        &self.graph[index]
+    }
 }
 
 impl Clone for NodeTable<'_> {

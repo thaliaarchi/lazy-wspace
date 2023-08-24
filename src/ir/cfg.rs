@@ -6,22 +6,23 @@ use bitvec::prelude::*;
 
 use crate::ast::{Inst, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
-use crate::ir::{AbstractHeap, AbstractStack, Exp, ExpPool, ExpRef, LazySize};
+use crate::ir::{AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeRef, NodeTable};
 use crate::number::Op;
 
 /// Control-flow graph of IR basic blocks.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cfg {
-    bbs: Vec<BBlock>,
+#[derive(Clone, Debug)]
+pub struct Cfg<'g> {
+    bbs: Vec<BBlock<'g>>,
+    graph: &'g Graph,
 }
 
 /// A basic block, i.e., a sequence of non-branching instructions, followed by a
 /// branch.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BBlock {
+#[derive(Clone, Debug)]
+pub struct BBlock<'g> {
     id: BBlockId,
     label: Option<LabelLit>,
-    exps: ExpPool,
+    table: NodeTable<'g>,
     stmts: Vec<Stmt>,
     exit: ExitStmt,
     stack: AbstractStack,
@@ -29,10 +30,10 @@ pub struct BBlock {
 }
 
 #[derive(Clone, Debug)]
-struct BBlockBuilder {
+struct BBlockBuilder<'g> {
     id: BBlockId,
     label: Option<LabelLit>,
-    exps: ExpPool,
+    table: NodeTable<'g>,
     stmts: Vec<Stmt>,
     exit: Option<ExitStmt>,
     exit_pc: Option<usize>,
@@ -47,18 +48,18 @@ pub struct BBlockId(u32);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
     GuardStack(usize),
-    Eval(ExpRef),
-    Store(ExpRef, ExpRef),
+    Eval(NodeRef),
+    Store(NodeRef, NodeRef),
     // Retrieve(u32), // TODO add for proper scheduling
-    Print(IoKind, ExpRef),
-    Read(IoKind, ExpRef),
+    Print(IoKind, NodeRef),
+    Read(IoKind, NodeRef),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExitStmt {
     Call(BBlockId, BBlockId),
     Jmp(BBlockId),
-    Br(Cond, ExpRef, BBlockId, BBlockId),
+    Br(Cond, NodeRef, BBlockId, BBlockId),
     Ret,
     End,
     Error(Error),
@@ -76,8 +77,8 @@ pub enum IoKind {
     Int,
 }
 
-impl Cfg {
-    pub fn new(prog: &[Inst]) -> Self {
+impl<'g> Cfg<'g> {
+    pub fn new(prog: &[Inst], graph: &'g Graph) -> Self {
         let mut bbs = Vec::new();
         let mut labels = HashMap::new();
         let mut first_parse_error = None;
@@ -86,7 +87,7 @@ impl Cfg {
         let mut pc = 0;
         while pc < prog.len() {
             let id = BBlockId::new(bbs.len());
-            let mut bb = BBlockBuilder::new(id);
+            let mut bb = BBlockBuilder::new(id, graph);
             if let Inst::Label(l) = &prog[pc] {
                 if !first_parse_error.is_some_and(|err_id| id >= err_id) {
                     labels.insert(l.clone(), id);
@@ -117,7 +118,7 @@ impl Cfg {
         // Add block for implicit end:
         if first_parse_error.is_none() {
             let id = BBlockId::new(bbs.len());
-            let mut bb = BBlockBuilder::new(id);
+            let mut bb = BBlockBuilder::new(id, graph);
             bb.exit = Some(ExitStmt::Error(ParseError::ImplicitEnd.into()));
             bbs.push(bb);
             first_parse_error = Some(id);
@@ -136,7 +137,7 @@ impl Cfg {
                     Inst::Label(_) => ExitStmt::Jmp(next),
                     Inst::Call(l) => ExitStmt::Call(get_label!(l), next),
                     Inst::Jmp(l) => ExitStmt::Jmp(get_label!(l)),
-                    Inst::Jz(l) | Inst::Jn(l) => match bb.do_stack(inst, |s, exps| s.pop(exps)) {
+                    Inst::Jz(l) | Inst::Jn(l) => match bb.do_stack(inst, |s, table| s.pop(table)) {
                         Ok(top) => {
                             bb.stmts.push(Stmt::Eval(top));
                             let cond = match inst {
@@ -158,6 +159,7 @@ impl Cfg {
 
         Cfg {
             bbs: bbs.into_iter().map(|bb| bb.finish()).collect(),
+            graph,
         }
     }
 
@@ -190,7 +192,7 @@ impl Cfg {
     }
 }
 
-impl BBlock {
+impl BBlock<'_> {
     #[inline]
     pub fn id(&self) -> BBlockId {
         self.id
@@ -222,12 +224,12 @@ impl BBlock {
     }
 }
 
-impl BBlockBuilder {
-    fn new(id: BBlockId) -> Self {
+impl<'g> BBlockBuilder<'g> {
+    fn new(id: BBlockId, graph: &'g Graph) -> Self {
         BBlockBuilder {
             id,
             label: None,
-            exps: ExpPool::new(),
+            table: NodeTable::new(graph),
             stmts: Vec::new(),
             exit: None,
             exit_pc: None,
@@ -238,43 +240,43 @@ impl BBlockBuilder {
 
     fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
         match inst {
-            Inst::Push(n) => self.do_stack(inst, |s, exps| Ok(s.push(exps.insert(n.into()))))?,
-            Inst::Dup => self.do_stack(inst, |s, exps| s.dup(exps))?,
-            Inst::Copy(n) => self.do_stack(inst, |s, exps| Ok(s.copy(n.into(), exps)))?,
-            Inst::Swap => self.do_stack(inst, |s, exps| s.swap(exps))?,
+            Inst::Push(n) => self.do_stack(inst, |s, t| Ok(s.push(t.insert(n.into()))))?,
+            Inst::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
+            Inst::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
+            Inst::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
             Inst::Drop => self.do_stack(inst, |s, _| s.drop_eager(1))?,
-            Inst::Slide(n) => self.do_stack(inst, |s, exps| s.slide(n.into(), exps))?,
-            Inst::Add => self.do_stack(inst, |s, exps| s.apply_op(Op::Add, exps))?,
-            Inst::Sub => self.do_stack(inst, |s, exps| s.apply_op(Op::Sub, exps))?,
-            Inst::Mul => self.do_stack(inst, |s, exps| s.apply_op(Op::Mul, exps))?,
-            Inst::Div => self.do_stack(inst, |s, exps| s.apply_op(Op::Div, exps))?,
-            Inst::Mod => self.do_stack(inst, |s, exps| s.apply_op(Op::Mod, exps))?,
+            Inst::Slide(n) => self.do_stack(inst, |s, t| s.slide(n.into(), t))?,
+            Inst::Add => self.do_stack(inst, |s, t| s.apply_op(Op::Add, t))?,
+            Inst::Sub => self.do_stack(inst, |s, t| s.apply_op(Op::Sub, t))?,
+            Inst::Mul => self.do_stack(inst, |s, t| s.apply_op(Op::Mul, t))?,
+            Inst::Div => self.do_stack(inst, |s, t| s.apply_op(Op::Div, t))?,
+            Inst::Mod => self.do_stack(inst, |s, t| s.apply_op(Op::Mod, t))?,
             Inst::Store => {
-                let (addr, val) = self.do_stack(inst, |s, exps| s.pop2(exps))?;
+                let (addr, val) = self.do_stack(inst, |s, t| s.pop2(t))?;
                 self.stmts.push(Stmt::Store(addr, val)); // TODO: cache
-                self.heap.store(addr, val, &mut self.exps)?;
+                self.heap.store(addr, val, &mut self.table)?;
             }
             Inst::Retrieve => {
-                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
-                self.stack.push(self.heap.retrieve(addr, &mut self.exps));
+                let addr = self.do_stack(inst, |s, t| s.pop(t))?;
+                self.stack.push(self.heap.retrieve(addr, &mut self.table));
             }
             Inst::Printc => {
-                let val = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                let val = self.do_stack(inst, |s, t| s.pop(t))?;
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Char, val));
             }
             Inst::Printi => {
-                let val = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                let val = self.do_stack(inst, |s, t| s.pop(t))?;
                 self.stmts.push(Stmt::Eval(val));
                 self.stmts.push(Stmt::Print(IoKind::Int, val));
             }
             Inst::Readc => {
-                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                let addr = self.do_stack(inst, |s, t| s.pop(t))?;
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Char, addr));
             }
             Inst::Readi => {
-                let addr = self.do_stack(inst, |s, exps| s.pop(exps))?;
+                let addr = self.do_stack(inst, |s, t| s.pop(t))?;
                 self.stmts.push(Stmt::Eval(addr));
                 self.stmts.push(Stmt::Read(IoKind::Int, addr));
             }
@@ -292,10 +294,10 @@ impl BBlockBuilder {
 
     fn do_stack<T, F>(&mut self, inst: &Inst, f: F) -> Result<T, Error>
     where
-        F: FnOnce(&mut AbstractStack, &mut ExpPool) -> Result<T, UnderflowError>,
+        F: FnOnce(&mut AbstractStack, &mut NodeTable) -> Result<T, UnderflowError>,
     {
         let pre = self.stack.accessed();
-        let res = f(&mut self.stack, &mut self.exps);
+        let res = f(&mut self.stack, &mut self.table);
         let post = self.stack.accessed();
         if post > pre {
             self.stmts.push(Stmt::GuardStack(post));
@@ -303,13 +305,13 @@ impl BBlockBuilder {
         res.map_err(|err| err.to_error(inst))
     }
 
-    fn finish(mut self) -> BBlock {
-        self.stack.simplify(&self.exps);
+    fn finish(mut self) -> BBlock<'g> {
+        self.stack.simplify(&self.table);
         BBlock {
             id: self.id,
             label: self.label,
             stmts: self.stmts,
-            exps: self.exps,
+            table: self.table,
             exit: self.exit.expect("missing exit"),
             stack: self.stack,
             heap: self.heap,
@@ -327,35 +329,35 @@ impl BBlockId {
     }
 }
 
-impl Index<BBlockId> for Cfg {
-    type Output = BBlock;
+impl<'g> Index<BBlockId> for Cfg<'g> {
+    type Output = BBlock<'g>;
 
-    fn index(&self, index: BBlockId) -> &BBlock {
+    fn index(&self, index: BBlockId) -> &BBlock<'g> {
         &self.bbs[index.0 as usize]
     }
 }
 
-impl IndexMut<BBlockId> for Cfg {
-    fn index_mut(&mut self, index: BBlockId) -> &mut BBlock {
+impl<'g> IndexMut<BBlockId> for Cfg<'g> {
+    fn index_mut(&mut self, index: BBlockId) -> &mut BBlock<'g> {
         &mut self.bbs[index.0 as usize]
     }
 }
 
-impl Display for Cfg {
+impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        fn visit_exp(root: ExpRef, exps: &ExpPool, visited: &mut BitBox, new_visited: &mut BitBox) {
+        fn visit_exp(root: NodeRef, graph: &Graph, visited: &mut BitBox, new_visited: &mut BitBox) {
             if visited[root.index()] {
                 return;
             }
             visited.set(root.index(), true);
             new_visited.set(root.index(), true);
-            match &exps[root] {
-                Exp::Op(_, lhs, rhs) => {
-                    visit_exp(*lhs, exps, visited, new_visited);
-                    visit_exp(*rhs, exps, visited, new_visited);
+            match &graph[root] {
+                Node::Op(_, lhs, rhs) => {
+                    visit_exp(*lhs, graph, visited, new_visited);
+                    visit_exp(*rhs, graph, visited, new_visited);
                 }
-                Exp::HeapRef(addr) => {
-                    visit_exp(*addr, exps, visited, new_visited);
+                Node::HeapRef(addr) => {
+                    visit_exp(*addr, graph, visited, new_visited);
                 }
                 _ => {}
             }
@@ -363,34 +365,36 @@ impl Display for Cfg {
 
         let reachable = self.reachable();
 
+        let mut visited = bitbox![0; self.graph.len()];
+        let mut new_visited = bitbox![0; self.graph.len()];
         let mut first = true;
         for bb in &self.bbs {
             if !first {
                 writeln!(f)?;
             }
             first = false;
+
             if !reachable[bb.id.as_usize()] {
                 writeln!(f, "# unreachable")?;
             }
             writeln!(f, "{bb}:")?;
 
-            let mut visited = bitbox![0; bb.exps.len()];
-
+            visited.fill(false);
             for stmt in &bb.stmts {
-                let mut new_visited = bitbox![0; bb.exps.len()];
+                new_visited.fill(false);
                 match stmt {
                     Stmt::GuardStack(_) => {}
                     Stmt::Eval(val) | Stmt::Print(_, val) | Stmt::Read(_, val) => {
-                        visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                        visit_exp(*val, self.graph, &mut visited, &mut new_visited);
                     }
                     Stmt::Store(addr, val) => {
-                        visit_exp(*addr, &bb.exps, &mut visited, &mut new_visited);
-                        visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                        visit_exp(*addr, self.graph, &mut visited, &mut new_visited);
+                        visit_exp(*val, self.graph, &mut visited, &mut new_visited);
                     }
                 }
                 for i in new_visited.iter_ones() {
-                    let i = ExpRef::new(i);
-                    writeln!(f, "    {i} = {}", bb.exps[i])?;
+                    let i = NodeRef::new(i);
+                    writeln!(f, "    {i} = {}", self.graph[i])?;
                 }
                 writeln!(f, "    {stmt}")?;
             }
@@ -403,11 +407,11 @@ impl Display for Cfg {
             }
 
             for &val in bb.stack.values() {
-                let mut new_visited = bitbox![0; bb.exps.len()];
-                visit_exp(val, &bb.exps, &mut visited, &mut new_visited);
+                new_visited.fill(false);
+                visit_exp(val, self.graph, &mut visited, &mut new_visited);
                 for i in new_visited.iter_ones() {
-                    let i = ExpRef::new(i);
-                    writeln!(f, "    {i} = {}", bb.exps[i])?;
+                    let i = NodeRef::new(i);
+                    writeln!(f, "    {i} = {}", self.graph[i])?;
                 }
                 writeln!(f, "    push {val}")?;
             }
@@ -417,11 +421,11 @@ impl Display for Cfg {
                 ExitStmt::Call(l1, l2) => write!(f, "call {} {}", self[*l1], self[*l2]),
                 ExitStmt::Jmp(l) => write!(f, "jmp {}", self[*l]),
                 ExitStmt::Br(cond, val, l1, l2) => {
-                    let mut new_visited = bitbox![0; bb.exps.len()];
-                    visit_exp(*val, &bb.exps, &mut visited, &mut new_visited);
+                    let mut new_visited = bitbox![0; bb.table.len()];
+                    visit_exp(*val, self.graph, &mut visited, &mut new_visited);
                     for i in new_visited.iter_ones() {
-                        let i = ExpRef::new(i);
-                        writeln!(f, "    {i} = {}", bb.exps[i])?;
+                        let i = NodeRef::new(i);
+                        writeln!(f, "    {i} = {}", self.graph[i])?;
                     }
                     write!(f, "br {cond:?} {val} {} {}", self[*l1], self[*l2])
                 }
@@ -435,7 +439,7 @@ impl Display for Cfg {
     }
 }
 
-impl Display for BBlock {
+impl Display for BBlock<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.label {
             Some(l) => Display::fmt(l, f),

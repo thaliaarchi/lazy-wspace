@@ -5,12 +5,10 @@ use std::vec;
 
 use static_assertions::assert_not_impl_any;
 
-use crate::ir::Exp;
-
-pub type Node = Exp;
+use crate::ir::Node;
 
 #[repr(transparent)]
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Graph {
     nodes: UnsafeCell<Vec<Node>>,
 }
@@ -114,6 +112,27 @@ impl IntoIterator for Graph {
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.nodes.into_inner().into_iter()
+    }
+}
+
+impl Debug for Graph {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("Graph ")?;
+        if f.alternate() {
+            struct DisplayDebug<T: Display>(T);
+            impl<T: Display> Debug for DisplayDebug<T> {
+                fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                    Display::fmt(&self.0, f)
+                }
+            }
+
+            let entries = self
+                .iter_entries()
+                .map(|(i, node)| (DisplayDebug(i), DisplayDebug(node)));
+            f.debug_map().entries(entries).finish()
+        } else {
+            f.debug_map().entries(self.iter().enumerate()).finish()
+        }
     }
 }
 

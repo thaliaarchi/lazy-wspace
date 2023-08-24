@@ -4,7 +4,7 @@ use std::{env, path::PathBuf};
 
 use lazy_wspace::ast::{Inst, Lexer, Parser};
 use lazy_wspace::error::Error;
-use lazy_wspace::ir::Cfg;
+use lazy_wspace::ir::{Cfg, Graph};
 
 fn main() {
     let mut args = env::args_os();
@@ -32,7 +32,8 @@ fn main() {
         }
     }
 
-    let ir = Cfg::new(&prog);
+    let graph = Graph::new();
+    let ir = Cfg::new(&prog, &graph);
     println!("\n\n===== IR =====\n");
     print!("{ir}");
 }
