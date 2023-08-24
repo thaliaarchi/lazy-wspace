@@ -7,7 +7,8 @@ use bitvec::prelude::*;
 use crate::ast::{Inst, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
 use crate::ir::{
-    AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeOp1, NodeOp2, NodeRef, NodeTable,
+    AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef,
+    NodeTable,
 };
 
 /// Control-flow graph of IR basic blocks.
@@ -357,7 +358,7 @@ impl Display for Cfg<'_> {
                     visit_exp(*lhs, graph, visited, new_visited);
                     visit_exp(*rhs, graph, visited, new_visited);
                 }
-                NodeOp1!(v) | Node::Shl(v, _) | Node::Shr(v, _) | Node::HeapRef(v) => {
+                NodeOp2U32!(v, _) | NodeOp1!(v) | Node::HeapRef(v) => {
                     visit_exp(*v, graph, visited, new_visited);
                 }
                 _ => {}

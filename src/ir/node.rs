@@ -88,6 +88,16 @@ pub enum Node {
     ///
     /// GMP `mpz_fdiv_q_2exp`
     Shr(NodeRef, u32),
+    /// ```ir
+    /// %r = getbit %v {bit}
+    /// ```
+    ///
+    /// GMP `mpz_tstbit`
+    GetBit(NodeRef, u32),
+    /// ```ir
+    /// %r = notgetbit %v {bit}
+    /// ```
+    NotGetBit(NodeRef, u32),
 
     // Unary operations
     /// ```ir
@@ -98,10 +108,6 @@ pub enum Node {
     /// %r = popcnt %v
     /// ```
     Popcnt(NodeRef),
-    /// ```ir
-    /// %r = lsb %v
-    /// ```
-    Lsb(NodeRef),
 
     /// Unchecked stack reference, that must be first guarded with
     /// `guard_stack`.
@@ -170,8 +176,9 @@ impl Display for Node {
             Node::Shl(lhs, rhs) => write!(f, "shl {lhs}, {rhs}"),
             Node::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
             Node::Neg(v) => write!(f, "neg {v}"),
+            Node::GetBit(v, bit) => write!(f, "getbit {v}, {bit}"),
+            Node::NotGetBit(v, bit) => write!(f, "notgetbit {v}, {bit}"),
             Node::Popcnt(v) => write!(f, "popcnt {v}"),
-            Node::Lsb(v) => write!(f, "lsb {v}"),
             Node::StackRef(n) => write!(f, "stack_ref {n}"),
             Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Node::HeapRef(addr) => write!(f, "heap_ref {addr}"),
@@ -196,9 +203,16 @@ macro_rules! NodeOp2(($lhs:pat, $rhs:pat) => {
 });
 pub(crate) use NodeOp2;
 
+macro_rules! NodeOp2U32(($lhs:pat, $rhs:pat) => {
+    Node::Shl($lhs, $rhs)
+    | Node::Shr($lhs, $rhs)
+    | Node::GetBit($lhs, $rhs)
+    | Node::NotGetBit($lhs, $rhs)
+});
+pub(crate) use NodeOp2U32;
+
 macro_rules! NodeOp1(($v:pat) => {
     Node::Neg($v)
     | Node::Popcnt($v)
-    | Node::Lsb($v)
 });
 pub(crate) use NodeOp1;

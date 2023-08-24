@@ -5,7 +5,7 @@ use rug::ops::{DivRounding, RemRounding};
 use rug::Complete;
 
 use crate::error::NumberError;
-use crate::ir::{Node, NodeOp1, NodeOp2, NodeRef, NodeTable};
+use crate::ir::{Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef, NodeTable};
 
 enum Action {
     New,
@@ -17,20 +17,8 @@ impl NodeTable<'_> {
     pub fn insert_peephole(&mut self, node: Node) -> NodeRef {
         match node {
             NodeOp2!(lhs, rhs) => self.insert_op2(node, lhs, rhs),
+            NodeOp2U32!(lhs, rhs) => self.insert_op2_u32(node, lhs, rhs),
             NodeOp1!(v) => self.insert_op1(node, v),
-            Node::Shl(lhs, rhs) | Node::Shr(lhs, rhs) => {
-                let node = if let Node::Number(lhs) = &self[lhs] {
-                    let lhs = &**lhs;
-                    match node {
-                        Node::Shl(..) => Node::Number((lhs << rhs).complete().into()),
-                        Node::Shr(..) => Node::Number((lhs >> rhs).complete().into()),
-                        _ => node,
-                    }
-                } else {
-                    node
-                };
-                self.insert(node)
-            }
             _ => self.insert(node),
         }
     }
@@ -39,9 +27,9 @@ impl NodeTable<'_> {
         use Action::*;
         use Node::*;
 
-        macro_rules! match_lsb(($x:expr, $y:expr, $node:expr) => {
+        macro_rules! is_getbit(($x:expr, $y:expr, $node:expr) => {
             match (&self[*$x], &self[*$y]) {
-                (Lsb(_), Lsb(_)) => Insert($node),
+                (GetBit(_, bx), GetBit(_, by)) if bx == by => Insert($node),
                 _ => New,
             }
         });
@@ -92,118 +80,98 @@ impl NodeTable<'_> {
             (Mul(..) | Div(..), Number(lhs), _) if **lhs == 1 => Use(rhs),
             (Mul(..) | Div(..), _, Number(rhs)) if **rhs == 1 => Use(lhs),
 
-            // Bitwise operations on the LSB
-
-            // AND on LSB
+            // Single-bit AND
             // x * y == x & y
-            (Mul(..), Lsb(_), Lsb(_)) => Insert(And(lhs, rhs)),
+            (Mul(..), GetBit(_, bx), GetBit(_, by)) if bx == by => Insert(And(lhs, rhs)),
             // (x + y) / 2 == x & y
             (Div(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
-                match_lsb!(x, y, And(*x, *y))
-            }
-            // 1 - !(x & y) == x & y
-            (Sub(..), Number(one), Nand(x, y)) if **one == 1 => {
-                match_lsb!(x, y, And(*x, *y))
+                is_getbit!(x, y, And(*x, *y))
             }
 
-            // OR on LSB
+            // Single-bit OR
             // (x + y) - (x & y) = x | y
             (Sub(..), Add(x, y), And(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
-                match_lsb!(x, y, Or(*x, *y))
+                is_getbit!(x, y, Or(*x, *y))
             }
             // x + (y - (x & y)) = x | y
-            (Add(..), Lsb(_), Sub(y, z)) => {
+            (Add(..), GetBit(..), Sub(y, z)) => {
                 let x = &lhs;
                 match &self[*z] {
                     And(x2, y2) if x == x2 && y == y2 || x == y2 && y == x2 => {
-                        match_lsb!(x, y, Or(*x, *y))
+                        is_getbit!(x, y, Or(*x, *y))
                     }
                     _ => New,
                 }
             }
-            // 1 - !(x | y) = !(!x & !y) = x | y
-            (Sub(..), Number(one), Nor(x, y)) if **one == 1 => {
-                match_lsb!(x, y, Or(*x, *y))
-            }
 
-            // XOR on LSB
+            // Single-bit XOR
             // (x + y) % 2 == x ^ y
             (Mod(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
-                match_lsb!(x, y, Xor(*x, *y))
+                is_getbit!(x, y, Xor(*x, *y))
             }
             // (x + y) * !(x & y) == x ^ y
             (Mul(..), Add(x, y), Nand(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
-                match_lsb!(x, y, Xor(*x, *y))
-            }
-            // 1 - !(x ^ y) == x ^ y
-            (Sub(..), Number(one), Xnor(x, y)) if **one == 1 => {
-                match_lsb!(x, y, Xor(*x, *y))
+                is_getbit!(x, y, Xor(*x, *y))
             }
 
-            // ANDNOT on LSB
-            // x * (1 - y) == x & !y
-            (Mul(..), Lsb(_), Sub(one, y)) => match &self[*one] {
-                Number(one) if **one == 1 => {
-                    match_lsb!(&lhs, y, AndNot(lhs, *y))
-                }
-                _ => New,
-            },
-            // (1 - x) * y == !x & y
-            (Mul(..), Sub(one, x), Lsb(_)) => match &self[*one] {
-                Number(one) if **one == 1 => {
-                    match_lsb!(&rhs, x, AndNot(rhs, *x))
-                }
-                _ => New,
-            },
-            // 1 - !(x & !y) == x & !y
-            (Sub(..), Number(one), NandNot(x, y)) if **one == 1 => {
-                match_lsb!(x, y, AndNot(*x, *y))
+            // Single-bit ANDNOT
+            // x * !y == x & !y
+            (Mul(..), GetBit(_, bx), NotGetBit(y, by)) if bx == by => {
+                Insert(AndNot(lhs, self.insert_peephole(Node::GetBit(*y, *by))))
+            }
+            // !x * y == y & !x
+            (Mul(..), NotGetBit(x, bx), GetBit(_, by)) if bx == by => {
+                Insert(AndNot(rhs, self.insert_peephole(Node::GetBit(*x, *bx))))
             }
 
-            // NAND on LSB
-            // 1 - (x & y) == !(x & y)
-            (Sub(..), Number(one), And(x, y)) if **one == 1 => {
-                match_lsb!(x, y, Nand(*x, *y))
+            // Single-bit NOR
+            // !x * !y == !x & !y == !(x | y)
+            (Mul(..), NotGetBit(x, bx), NotGetBit(y, by)) if bx == by => {
+                let (y, by) = (*y, *by);
+                let x = self.insert_peephole(Node::GetBit(*x, *bx));
+                let y = self.insert_peephole(Node::GetBit(y, by));
+                Insert(Nor(x, y))
             }
-
-            // NOR on LSB
-            // 1 - (x | y) == !(x | y)
-            (Sub(..), Number(one), Or(x, y)) if **one == 1 => {
-                match_lsb!(x, y, Nor(*x, *y))
-            }
-            // (1 - x) * (1 - y) == !x & !y == !(x | y)
-            (Mul(..), Sub(one1, x), Sub(one2, y)) => match (&self[*one1], &self[*one2]) {
-                (Number(one1), Number(one2)) if **one1 == 1 && **one2 == 1 => {
-                    match_lsb!(x, y, Nor(*x, *y))
-                }
-                _ => New,
-            },
             // (1 - (x + y)) - (x & y) == !(x | y)
             (Sub(..), Sub(a, b), And(x2, y2)) => match (&self[*a], &self[*b]) {
                 (Number(one), Add(x, y))
                     if **one == 1 && (x == x2 && y == y2 || x == y2 && y == x2) =>
                 {
-                    match_lsb!(x, y, Nor(*x, *y))
+                    is_getbit!(x, y, Nor(*x, *y))
                 }
                 _ => New,
             },
 
-            // XNOR on LSB
-            // 1 - (x ^ y) == !(x ^ y)
+            // Negation
+            (Sub(..), Number(one), Nand(x, y)) if **one == 1 => {
+                is_getbit!(x, y, And(*x, *y))
+            }
+            (Sub(..), Number(one), Nor(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Or(*x, *y))
+            }
+            (Sub(..), Number(one), Xnor(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Xor(*x, *y))
+            }
+            (Sub(..), Number(one), NandNot(x, y)) if **one == 1 => {
+                is_getbit!(x, y, AndNot(*x, *y))
+            }
+            (Sub(..), Number(one), And(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Nand(*x, *y))
+            }
+            (Sub(..), Number(one), Or(x, y)) if **one == 1 => {
+                is_getbit!(x, y, Nor(*x, *y))
+            }
             (Sub(..), Number(one), Xor(x, y)) if **one == 1 => {
-                match_lsb!(x, y, Xnor(*x, *y))
+                is_getbit!(x, y, Xnor(*x, *y))
             }
-
-            // NANDNOT on LSB
-            // 1 - (x & !y) == !(x & !y)
             (Sub(..), Number(one), AndNot(x, y)) if **one == 1 => {
-                match_lsb!(x, y, NandNot(*x, *y))
+                is_getbit!(x, y, NandNot(*x, *y))
             }
+            (Sub(..), Number(one), GetBit(v, bit)) if **one == 1 => Insert(NotGetBit(*v, *bit)),
 
-            // LSB
-            (Mod(..), _, Number(rhs)) if **rhs == 2 => Insert(Lsb(lhs)),
-
-            // Bitwise operations on more bits
+            // Get LSB
+            (And(..), _, Number(rhs)) if **rhs == 1 => Insert(GetBit(lhs, 0)),
+            (Mod(..), _, Number(rhs)) if **rhs == 2 => Insert(GetBit(lhs, 0)),
 
             // Bitwise shifts
             (Mul(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
@@ -215,6 +183,35 @@ impl NodeTable<'_> {
             (Div(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
                 Insert(Shr(lhs, rhs.to_u32().unwrap().ilog2()))
             }
+
+            // Masking
+            (Mod(..), _, Number(rhs)) if rhs.is_power_of_two() => {
+                Insert(And(lhs, self.insert(Node::number(&**rhs - 1))))
+            }
+
+            _ => New,
+        };
+
+        match action {
+            Action::New => self.insert(node),
+            Action::Insert(node) => self.insert_peephole(node),
+            Action::Use(i) => return i,
+        }
+    }
+
+    fn insert_op2_u32(&mut self, node: Node, lhs: NodeRef, rhs: u32) -> NodeRef {
+        use Action::*;
+        use Node::*;
+
+        let action = match (&node, &self[lhs]) {
+            // Constant expressions
+            (Shl(..), Number(lhs)) => Insert(Node::number(&**lhs << rhs)),
+            (Shr(..), Number(lhs)) => Insert(Node::number(&**lhs >> rhs)),
+
+            (GetBit(_, bit), Number(lhs)) => Insert(Node::number(lhs.get_bit(*bit))),
+            (GetBit(_, 0), GetBit(..)) => Use(lhs),
+            (GetBit(_, 0), Shr(v, bit)) => Insert(Node::GetBit(*v, *bit)),
+            (Shl(_, bit), GetBit(v, bit1)) if bit == bit1 => Insert(GetBit(*v, *bit)),
 
             _ => New,
         };
@@ -237,16 +234,14 @@ impl NodeTable<'_> {
                 let r = match node {
                     Neg(_) => (-n).complete(),
                     Popcnt(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
-                    Lsb(_) => n.get_bit(0).into(),
                     _ => panic!("not a unary operator: {node}"),
                 };
                 Insert(Number(r.into()))
             }
-            // Errors
+
             (_, Error(_)) => Use(v),
-            // Inverse identities
             (Neg(_), Neg(v)) => Use(*v),
-            (Lsb(_), Lsb(v)) => Use(*v),
+
             _ => New,
         };
 
