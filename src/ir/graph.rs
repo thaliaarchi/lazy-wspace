@@ -7,6 +7,13 @@ use static_assertions::assert_not_impl_any;
 
 use crate::ir::Node;
 
+/// Graph of IR nodes, indexed by [`NodeRef`].
+///
+/// # Safety
+///
+/// Any `NodeRef` stored in or used to index a graph must belong to that same
+/// graph. It uses uses unchecked indexing and has undefined behavior when
+/// passed a `NodeRef` from another graph.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct Graph {
@@ -74,7 +81,18 @@ impl Index<NodeRef> for Graph {
 
     #[inline]
     fn index(&self, index: NodeRef) -> &Node {
-        &self.nodes()[index.index()]
+        debug_assert!(index.index() < self.len());
+
+        // SAFETY: The pool length is monotonically increasing, so the index
+        // will always be in bounds, as long as the index was created by this
+        // pool.
+        //
+        // Branding `NodeRef` with a lifetime like the [`BrandedVec`](https://matyama.github.io/rust-examples/rust_examples/brands/index.html)
+        // technique from [“GhostCell: Separating Permissions from Data in Rust”](https://plv.mpi-sws.org/rustbelt/ghostcell/)
+        // (Yanovski et al., 2021) imposes heavy API restrictions, and, since
+        // only one `Graph` is constructed per program, this cost is not worth
+        // it.
+        unsafe { self.nodes().get_unchecked(index.index()) }
     }
 }
 
