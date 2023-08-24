@@ -18,6 +18,19 @@ impl NodeTable<'_> {
         match node {
             NodeOp2!(lhs, rhs) => self.insert_op2(node, lhs, rhs),
             NodeOp1!(v) => self.insert_op1(node, v),
+            Node::Shl(lhs, rhs) | Node::Shr(lhs, rhs) => {
+                let node = if let Node::Number(lhs) = &self[lhs] {
+                    let lhs = &**lhs;
+                    match node {
+                        Node::Shl(..) => Node::Number((lhs << rhs).complete().into()),
+                        Node::Shr(..) => Node::Number((lhs >> rhs).complete().into()),
+                        _ => node,
+                    }
+                } else {
+                    node
+                };
+                self.insert(node)
+            }
             _ => self.insert(node),
         }
     }
@@ -38,23 +51,21 @@ impl NodeTable<'_> {
             (_, Number(lhs), Number(rhs)) => {
                 let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
                 let res = match &node {
-                    Add(_, _) => Ok((lhs + rhs).complete()),
-                    Sub(_, _) => Ok((lhs - rhs).complete()),
-                    Mul(_, _) => Ok((lhs * rhs).complete()),
-                    Div(_, _) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Div(_, _) => Ok(lhs.div_floor(rhs).into()),
-                    Mod(_, _) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Mod(_, _) => Ok(lhs.rem_floor(rhs).into()),
-                    And(_, _) => Ok((lhs & rhs).complete()),
-                    Or(_, _) => Ok((lhs | rhs).complete()),
-                    Xor(_, _) => Ok((lhs ^ rhs).complete()),
-                    AndNot(_, _) => Ok(lhs & (!rhs).complete()),
-                    Nand(_, _) => Ok(!(lhs & rhs).complete()),
-                    Nor(_, _) => Ok(!(lhs | rhs).complete()),
-                    Xnor(_, _) => Ok(!(lhs ^ rhs).complete()),
-                    NandNot(_, _) => Ok(!(lhs & (!rhs).complete())),
-                    Shl(_, _) => Ok((lhs << rhs.to_usize().unwrap()).complete()), // TODO: handle overflow
-                    Shr(_, _) => Ok((lhs >> rhs.to_usize().unwrap()).complete()), // TODO: handle overflow
+                    Add(..) => Ok((lhs + rhs).complete()),
+                    Sub(..) => Ok((lhs - rhs).complete()),
+                    Mul(..) => Ok((lhs * rhs).complete()),
+                    Div(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Div(..) => Ok(lhs.div_floor(rhs).into()),
+                    Mod(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    Mod(..) => Ok(lhs.rem_floor(rhs).into()),
+                    And(..) => Ok((lhs & rhs).complete()),
+                    Or(..) => Ok((lhs | rhs).complete()),
+                    Xor(..) => Ok((lhs ^ rhs).complete()),
+                    AndNot(..) => Ok(lhs & (!rhs).complete()),
+                    Nand(..) => Ok(!(lhs & rhs).complete()),
+                    Nor(..) => Ok(!(lhs | rhs).complete()),
+                    Xnor(..) => Ok(!(lhs ^ rhs).complete()),
+                    NandNot(..) => Ok(!(lhs & (!rhs).complete())),
                     _ => panic!("not a binary operator: {node}"),
                 };
                 let node = match res {
@@ -65,43 +76,43 @@ impl NodeTable<'_> {
             }
 
             // Division by 0
-            (Div(_, _) | Mod(_, _), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
+            (Div(..) | Mod(..), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
                 Insert(Error(NumberError::DivModZero))
             }
 
             // Errors
-            (Add(_, _) | Sub(_, _) | Div(_, _) | Mod(_, _), _, Error(_)) => Use(rhs),
-            (Add(_, _) | Sub(_, _) | Div(_, _) | Mod(_, _), Error(_), Number(_)) => Use(lhs),
-            (Mul(_, _), Error(_), _) => Use(lhs),
-            (Mul(_, _), Number(_), Error(_)) => Use(rhs),
+            (Add(..) | Sub(..) | Div(..) | Mod(..), _, Error(_)) => Use(rhs),
+            (Add(..) | Sub(..) | Div(..) | Mod(..), Error(_), Number(_)) => Use(lhs),
+            (Mul(..), Error(_), _) => Use(lhs),
+            (Mul(..), Number(_), Error(_)) => Use(rhs),
 
             // Identities
-            (Add(_, _), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Use(rhs),
-            (Add(_, _) | Sub(_, _), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => Use(lhs),
-            (Mul(_, _) | Div(_, _), Number(lhs), _) if **lhs == 1 => Use(rhs),
-            (Mul(_, _) | Div(_, _), _, Number(rhs)) if **rhs == 1 => Use(lhs),
+            (Add(..), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Use(rhs),
+            (Add(..) | Sub(..), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => Use(lhs),
+            (Mul(..) | Div(..), Number(lhs), _) if **lhs == 1 => Use(rhs),
+            (Mul(..) | Div(..), _, Number(rhs)) if **rhs == 1 => Use(lhs),
 
             // Bitwise operations on the LSB
 
             // AND on LSB
             // x * y == x & y
-            (Mul(_, _), Lsb(_), Lsb(_)) => Insert(And(lhs, rhs)),
+            (Mul(..), Lsb(_), Lsb(_)) => Insert(And(lhs, rhs)),
             // (x + y) / 2 == x & y
-            (Div(_, _), Add(x, y), Number(rhs)) if **rhs == 2 => {
+            (Div(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
                 match_lsb!(x, y, And(*x, *y))
             }
             // 1 - !(x & y) == x & y
-            (Sub(_, _), Number(one), Nand(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), Nand(x, y)) if **one == 1 => {
                 match_lsb!(x, y, And(*x, *y))
             }
 
             // OR on LSB
             // (x + y) - (x & y) = x | y
-            (Sub(_, _), Add(x, y), And(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
+            (Sub(..), Add(x, y), And(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
                 match_lsb!(x, y, Or(*x, *y))
             }
             // x + (y - (x & y)) = x | y
-            (Add(_, _), Lsb(_), Sub(y, z)) => {
+            (Add(..), Lsb(_), Sub(y, z)) => {
                 let x = &lhs;
                 match &self[*z] {
                     And(x2, y2) if x == x2 && y == y2 || x == y2 && y == x2 => {
@@ -111,64 +122,64 @@ impl NodeTable<'_> {
                 }
             }
             // 1 - !(x | y) = !(!x & !y) = x | y
-            (Sub(_, _), Number(one), Nor(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), Nor(x, y)) if **one == 1 => {
                 match_lsb!(x, y, Or(*x, *y))
             }
 
             // XOR on LSB
             // (x + y) % 2 == x ^ y
-            (Mod(_, _), Add(x, y), Number(rhs)) if **rhs == 2 => {
+            (Mod(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
                 match_lsb!(x, y, Xor(*x, *y))
             }
             // (x + y) * !(x & y) == x ^ y
-            (Mul(_, _), Add(x, y), Nand(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
+            (Mul(..), Add(x, y), Nand(x2, y2)) if x == x2 && y == y2 || x == y2 && y == x2 => {
                 match_lsb!(x, y, Xor(*x, *y))
             }
             // 1 - !(x ^ y) == x ^ y
-            (Sub(_, _), Number(one), Xnor(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), Xnor(x, y)) if **one == 1 => {
                 match_lsb!(x, y, Xor(*x, *y))
             }
 
             // ANDNOT on LSB
             // x * (1 - y) == x & !y
-            (Mul(_, _), Lsb(_), Sub(one, y)) => match &self[*one] {
+            (Mul(..), Lsb(_), Sub(one, y)) => match &self[*one] {
                 Number(one) if **one == 1 => {
                     match_lsb!(&lhs, y, AndNot(lhs, *y))
                 }
                 _ => New,
             },
             // (1 - x) * y == !x & y
-            (Mul(_, _), Sub(one, x), Lsb(_)) => match &self[*one] {
+            (Mul(..), Sub(one, x), Lsb(_)) => match &self[*one] {
                 Number(one) if **one == 1 => {
                     match_lsb!(&rhs, x, AndNot(rhs, *x))
                 }
                 _ => New,
             },
             // 1 - !(x & !y) == x & !y
-            (Sub(_, _), Number(one), NandNot(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), NandNot(x, y)) if **one == 1 => {
                 match_lsb!(x, y, AndNot(*x, *y))
             }
 
             // NAND on LSB
             // 1 - (x & y) == !(x & y)
-            (Sub(_, _), Number(one), And(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), And(x, y)) if **one == 1 => {
                 match_lsb!(x, y, Nand(*x, *y))
             }
 
             // NOR on LSB
             // 1 - (x | y) == !(x | y)
-            (Sub(_, _), Number(one), Or(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), Or(x, y)) if **one == 1 => {
                 match_lsb!(x, y, Nor(*x, *y))
             }
             // (1 - x) * (1 - y) == !x & !y == !(x | y)
-            (Mul(_, _), Sub(one1, x), Sub(one2, y)) => match (&self[*one1], &self[*one2]) {
+            (Mul(..), Sub(one1, x), Sub(one2, y)) => match (&self[*one1], &self[*one2]) {
                 (Number(one1), Number(one2)) if **one1 == 1 && **one2 == 1 => {
                     match_lsb!(x, y, Nor(*x, *y))
                 }
                 _ => New,
             },
             // (1 - (x + y)) - (x & y) == !(x | y)
-            (Sub(_, _), Sub(a, b), And(x2, y2)) => match (&self[*a], &self[*b]) {
+            (Sub(..), Sub(a, b), And(x2, y2)) => match (&self[*a], &self[*b]) {
                 (Number(one), Add(x, y))
                     if **one == 1 && (x == x2 && y == y2 || x == y2 && y == x2) =>
                 {
@@ -179,28 +190,40 @@ impl NodeTable<'_> {
 
             // XNOR on LSB
             // 1 - (x ^ y) == !(x ^ y)
-            (Sub(_, _), Number(one), Xor(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), Xor(x, y)) if **one == 1 => {
                 match_lsb!(x, y, Xnor(*x, *y))
             }
 
             // NANDNOT on LSB
             // 1 - (x & !y) == !(x & !y)
-            (Sub(_, _), Number(one), AndNot(x, y)) if **one == 1 => {
+            (Sub(..), Number(one), AndNot(x, y)) if **one == 1 => {
                 match_lsb!(x, y, NandNot(*x, *y))
             }
 
             // LSB
-            (Mod(_, _), _, Number(rhs)) if **rhs == 2 => Insert(Lsb(lhs)),
+            (Mod(..), _, Number(rhs)) if **rhs == 2 => Insert(Lsb(lhs)),
+
+            // Bitwise operations on more bits
+
+            // Bitwise shifts
+            (Mul(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+                Insert(Shl(lhs, rhs.to_u32().unwrap().ilog2()))
+            }
+            (Mul(..), Number(lhs), _) if lhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+                Insert(Shl(rhs, lhs.to_u32().unwrap().ilog2()))
+            }
+            (Div(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+                Insert(Shr(lhs, rhs.to_u32().unwrap().ilog2()))
+            }
 
             _ => New,
         };
 
-        let node = match action {
-            Action::New => node,
-            Action::Insert(node) => node,
+        match action {
+            Action::New => self.insert(node),
+            Action::Insert(node) => self.insert_peephole(node),
             Action::Use(i) => return i,
-        };
-        self.insert(node)
+        }
     }
 
     fn insert_op1(&mut self, node: Node, v: NodeRef) -> NodeRef {
@@ -227,11 +250,10 @@ impl NodeTable<'_> {
             _ => New,
         };
 
-        let node = match action {
-            Action::New => node,
-            Action::Insert(node) => node,
+        match action {
+            Action::New => self.insert(node),
+            Action::Insert(node) => self.insert_peephole(node),
             Action::Use(i) => return i,
-        };
-        self.insert(node)
+        }
     }
 }

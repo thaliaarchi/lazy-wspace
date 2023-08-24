@@ -77,13 +77,17 @@ pub enum Node {
     /// ```
     NandNot(NodeRef, NodeRef),
     /// ```ir
-    /// %r = shl %lhs %rhs
+    /// %r = shl %lhs {rhs}
     /// ```
-    Shl(NodeRef, NodeRef),
+    ///
+    /// GMP `mpz_mul_2exp`
+    Shl(NodeRef, u32),
     /// ```ir
-    /// %r = shr %lhs %rhs
+    /// %r = shr %lhs {rhs}
     /// ```
-    Shr(NodeRef, NodeRef),
+    ///
+    /// GMP `mpz_fdiv_q_2exp`
+    Shr(NodeRef, u32),
 
     // Unary operations
     /// ```ir
@@ -189,8 +193,6 @@ macro_rules! NodeOp2(($lhs:pat, $rhs:pat) => {
     | Node::Nor($lhs, $rhs)
     | Node::Xnor($lhs, $rhs)
     | Node::NandNot($lhs, $rhs)
-    | Node::Shl($lhs, $rhs)
-    | Node::Shr($lhs, $rhs)
 });
 pub(crate) use NodeOp2;
 

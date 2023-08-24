@@ -357,7 +357,7 @@ impl Display for Cfg<'_> {
                     visit_exp(*lhs, graph, visited, new_visited);
                     visit_exp(*rhs, graph, visited, new_visited);
                 }
-                NodeOp1!(v) | Node::HeapRef(v) => {
+                NodeOp1!(v) | Node::Shl(v, _) | Node::Shr(v, _) | Node::HeapRef(v) => {
                     visit_exp(*v, graph, visited, new_visited);
                 }
                 _ => {}
