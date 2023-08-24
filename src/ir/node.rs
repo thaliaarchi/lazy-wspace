@@ -10,6 +10,7 @@ use rug::Integer;
 
 use crate::ast::NumberLit;
 use crate::error::NumberError;
+use crate::ir::NodeRef;
 use crate::number::Op;
 
 /// Pool of IR expressions.
@@ -67,10 +68,7 @@ pub enum Exp {
     HeapRef(ExpRef),
 }
 
-/// Reference to an [`Exp`] in an [`ExpPool`].
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ExpRef(u32);
+pub type ExpRef = NodeRef;
 
 impl ExpPool {
     #[inline]
@@ -83,7 +81,7 @@ impl ExpPool {
 
     pub fn lookup(&self, e: &Exp) -> Option<ExpRef> {
         let hash = e.make_hash();
-        match self.table.find(hash, |key| &self.exps[key.as_usize()] == e) {
+        match self.table.find(hash, |key| &self.exps[key.index()] == e) {
             Some(bucket) => Some(*unsafe { bucket.as_ref() }),
             None => None,
         }
@@ -93,8 +91,8 @@ impl ExpPool {
         let hash = e.make_hash();
         match self.table.find_or_find_insert_slot(
             hash,
-            |key| &self.exps[key.as_usize()] == &e,
-            |key| self.exps[key.as_usize()].make_hash(),
+            |key| &self.exps[key.index()] == &e,
+            |key| self.exps[key.index()].make_hash(),
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
@@ -158,19 +156,6 @@ impl ExpPool {
     }
 
     #[inline]
-    pub fn iter_refs(&self) -> impl Iterator<Item = ExpRef> {
-        (0..self.exps.len() as u32).map(ExpRef)
-    }
-
-    #[inline]
-    pub fn iter_entries(&self) -> impl Iterator<Item = (ExpRef, &Exp)> {
-        self.exps
-            .iter()
-            .enumerate()
-            .map(|(i, e)| (ExpRef::new(i), e))
-    }
-
-    #[inline]
     pub fn len(&self) -> usize {
         self.exps.len()
     }
@@ -206,18 +191,6 @@ impl From<NumberError> for Exp {
     }
 }
 
-impl ExpRef {
-    #[inline]
-    pub(crate) const fn new(n: usize) -> Self {
-        ExpRef(n as u32)
-    }
-
-    #[inline]
-    pub const fn as_usize(&self) -> usize {
-        self.0 as usize
-    }
-}
-
 impl Index<ExpRef> for ExpPool {
     type Output = Exp;
 
@@ -227,7 +200,7 @@ impl Index<ExpRef> for ExpPool {
         // will always be in bounds, as long as the index was created by this
         // pool. Branding `ExpRef` with a lifetime like [`BrandedVec`](https://matyama.github.io/rust-examples/rust_examples/brands/struct.BrandedVec.html)
         // in the MPI-SWS `GhostCell` paper does not seem worth it.
-        unsafe { self.exps.get_unchecked(index.as_usize()) }
+        unsafe { self.exps.get_unchecked(index.index()) }
     }
 }
 
@@ -255,12 +228,6 @@ impl Display for Exp {
             Exp::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Exp::HeapRef(addr) => write!(f, "heap_ref {addr}"),
         }
-    }
-}
-
-impl Display for ExpRef {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "%{}", self.0)
     }
 }
 

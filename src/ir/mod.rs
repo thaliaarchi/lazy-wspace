@@ -1,9 +1,13 @@
 mod cfg;
-mod exp;
+mod graph;
 mod heap;
+mod node;
 mod stack;
+mod table;
 
 pub use cfg::*;
-pub use exp::*;
+pub use graph::*;
 pub use heap::*;
+pub use node::*;
 pub use stack::*;
+pub use table::*;

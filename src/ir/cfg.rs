@@ -344,11 +344,11 @@ impl IndexMut<BBlockId> for Cfg {
 impl Display for Cfg {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fn visit_exp(root: ExpRef, exps: &ExpPool, visited: &mut BitBox, new_visited: &mut BitBox) {
-            if visited[root.as_usize()] {
+            if visited[root.index()] {
                 return;
             }
-            visited.set(root.as_usize(), true);
-            new_visited.set(root.as_usize(), true);
+            visited.set(root.index(), true);
+            new_visited.set(root.index(), true);
             match &exps[root] {
                 Exp::Op(_, lhs, rhs) => {
                     visit_exp(*lhs, exps, visited, new_visited);
