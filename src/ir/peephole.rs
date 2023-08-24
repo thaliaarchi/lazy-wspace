@@ -210,7 +210,7 @@ impl NodeTable<'_> {
                 Insert(Shr(lhs, rhs.to_u32().unwrap().ilog2()))
             }
 
-            // Masking
+            // Multi-bit AND
             (Mod(..), _, Number(rhs)) if rhs.is_power_of_two() => {
                 Insert(And(lhs, self.insert(Node::number(&**rhs - 1))))
             }
@@ -218,10 +218,7 @@ impl NodeTable<'_> {
                 (Number(m1), Number(m2))
                     if (&**m1 & &**m2).complete().cmp0() == Ordering::Equal =>
                 {
-                    Insert(And(
-                        *x1,
-                        self.insert(Node::number((&**m1 | &**m2).complete())),
-                    ))
+                    Insert(And(*x1, self.insert(Node::number(&**m1 | &**m2))))
                 }
                 _ => New,
             },
@@ -235,6 +232,26 @@ impl NodeTable<'_> {
                     _ => New,
                 }
             }
+
+            // Popcnt
+            (Add(..), GetBit(x1, bit1), GetBit(x2, bit2)) if x1 == x2 && bit1 != bit2 => {
+                let x = *x1;
+                let m = self.insert(Node::number(
+                    (Integer::ONE << bit1).complete() | (Integer::ONE << bit2).complete(),
+                ));
+                Insert(Popcnt(self.insert_peephole(And(x, m))))
+            }
+            (Add(..), Popcnt(a), GetBit(x2, bit)) => match &self[*a] {
+                And(x1, m) if x1 == x2 => match &self[*m] {
+                    Number(m) if !m.get_bit(*bit) => {
+                        let x = *x1;
+                        let m = self.insert(Node::number(&**m | (Integer::ONE << bit).complete()));
+                        Insert(Popcnt(self.insert_peephole(And(x, m))))
+                    }
+                    _ => New,
+                },
+                _ => New,
+            },
 
             _ => New,
         };
