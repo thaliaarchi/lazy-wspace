@@ -2,7 +2,6 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::rc::Rc;
 
 use rug::Integer;
-use strum::Display;
 
 use crate::ast::NumberLit;
 use crate::error::NumberError;
@@ -10,6 +9,7 @@ use crate::ir::NodeRef;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Node {
+    // Values
     /// A constant number.
     ///
     /// ```ir
@@ -22,18 +22,83 @@ pub enum Node {
     /// %r = error {kind}
     /// ```
     Error(NumberError),
-    /// A lazy binary arithmetic operation.
-    ///
+
+    // Binary operations
     /// ```ir
-    /// %r = {op} %lhs %rhs
+    /// %r = add %lhs %rhs
     /// ```
-    Op2(Op2, NodeRef, NodeRef),
-    /// A lazy unary arithmetic operation.
-    ///
+    Add(NodeRef, NodeRef),
     /// ```ir
-    /// %r = {op} %v
+    /// %r = sub %lhs %rhs
     /// ```
-    Op1(Op1, NodeRef),
+    Sub(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = mul %lhs %rhs
+    /// ```
+    Mul(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = div %lhs %rhs
+    /// ```
+    Div(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = mod %lhs %rhs
+    /// ```
+    Mod(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = and %lhs %rhs
+    /// ```
+    And(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = or %lhs %rhs
+    /// ```
+    Or(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = xor %lhs %rhs
+    /// ```
+    Xor(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = andnot %lhs %rhs
+    /// ```
+    AndNot(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = nand %lhs %rhs
+    /// ```
+    Nand(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = nor %lhs %rhs
+    /// ```
+    Nor(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = xnor %lhs %rhs
+    /// ```
+    Xnor(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = nandnot %lhs %rhs
+    /// ```
+    NandNot(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = shl %lhs %rhs
+    /// ```
+    Shl(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = shr %lhs %rhs
+    /// ```
+    Shr(NodeRef, NodeRef),
+
+    // Unary operations
+    /// ```ir
+    /// %r = neg %v
+    /// ```
+    Neg(NodeRef),
+    /// ```ir
+    /// %r = popcnt %v
+    /// ```
+    Popcnt(NodeRef),
+    /// ```ir
+    /// %r = lsb %v
+    /// ```
+    Lsb(NodeRef),
+
     /// Unchecked stack reference, that must be first guarded with
     /// `guard_stack`.
     ///
@@ -47,40 +112,13 @@ pub enum Node {
     /// %r = checked_stack_ref {index}
     /// ```
     CheckedStackRef(usize),
+
     /// Heap reference.
     ///
     /// ```ir
     /// %r = heap_ref %addr
     /// ```
     HeapRef(NodeRef),
-}
-
-#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
-#[strum(serialize_all = "lowercase")]
-pub enum Op2 {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    And,
-    Or,
-    Xor,
-    AndNot,
-    Nand,
-    Nor,
-    Xnor,
-    NandNot,
-    Shl,
-    Shr,
-}
-
-#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
-#[strum(serialize_all = "lowercase")]
-pub enum Op1 {
-    Neg,
-    Popcnt,
-    Lsb,
 }
 
 impl Node {
@@ -112,11 +150,53 @@ impl Display for Node {
         match self {
             Node::Number(n) => write!(f, "number {n}"),
             Node::Error(err) => write!(f, "error {err:?}"),
-            Node::Op2(op, l, r) => write!(f, "{op} {l} {r}"),
-            Node::Op1(op, v) => write!(f, "{op} {v}"),
+            Node::Add(lhs, rhs) => write!(f, "add {lhs}, {rhs}"),
+            Node::Sub(lhs, rhs) => write!(f, "sub {lhs}, {rhs}"),
+            Node::Mul(lhs, rhs) => write!(f, "mul {lhs}, {rhs}"),
+            Node::Div(lhs, rhs) => write!(f, "div {lhs}, {rhs}"),
+            Node::Mod(lhs, rhs) => write!(f, "mod {lhs}, {rhs}"),
+            Node::And(lhs, rhs) => write!(f, "and {lhs}, {rhs}"),
+            Node::Or(lhs, rhs) => write!(f, "or {lhs}, {rhs}"),
+            Node::Xor(lhs, rhs) => write!(f, "xor {lhs}, {rhs}"),
+            Node::AndNot(lhs, rhs) => write!(f, "andnot {lhs}, {rhs}"),
+            Node::Nand(lhs, rhs) => write!(f, "nand {lhs}, {rhs}"),
+            Node::Nor(lhs, rhs) => write!(f, "nor {lhs}, {rhs}"),
+            Node::Xnor(lhs, rhs) => write!(f, "xnor {lhs}, {rhs}"),
+            Node::NandNot(lhs, rhs) => write!(f, "nandnot {lhs}, {rhs}"),
+            Node::Shl(lhs, rhs) => write!(f, "shl {lhs}, {rhs}"),
+            Node::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
+            Node::Neg(v) => write!(f, "neg {v}"),
+            Node::Popcnt(v) => write!(f, "popcnt {v}"),
+            Node::Lsb(v) => write!(f, "lsb {v}"),
             Node::StackRef(n) => write!(f, "stack_ref {n}"),
             Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Node::HeapRef(addr) => write!(f, "heap_ref {addr}"),
         }
     }
 }
+
+macro_rules! NodeOp2(($lhs:pat, $rhs:pat) => {
+    Node::Add($lhs, $rhs)
+    | Node::Sub($lhs, $rhs)
+    | Node::Mul($lhs, $rhs)
+    | Node::Div($lhs, $rhs)
+    | Node::Mod($lhs, $rhs)
+    | Node::And($lhs, $rhs)
+    | Node::Or($lhs, $rhs)
+    | Node::Xor($lhs, $rhs)
+    | Node::AndNot($lhs, $rhs)
+    | Node::Nand($lhs, $rhs)
+    | Node::Nor($lhs, $rhs)
+    | Node::Xnor($lhs, $rhs)
+    | Node::NandNot($lhs, $rhs)
+    | Node::Shl($lhs, $rhs)
+    | Node::Shr($lhs, $rhs)
+});
+pub(crate) use NodeOp2;
+
+macro_rules! NodeOp1(($v:pat) => {
+    Node::Neg($v)
+    | Node::Popcnt($v)
+    | Node::Lsb($v)
+});
+pub(crate) use NodeOp1;

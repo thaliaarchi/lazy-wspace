@@ -6,7 +6,9 @@ use bitvec::prelude::*;
 
 use crate::ast::{Inst, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
-use crate::ir::{AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeRef, NodeTable, Op2};
+use crate::ir::{
+    AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeOp1, NodeOp2, NodeRef, NodeTable,
+};
 
 /// Control-flow graph of IR basic blocks.
 #[derive(Clone, Debug)]
@@ -245,11 +247,11 @@ impl<'g> BBlockBuilder<'g> {
             Inst::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
             Inst::Drop => self.do_stack(inst, |s, _| s.drop_eager(1))?,
             Inst::Slide(n) => self.do_stack(inst, |s, t| s.slide(n.into(), t))?,
-            Inst::Add => self.do_stack(inst, |s, t| s.apply_op(Op2::Add, t))?,
-            Inst::Sub => self.do_stack(inst, |s, t| s.apply_op(Op2::Sub, t))?,
-            Inst::Mul => self.do_stack(inst, |s, t| s.apply_op(Op2::Mul, t))?,
-            Inst::Div => self.do_stack(inst, |s, t| s.apply_op(Op2::Div, t))?,
-            Inst::Mod => self.do_stack(inst, |s, t| s.apply_op(Op2::Mod, t))?,
+            Inst::Add => self.do_stack(inst, |s, t| s.apply_op(Node::Add, t))?,
+            Inst::Sub => self.do_stack(inst, |s, t| s.apply_op(Node::Sub, t))?,
+            Inst::Mul => self.do_stack(inst, |s, t| s.apply_op(Node::Mul, t))?,
+            Inst::Div => self.do_stack(inst, |s, t| s.apply_op(Node::Div, t))?,
+            Inst::Mod => self.do_stack(inst, |s, t| s.apply_op(Node::Mod, t))?,
             Inst::Store => {
                 let (addr, val) = self.do_stack(inst, |s, t| s.pop2(t))?;
                 self.stmts.push(Stmt::Store(addr, val)); // TODO: cache
@@ -351,11 +353,11 @@ impl Display for Cfg<'_> {
             visited.set(root.index(), true);
             new_visited.set(root.index(), true);
             match &graph[root] {
-                Node::Op2(_, lhs, rhs) => {
+                NodeOp2!(lhs, rhs) => {
                     visit_exp(*lhs, graph, visited, new_visited);
                     visit_exp(*rhs, graph, visited, new_visited);
                 }
-                Node::Op1(_, v) | Node::HeapRef(v) => {
+                NodeOp1!(v) | Node::HeapRef(v) => {
                     visit_exp(*v, graph, visited, new_visited);
                 }
                 _ => {}

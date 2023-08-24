@@ -150,8 +150,6 @@ impl Debug for NodeTableIter<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::Op2;
-
     use super::*;
 
     #[test]
@@ -160,10 +158,10 @@ mod tests {
         let mut table = NodeTable::new(&mut graph);
         let x = table.insert(Node::number(1));
         let y = table.insert(Node::number(2));
-        let z = table.insert(Node::Op2(Op2::Add, x, y));
+        let z = table.insert(Node::Add(x, y));
         let y2 = table.insert(Node::number(2));
         let x2 = table.insert(Node::number(1));
-        let z2 = table.insert(Node::Op2(Op2::Add, x2, y2));
+        let z2 = table.insert(Node::Add(x2, y2));
         assert_eq!(3, table.len());
         assert_eq!(x, x2);
         assert_eq!(y, y2);
