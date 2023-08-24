@@ -1,1 +1,6 @@
 /target/
+*.ws
+*.wsa
+*.wsf
+*.ir
+*.out

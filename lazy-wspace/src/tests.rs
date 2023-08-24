@@ -21,7 +21,7 @@ fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>
 
 #[test]
 fn execute_expected() {
-    let base: &Path = "../yspace/tests".as_ref();
+    let base: &Path = "../../yspace/tests".as_ref();
     macro_rules! test(($path:literal, $stdin:literal => $res:expr, $stdout:literal) => {{
         let (res, stdout) = execute_file(base.join($path), &$stdin[..]);
         assert_eq!($res, res);

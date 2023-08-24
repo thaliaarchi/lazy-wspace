@@ -1,0 +1,22 @@
+[package]
+name = "lazy-wspace"
+version = "0.1.0"
+authors = ["Thalia Archibald <thalia@archibald.dev>"]
+edition = "2021"
+rust-version = "1.70"
+description = "A Whitespace compiler and interpreter with lazy semantics"
+repository = "https://github.com/thaliaarchi/lazy-wspace"
+license = "MPL-2.0"
+keywords = ["whitespace", "compiler", "interpreter"]
+categories = ["compilers"]
+
+[dependencies]
+arrayvec = "0.7"
+bitvec = "1.0"
+hashbrown = { version = "0.14", features = ["raw"] }
+rug = "1.20"
+simdutf8 = "0.1"
+static_assertions = "1.1"
+strum = { version = "0.25", features = ["derive"] }
+thiserror = "1.0"
+utf8-chars = "3.0"
