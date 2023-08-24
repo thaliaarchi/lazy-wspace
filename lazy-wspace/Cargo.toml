@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
 rust-version = "1.70"
-description = "A Whitespace compiler and interpreter with lazy semantics"
+description = "Optimizing Whitespace compiler and interpreter with lazy semantics"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "MPL-2.0"
 keywords = ["whitespace", "compiler", "interpreter"]
@@ -20,3 +20,6 @@ static_assertions = "1.1"
 strum = { version = "0.25", features = ["derive"] }
 thiserror = "1.0"
 utf8-chars = "3.0"
+
+[build-dependencies]
+lazy-wspace-generate = { path = "../lazy-wspace-generate" }

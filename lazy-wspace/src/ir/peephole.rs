@@ -7,6 +7,8 @@ use rug::{Complete, Integer};
 use crate::error::NumberError;
 use crate::ir::{Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef, NodeTable};
 
+include!(concat!(env!("OUT_DIR"), "/rewrites.rs"));
+
 enum Action {
     New,
     Insert(Node),

@@ -1,6 +1,7 @@
 [workspace]
 members = [
-  "lazy-wspace"
+  "lazy-wspace",
+  "lazy-wspace-generate"
 ]
 
 [workspace.package]
