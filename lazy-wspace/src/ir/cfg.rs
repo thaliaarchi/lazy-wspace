@@ -112,6 +112,8 @@ impl<'g> Cfg<'g> {
                 } else if let Err(err) = bb.push_inst(inst) {
                     bb.exit = Some(ExitStmt::Error(err));
                     break;
+                } else if pc >= prog.len() {
+                    bb.exit = Some(ExitStmt::Error(ParseError::ImplicitEnd.into()));
                 }
             }
             bbs.push(bb);
