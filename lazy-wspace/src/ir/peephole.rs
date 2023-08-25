@@ -71,10 +71,8 @@ impl NodeTable<'_> {
             }
 
             // Errors
-            (Add(..) | Sub(..) | Div(..) | Mod(..), _, Error(_)) => Use(rhs),
-            (Add(..) | Sub(..) | Div(..) | Mod(..), Error(_), Number(_)) => Use(lhs),
-            (Mul(..), Error(_), _) => Use(lhs),
-            (Mul(..), Number(_), Error(_)) => Use(rhs),
+            (Add(..) | Sub(..) | Mul(..) | Div(..) | Mod(..), _, Error(_)) => Use(rhs),
+            (Add(..) | Sub(..) | Mul(..) | Div(..) | Mod(..), Error(_), Number(_)) => Use(lhs),
 
             // Identities
             (Add(..), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Use(rhs),

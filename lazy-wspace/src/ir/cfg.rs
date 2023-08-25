@@ -10,6 +10,7 @@ use crate::ir::{
     AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef,
     NodeTable,
 };
+use crate::number::Op;
 
 /// Control-flow graph of IR basic blocks.
 #[derive(Clone, Debug)]
@@ -250,11 +251,11 @@ impl<'g> BBlockBuilder<'g> {
             Inst::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
             Inst::Drop => self.do_stack(inst, |s, _| s.drop_eager(1))?,
             Inst::Slide(n) => self.do_stack(inst, |s, t| s.slide(n.into(), t))?,
-            Inst::Add => self.do_stack(inst, |s, t| s.apply_op(Node::Add, t))?,
-            Inst::Sub => self.do_stack(inst, |s, t| s.apply_op(Node::Sub, t))?,
-            Inst::Mul => self.do_stack(inst, |s, t| s.apply_op(Node::Mul, t))?,
-            Inst::Div => self.do_stack(inst, |s, t| s.apply_op(Node::Div, t))?,
-            Inst::Mod => self.do_stack(inst, |s, t| s.apply_op(Node::Mod, t))?,
+            Inst::Add => self.do_stack(inst, |s, t| s.apply_op(Op::Add, t))?,
+            Inst::Sub => self.do_stack(inst, |s, t| s.apply_op(Op::Sub, t))?,
+            Inst::Mul => self.do_stack(inst, |s, t| s.apply_op(Op::Mul, t))?,
+            Inst::Div => self.do_stack(inst, |s, t| s.apply_op(Op::Div, t))?,
+            Inst::Mod => self.do_stack(inst, |s, t| s.apply_op(Op::Mod, t))?,
             Inst::Store => {
                 let (addr, val) = self.do_stack(inst, |s, t| s.pop2(t))?;
                 self.stmts.push(Stmt::Store(addr, val)); // TODO: cache

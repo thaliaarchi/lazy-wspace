@@ -7,6 +7,12 @@ use crate::ast::NumberLit;
 use crate::error::NumberError;
 use crate::ir::NodeRef;
 
+/// A node in a graph.
+///
+/// All operations evaluate the RHS first, then the LHS. In Whitespace, `mul`
+/// evaluates the LHS first, but its operands are swapped when constructing the
+/// IR, so it is also right-first. Synthetic operations have right-first
+/// evaluation order for consistency.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Node {
     // Values
