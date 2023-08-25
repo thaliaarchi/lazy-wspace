@@ -2,11 +2,12 @@ Require Import NArith PArith ZArith.
 Local Open Scope Z_scope.
 
 Inductive val : Type :=
-  | Num (n : Z)
-  | Err (id : nat).
+  | VNum (n : Z)
+  | VErr (id : nat).
 
 Inductive exp : Type :=
-  | Value (v : val)
+  | Num (n : Z)
+  | Err (id : nat)
   | Ref (v : val) (* StackRef, CheckedStackRef, and HeapRef *)
 
   | Add (x y : exp)
@@ -85,29 +86,30 @@ Definition ir_popcnt x := Z_popcnt x.
 
 Definition eval_op2 op x y :=
   match y, x with
-  | Num y, Num x => Num (op x y)
-  | Err e, _ | Num _, Err e => Err e
+  | VNum y, VNum x => VNum (op x y)
+  | VErr e, _ | VNum _, VErr e => VErr e
   end.
 Definition eval_divmod op x y id :=
   match y, x with
-  | Num 0, _ => Err id
-  | Num y, Num x => Num (op x y)
-  | Err e, _ | Num _, Err e => Err e
+  | VNum 0, _ => VErr id
+  | VNum y, VNum x => VNum (op x y)
+  | VErr e, _ | VNum _, VErr e => VErr e
   end.
 Definition eval_op2N op x (y : N) :=
   match x with
-  | Num x => Num (op x y)
-  | Err e => Err e
+  | VNum x => VNum (op x y)
+  | VErr e => VErr e
   end.
 Definition eval_op1 op x :=
   match x with
-  | Num x => Num (op x)
-  | Err e => Err e
+  | VNum x => VNum (op x)
+  | VErr e => VErr e
   end.
 
 Fixpoint eval (e : exp) : val :=
   match e with
-  | Value v => v
+  | Num n => VNum n
+  | Err e => VErr e
   | Ref v => v
   | Add x y => eval_op2 ir_add (eval x) (eval y)
   | Sub x y => eval_op2 ir_sub (eval x) (eval y)

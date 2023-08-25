@@ -17,18 +17,12 @@
 (xnor _ (e : error)) => e
 (nandnot _ (e : error)) => e
 (nnotand _ (e : error)) => e
-(shl (e : error) _) => e
-(shr (e : error) _) => e
-(getbit (e : error) _) => e
-(ngetbit (e : error) _) => e
-(neg (e : error) _) => e
-(popcnt (e : error) _) => e
 
 (add (e : error) number) => e
 (sub (e : error) number) => e
 (mul (e : error) number) => e
-(div (e : error) number) => e
-(mod (e : error) number) => e
+(div (e : error) (y : number)) if (not (eq? y 0)) => e
+(mod (e : error) (y : number)) if (not (eq? y 0)) => e
 (and (e : error) number) => e
 (or (e : error) number) => e
 (xor (e : error) number) => e
@@ -39,6 +33,13 @@
 (xnor (e : error) number) => e
 (nandnot (e : error) number) => e
 (nnotand (e : error) number) => e
+
+(shl (e : error) _) => e
+(shr (e : error) _) => e
+(getbit (e : error) _) => e
+(ngetbit (e : error) _) => e
+(neg (e : error) _) => e
+(popcnt (e : error) _) => e
 
 (add (x : number) y) => (add y x)
 (mul (x : number) y) => (mul y x)
@@ -58,7 +59,6 @@
 
 (sub x x) => (error_or x 0)
 (mul x 0) => (error_or x 0)
-(mul 0 x) => (error_or x 0)
 (div x x) => (error_or x 1)
 (mod x x) => (error_or x 0)
 (mod x 1) => (error_or x 0)
