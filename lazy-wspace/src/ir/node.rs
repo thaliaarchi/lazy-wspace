@@ -1,5 +1,4 @@
 use std::fmt::{self, Debug, Display, Formatter};
-use std::rc::Rc;
 
 use rug::Integer;
 
@@ -21,7 +20,8 @@ pub enum Node {
     /// ```ir
     /// %r = value {number}
     /// ```
-    Number(Rc<Integer>),
+    // Boxed to keep the size smaller.
+    Number(Box<Integer>),
     /// A lazy unevaluated error.
     ///
     /// ```ir
@@ -152,7 +152,7 @@ pub enum Node {
 impl Node {
     #[inline]
     pub fn number<T: Into<Integer>>(v: T) -> Self {
-        Node::Number(Rc::new(v.into()))
+        Node::Number(Box::new(v.into()))
     }
 }
 
@@ -160,7 +160,7 @@ impl From<&NumberLit> for Node {
     #[inline]
     fn from(n: &NumberLit) -> Self {
         match n {
-            NumberLit::Number(n) => Node::Number(n.clone()),
+            NumberLit::Number(n) => Node::Number(Box::new(n.as_ref().clone())),
             NumberLit::Empty => Node::Error(NumberError::EmptyLit),
         }
     }
@@ -202,6 +202,28 @@ impl Display for Node {
             Node::StackRef(n) => write!(f, "stack_ref {n}"),
             Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Node::HeapRef(addr) => write!(f, "heap_ref {addr}"),
+        }
+    }
+}
+
+impl PartialEq<Integer> for Node {
+    #[inline]
+    fn eq(&self, other: &Integer) -> bool {
+        if let Node::Number(n) = self {
+            &**n == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<NumberError> for Node {
+    #[inline]
+    fn eq(&self, other: &NumberError) -> bool {
+        if let Node::Error(err) = self {
+            err == other
+        } else {
+            false
         }
     }
 }

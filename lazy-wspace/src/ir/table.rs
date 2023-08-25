@@ -2,10 +2,13 @@ use std::fmt::{self, Debug, Formatter};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::Index;
+use std::ptr::NonNull;
 
 use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
+use rug::Integer;
 
 use crate::ir::{Graph, Node, NodeRef};
 
@@ -33,7 +36,7 @@ impl<'g> NodeTable<'g> {
 
     #[inline]
     pub fn get(&self, node: &Node) -> Option<NodeRef> {
-        let hash = hash_node(node);
+        let hash = make_hash(node);
         match self.table.find(hash, |&key| &self.graph[key] == node) {
             Some(bucket) => Some(*unsafe { bucket.as_ref() }),
             None => None,
@@ -42,15 +45,45 @@ impl<'g> NodeTable<'g> {
 
     #[inline]
     pub fn insert(&mut self, node: Node) -> NodeRef {
-        let hash = hash_node(&node);
+        let hash = make_hash(&node);
         match self.table.find_or_find_insert_slot(
             hash,
             |&key| self.graph[key] == node,
-            |&key| hash_node(&self.graph[key]),
+            |&key| make_hash(&self.graph[key]),
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
                 let i = self.graph.push(node);
+                unsafe { self.table.insert_in_slot(hash, slot, i) };
+                i
+            }
+        }
+    }
+
+    /// A specialization of `insert`, that avoids cloning `n` and constructing a
+    /// `Node::Number`, when an equivalent node already has been inserted.
+    #[inline]
+    pub fn insert_number(&mut self, n: &Integer) -> NodeRef {
+        struct NodeNumberRef<'a>(&'a Integer);
+        impl Hash for NodeNumberRef<'_> {
+            #[inline]
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                let node = unsafe { Node::Number(Box::from_raw(NonNull::dangling().as_mut())) };
+                mem::discriminant(&node).hash(state);
+                mem::forget(node);
+                self.0.hash(state);
+            }
+        }
+
+        let hash = make_hash(&NodeNumberRef(n));
+        match self.table.find_or_find_insert_slot(
+            hash,
+            |&key| &self.graph[key] == n,
+            |&key| make_hash(&self.graph[key]),
+        ) {
+            Ok(bucket) => *unsafe { bucket.as_ref() },
+            Err(slot) => {
+                let i = self.graph.push(Node::Number(Box::new(n.clone())));
                 unsafe { self.table.insert_in_slot(hash, slot, i) };
                 i
             }
@@ -82,9 +115,9 @@ impl<'g> NodeTable<'g> {
 }
 
 #[inline]
-fn hash_node(node: &Node) -> u64 {
+fn make_hash<T: Hash>(v: &T) -> u64 {
     let mut state = DefaultHashBuilder::default().build_hasher();
-    node.hash(&mut state);
+    v.hash(&mut state);
     state.finish()
 }
 
@@ -133,6 +166,7 @@ impl Iterator for NodeTableIter<'_> {
         self.inner.size_hint()
     }
 }
+
 impl ExactSizeIterator for NodeTableIter<'_> {
     #[inline]
     fn len(&self) -> usize {

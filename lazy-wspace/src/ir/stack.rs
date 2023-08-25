@@ -59,6 +59,18 @@ impl AbstractStack {
         self.values.push(n);
     }
 
+    /// Pushes a number to the stack, only cloning it, if it does not already
+    /// exist in the table.
+    #[inline]
+    pub fn push_number(&mut self, n: &NumberLit, table: &mut NodeTable<'_>) -> NodeRef {
+        let node = match n {
+            NumberLit::Number(n) => table.insert_number(n),
+            NumberLit::Empty => table.insert(NumberError::EmptyLit.into()),
+        };
+        self.push(node);
+        node
+    }
+
     /// Eagerly pushes a reference to the top element on the stack.
     #[inline]
     pub fn dup(&mut self, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {

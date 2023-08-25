@@ -11,7 +11,7 @@ pub struct Node {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum NodeKind {
     /// ```text
-    /// Number(Rc<Integer>),
+    /// Number(Box<Integer>),
     /// ```
     Number,
     /// ```text
@@ -99,7 +99,7 @@ impl Node {
             let variant = syn::Ident::new(node.variant, Span::call_site());
             match node.kind {
                 NodeKind::Number => quote! {
-                    Node::#variant(n) => { let _: Rc<Integer> = n; },
+                    Node::#variant(n) => { let _: Box<Integer> = n; },
                 },
                 NodeKind::Error => quote! {
                     Node::#variant(err) => { let _: NumberError = err; },

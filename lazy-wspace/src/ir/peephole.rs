@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::rc::Rc;
 
 use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer};
@@ -70,7 +69,7 @@ impl NodeTable<'_> {
                     _ => panic!("not a binary operator: {node}"),
                 };
                 let node = match res {
-                    Ok(r) => Number(Rc::new(r)),
+                    Ok(r) => Number(Box::new(r)),
                     Err(err) => Error(err),
                 };
                 Insert(node)

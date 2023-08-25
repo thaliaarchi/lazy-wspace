@@ -1,6 +1,8 @@
 use std::cell::UnsafeCell;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::ops::Index;
+use std::rc::Rc;
 use std::vec;
 
 use static_assertions::assert_not_impl_any;
@@ -11,6 +13,8 @@ use crate::ir::Node;
 #[repr(transparent)]
 pub struct Graph {
     nodes: UnsafeCell<Vec<Node>>,
+    // Mark as !Sync
+    marker: PhantomData<Rc<Node>>,
 }
 
 /// Reference to a [`Node`] in a [`Graph`].
@@ -34,6 +38,7 @@ impl Graph {
     pub const unsafe fn new() -> Self {
         Graph {
             nodes: UnsafeCell::new(Vec::new()),
+            marker: PhantomData,
         }
     }
 
@@ -105,6 +110,7 @@ impl Clone for Graph {
         let nodes = unsafe { &*self.nodes.get() };
         Graph {
             nodes: UnsafeCell::new(nodes.clone()),
+            marker: PhantomData,
         }
     }
 

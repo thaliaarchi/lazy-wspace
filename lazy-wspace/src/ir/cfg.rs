@@ -245,7 +245,7 @@ impl<'g> BBlockBuilder<'g> {
 
     fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
         match inst {
-            Inst::Push(n) => self.do_stack(inst, |s, t| Ok(s.push(t.insert(n.into()))))?,
+            Inst::Push(n) => self.do_stack(inst, |s, t| Ok(_ = s.push_number(n, t)))?,
             Inst::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
             Inst::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
             Inst::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
