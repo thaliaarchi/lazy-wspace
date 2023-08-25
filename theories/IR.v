@@ -39,6 +39,7 @@ Definition Z_testbit (z : Z) (n : N) : bool :=
   match z with
   | 0 => false
   | Zpos p => Pos.testbit p n
+  | Zneg 1 => true
   | Zneg p => negb (Pos.testbit (Pos.pred p) n)
   end.
 
