@@ -79,8 +79,13 @@ impl NodeTable<'_> {
             // Identities
             (Add(..), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Use(rhs),
             (Add(..) | Sub(..), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => Use(lhs),
-            (Mul(..) | Div(..), Number(lhs), _) if **lhs == 1 => Use(rhs),
+            (Mul(..), Number(lhs), _) if **lhs == 1 => Use(rhs),
             (Mul(..) | Div(..), _, Number(rhs)) if **rhs == 1 => Use(lhs),
+
+            // Negation
+            (Sub(..), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Insert(Neg(rhs)),
+            (Add(..), _, Neg(rhs)) => Insert(Sub(lhs, *rhs)),
+            (Sub(..), _, Neg(rhs)) => Insert(Add(lhs, *rhs)),
 
             // Single-bit AND
             // x * y == x & y
