@@ -8,14 +8,7 @@ use static_assertions::assert_not_impl_any;
 use crate::ir::Node;
 
 /// Graph of IR nodes, indexed by [`NodeRef`].
-///
-/// # Safety
-///
-/// Any `NodeRef` stored in or used to index a graph must belong to that same
-/// graph. It uses uses unchecked indexing and has undefined behavior when
-/// passed a `NodeRef` from another graph.
 #[repr(transparent)]
-#[derive(Default)]
 pub struct Graph {
     nodes: UnsafeCell<Vec<Node>>,
 }
@@ -30,9 +23,18 @@ pub struct NodeRef {
 assert_not_impl_any!(Graph: Send, Sync);
 
 impl Graph {
+    /// Construct a graph.
+    ///
+    /// # Safety
+    ///
+    /// Any `NodeRef` stored in or used to index this graph must belong to this
+    /// same graph. It uses uses unchecked indexing and has undefined behavior
+    /// when passed a `NodeRef` from another graph.
     #[inline]
-    pub fn new() -> Self {
-        Graph::default()
+    pub const unsafe fn new() -> Self {
+        Graph {
+            nodes: UnsafeCell::new(Vec::new()),
+        }
     }
 
     #[inline]

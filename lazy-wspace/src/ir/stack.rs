@@ -349,56 +349,61 @@ mod tests {
 
     #[test]
     fn pop() {
-        {
-            let graph = Graph::new();
+        let graph = unsafe { Graph::new() };
+        let (s, top) = {
             let mut table = NodeTable::new(&graph);
             let mut s = stack!([], 0, 0, Finite(0));
             let top = s.pop(&mut table).unwrap();
-
-            let graph1 = Graph::new();
+            (s, top)
+        };
+        let graph1 = unsafe { Graph::new() };
+        let (s1, top1) = {
             let r1 = graph1.push(Node::StackRef(0));
             let s1 = stack!([], 1, 1, Finite(0));
-            let top1 = r1;
+            (s1, r1)
+        };
+        assert_eq!(s1, s);
+        assert_eq!(top1, top);
+        assert_eq!(graph1, graph);
 
-            assert_eq!(s1, s);
-            assert_eq!(top1, top);
-            assert_eq!(graph1, graph);
-        }
-        {
-            let graph = Graph::new();
+        let graph = unsafe { Graph::new() };
+        let (s, top) = {
             let mut table = NodeTable::new(&graph);
             let v0 = table.insert(Node::number(1));
             let v1 = table.insert(Node::number(2));
             let mut s = stack!([v0, v1], 0, 0, Finite(0));
             let top = s.pop(&mut table).unwrap();
-
-            let graph1 = Graph::new();
+            (s, top)
+        };
+        let graph1 = unsafe { Graph::new() };
+        let (s1, top1) = {
             let v0 = graph1.push(Node::number(1));
             let v1 = graph1.push(Node::number(2));
             let s1 = stack!([v0], 0, 0, Finite(0));
-            let top1 = v1;
+            (s1, v1)
+        };
+        assert_eq!(s1, s);
+        assert_eq!(top1, top);
+        assert_eq!(graph1, graph);
 
-            assert_eq!(s1, s);
-            assert_eq!(top1, top);
-            assert_eq!(graph1, graph);
-        }
-        {
-            let graph = Graph::new();
+        let graph = unsafe { Graph::new() };
+        let (s, top) = {
             let mut table = NodeTable::new(&graph);
             table.insert(Node::StackRef(1));
             let mut s = stack!([], 3, 3, Finite(0));
             let top = s.pop(&mut table).unwrap();
-
-            let graph1 = Graph::new();
+            (s, top)
+        };
+        let graph1 = unsafe { Graph::new() };
+        let (s1, top1) = {
             graph1.push(Node::StackRef(1));
             let r1 = graph1.push(Node::StackRef(3));
             let s1 = stack!([], 4, 4, Finite(0));
-            let top1 = r1;
-
-            assert_eq!(s1, s);
-            assert_eq!(top1, top);
-            assert_eq!(graph1, graph);
-        }
+            (s1, r1)
+        };
+        assert_eq!(s1, s);
+        assert_eq!(top1, top);
+        assert_eq!(graph1, graph);
     }
 
     #[test]
@@ -476,42 +481,48 @@ mod tests {
 
     #[test]
     fn simplify_swap_swap() {
-        let graph = Graph::new();
-        let mut table = NodeTable::new(&graph);
-        let mut s = stack!([], 0, 0, Finite(0));
-        s.swap(&mut table).unwrap();
-        s.swap(&mut table).unwrap();
-        s.simplify(&table);
-
-        let graph1 = Graph::new();
-        graph1.push(Node::StackRef(0));
-        graph1.push(Node::StackRef(1));
-        let s1 = stack!([], 2, 0, Finite(0));
-
+        let graph = unsafe { Graph::new() };
+        let s = {
+            let mut table = NodeTable::new(&graph);
+            let mut s = stack!([], 0, 0, Finite(0));
+            s.swap(&mut table).unwrap();
+            s.swap(&mut table).unwrap();
+            s.simplify(&table);
+            s
+        };
+        let graph1 = unsafe { Graph::new() };
+        let s1 = {
+            graph1.push(Node::StackRef(0));
+            graph1.push(Node::StackRef(1));
+            stack!([], 2, 0, Finite(0))
+        };
         assert_eq!(s1, s);
         assert_eq!(graph1, graph);
     }
 
     #[test]
     fn simplify_copy() {
-        let graph = Graph::new();
-        let mut table = NodeTable::new(&graph);
-        let mut s = stack!([], 0, 0, Finite(0));
-        let r1 = s.at_lazy(1, &mut table).unwrap();
-        let r2 = s.at_lazy(2, &mut table).unwrap();
-        let r0 = s.at_eager(0, &mut table).unwrap();
-        s.drop_eager(3).unwrap();
-        s.push(r2);
-        s.push(r1);
-        s.push(r0);
-        s.simplify(&table);
-
-        let graph1 = Graph::new();
-        graph1.push(Node::CheckedStackRef(1));
-        graph1.push(Node::CheckedStackRef(2));
-        graph1.push(Node::StackRef(0));
-        let s1 = stack!([], 3, 0, Finite(0));
-
+        let graph = unsafe { Graph::new() };
+        let s = {
+            let mut table = NodeTable::new(&graph);
+            let mut s = stack!([], 0, 0, Finite(0));
+            let r1 = s.at_lazy(1, &mut table).unwrap();
+            let r2 = s.at_lazy(2, &mut table).unwrap();
+            let r0 = s.at_eager(0, &mut table).unwrap();
+            s.drop_eager(3).unwrap();
+            s.push(r2);
+            s.push(r1);
+            s.push(r0);
+            s.simplify(&table);
+            s
+        };
+        let graph1 = unsafe { Graph::new() };
+        let s1 = {
+            graph1.push(Node::CheckedStackRef(1));
+            graph1.push(Node::CheckedStackRef(2));
+            graph1.push(Node::StackRef(0));
+            stack!([], 3, 0, Finite(0))
+        };
         assert_eq!(s1, s);
         assert_eq!(graph1, graph);
     }

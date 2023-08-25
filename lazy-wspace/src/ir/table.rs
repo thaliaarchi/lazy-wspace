@@ -154,8 +154,8 @@ mod tests {
 
     #[test]
     fn unique() {
-        let mut graph = Graph::new();
-        let mut table = NodeTable::new(&mut graph);
+        let graph = unsafe { Graph::new() };
+        let mut table = NodeTable::new(&graph);
         let x = table.insert(Node::number(1));
         let y = table.insert(Node::number(2));
         let z = table.insert(Node::Add(x, y));

@@ -24,7 +24,8 @@ fn main() {
     f.read_to_end(&mut src).unwrap();
 
     let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
-    let graph = Graph::new();
+    // SAFETY: This is the only graph constructed, so all indexes belong to it.
+    let graph = unsafe { Graph::new() };
     let ir = Cfg::new(&prog, &graph);
     print!("{ir}");
 }
