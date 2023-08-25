@@ -121,6 +121,10 @@ pub enum Node {
     /// ```ir
     /// %r = popcnt %v
     /// ```
+    ///
+    /// GMP [`mpz_popcount`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fpopcount)
+    /// returns the maximum `mp_bitcnt_t` for v < 0. This instead returns 0 for
+    /// v < 0.
     Popcnt(NodeRef),
 
     /// Unchecked stack reference, that must be first guarded with
