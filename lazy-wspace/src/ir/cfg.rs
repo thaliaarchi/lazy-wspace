@@ -17,6 +17,7 @@ use crate::number::Op;
 pub struct Cfg<'g> {
     bbs: Vec<BBlock<'g>>,
     graph: &'g Graph,
+    globals: NodeTable<'g>,
 }
 
 /// A basic block, i.e., a sequence of non-branching instructions, followed by a
@@ -83,6 +84,7 @@ pub enum IoKind {
 impl<'g> Cfg<'g> {
     pub fn new(prog: &[Inst], graph: &'g Graph) -> Self {
         let mut bbs = Vec::new();
+        let mut globals = NodeTable::new(graph);
         let mut labels = HashMap::new();
         let mut first_parse_error = None;
 
@@ -110,7 +112,7 @@ impl<'g> Cfg<'g> {
                         _ => {}
                     }
                     break;
-                } else if let Err(err) = bb.push_inst(inst) {
+                } else if let Err(err) = bb.push_inst(inst, &mut globals) {
                     bb.exit = Some(ExitStmt::Error(err));
                     break;
                 } else if pc >= prog.len() {
@@ -165,7 +167,23 @@ impl<'g> Cfg<'g> {
         Cfg {
             bbs: bbs.into_iter().map(|bb| bb.finish()).collect(),
             graph,
+            globals,
         }
+    }
+
+    #[inline]
+    pub fn bbs(&self) -> &[BBlock<'g>] {
+        &self.bbs
+    }
+
+    #[inline]
+    pub fn graph(&self) -> &'g Graph {
+        self.graph
+    }
+
+    #[inline]
+    pub fn globals(&self) -> &NodeTable<'g> {
+        &self.globals
     }
 
     pub fn reachable(&self) -> BitBox {
@@ -243,9 +261,9 @@ impl<'g> BBlockBuilder<'g> {
         }
     }
 
-    fn push_inst(&mut self, inst: &Inst) -> Result<(), Error> {
+    fn push_inst(&mut self, inst: &Inst, globals: &mut NodeTable<'g>) -> Result<(), Error> {
         match inst {
-            Inst::Push(n) => self.do_stack(inst, |s, t| Ok(_ = s.push_number(n, t)))?,
+            Inst::Push(n) => self.do_stack(inst, |s, _| Ok(_ = s.push_number(n, globals)))?,
             Inst::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
             Inst::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
             Inst::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
