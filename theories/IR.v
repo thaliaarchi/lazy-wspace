@@ -83,115 +83,51 @@ Definition ir_ngetbit x b := Z_of_bool (negb (Z_testbit x b)).
 Definition ir_neg x := Z.opp x.
 Definition ir_popcnt x := Z_popcnt x.
 
+Definition eval_op2 op x y :=
+  match y, x with
+  | Num y, Num x => Num (op x y)
+  | Err e, _ | Num _, Err e => Err e
+  end.
+Definition eval_divmod op x y id :=
+  match y, x with
+  | Num 0, _ => Err id
+  | Num y, Num x => Num (op x y)
+  | Err e, _ | Num _, Err e => Err e
+  end.
+Definition eval_op2N op x (y : N) :=
+  match x with
+  | Num x => Num (op x y)
+  | Err e => Err e
+  end.
+Definition eval_op1 op x :=
+  match x with
+  | Num x => Num (op x)
+  | Err e => Err e
+  end.
+
 Fixpoint eval (e : exp) : val :=
   match e with
   | Value v => v
   | Ref v => v
-  | Add x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_add x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Sub x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_sub x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Mul x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_mul x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Div x y id =>
-    match eval y, eval x with
-    | Num 0, _ => Err id
-    | Num y, Num x => Num (ir_div x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Mod x y id =>
-    match eval y, eval x with
-    | Num 0, _ => Err id
-    | Num y, Num x => Num (ir_mod x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | And x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_and x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Or x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_or x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Xor x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_xor x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | AndNot x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_andnot x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | NotAnd x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_notand x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Nand x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_nand x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Nor x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_nor x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Xnor x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_xnor x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | NandNot x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_nandnot x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | NNotAnd x y =>
-    match eval y, eval x with
-    | Num y, Num x => Num (ir_nnotand x y)
-    | Err e, _ | Num _, Err e => Err e
-    end
-  | Shl x y =>
-    match eval x with
-    | Num x => Num (ir_shl x y)
-    | Err e => Err e
-    end
-  | Shr x y =>
-    match eval x with
-    | Num x => Num (ir_shr x y)
-    | Err e => Err e
-    end
-  | GetBit x b =>
-    match eval x with
-    | Num x => Num (ir_getbit x b)
-    | Err e => Err e
-    end
-  | NGetBit x b =>
-    match eval x with
-    | Num x => Num (ir_ngetbit x b)
-    | Err e => Err e
-    end
-  | Neg x =>
-    match eval x with
-    | Num x => Num (ir_neg x)
-    | Err e => Err e
-    end
-  | Popcnt x =>
-    match eval x with
-    | Num x => Num (ir_popcnt x)
-    | Err e => Err e
-    end
+  | Add x y => eval_op2 ir_add (eval x) (eval y)
+  | Sub x y => eval_op2 ir_sub (eval x) (eval y)
+  | Mul x y => eval_op2 ir_mul (eval x) (eval y)
+  | Div x y id => eval_divmod ir_div (eval x) (eval y) id
+  | Mod x y id => eval_divmod ir_mod (eval x) (eval y) id
+  | And x y => eval_op2 ir_and (eval x) (eval y)
+  | Or x y => eval_op2 ir_or (eval x) (eval y)
+  | Xor x y => eval_op2 ir_xor (eval x) (eval y)
+  | AndNot x y => eval_op2 ir_andnot (eval x) (eval y)
+  | NotAnd x y => eval_op2 ir_notand (eval x) (eval y)
+  | Nand x y => eval_op2 ir_nand (eval x) (eval y)
+  | Nor x y => eval_op2 ir_nor (eval x) (eval y)
+  | Xnor x y => eval_op2 ir_xnor (eval x) (eval y)
+  | NandNot x y => eval_op2 ir_nandnot (eval x) (eval y)
+  | NNotAnd x y => eval_op2 ir_nnotand (eval x) (eval y)
+  | Shl x y => eval_op2N ir_shl (eval x) y
+  | Shr x y => eval_op2N ir_shr (eval x) y
+  | GetBit x b => eval_op2N ir_getbit (eval x) b
+  | NGetBit x b => eval_op2N ir_ngetbit (eval x) b
+  | Neg x => eval_op1 ir_neg (eval x)
+  | Popcnt x => eval_op1 ir_popcnt (eval x)
   end.
