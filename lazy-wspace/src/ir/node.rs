@@ -67,6 +67,10 @@ pub enum Node {
     /// ```
     AndNot(NodeRef, NodeRef),
     /// ```ir
+    /// %r = notand %lhs %rhs
+    /// ```
+    NotAnd(NodeRef, NodeRef),
+    /// ```ir
     /// %r = nand %lhs %rhs
     /// ```
     Nand(NodeRef, NodeRef),
@@ -82,6 +86,10 @@ pub enum Node {
     /// %r = nandnot %lhs %rhs
     /// ```
     NandNot(NodeRef, NodeRef),
+    /// ```ir
+    /// %r = nnotand %lhs %rhs
+    /// ```
+    NNotAnd(NodeRef, NodeRef),
     /// ```ir
     /// %r = shl %lhs {rhs}
     /// ```
@@ -175,10 +183,12 @@ impl Display for Node {
             Node::Or(lhs, rhs) => write!(f, "or {lhs}, {rhs}"),
             Node::Xor(lhs, rhs) => write!(f, "xor {lhs}, {rhs}"),
             Node::AndNot(lhs, rhs) => write!(f, "andnot {lhs}, {rhs}"),
+            Node::NotAnd(lhs, rhs) => write!(f, "notand {lhs}, {rhs}"),
             Node::Nand(lhs, rhs) => write!(f, "nand {lhs}, {rhs}"),
             Node::Nor(lhs, rhs) => write!(f, "nor {lhs}, {rhs}"),
             Node::Xnor(lhs, rhs) => write!(f, "xnor {lhs}, {rhs}"),
             Node::NandNot(lhs, rhs) => write!(f, "nandnot {lhs}, {rhs}"),
+            Node::NNotAnd(lhs, rhs) => write!(f, "nnotand {lhs}, {rhs}"),
             Node::Shl(lhs, rhs) => write!(f, "shl {lhs}, {rhs}"),
             Node::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
             Node::Neg(v) => write!(f, "neg {v}"),
@@ -202,10 +212,12 @@ macro_rules! NodeOp2(($lhs:pat, $rhs:pat) => {
     | Node::Or($lhs, $rhs)
     | Node::Xor($lhs, $rhs)
     | Node::AndNot($lhs, $rhs)
+    | Node::NotAnd($lhs, $rhs)
     | Node::Nand($lhs, $rhs)
     | Node::Nor($lhs, $rhs)
     | Node::Xnor($lhs, $rhs)
     | Node::NandNot($lhs, $rhs)
+    | Node::NNotAnd($lhs, $rhs)
 });
 pub(crate) use NodeOp2;
 

@@ -28,10 +28,12 @@ pub enum NodeKind {
     /// Or(NodeRef, NodeRef),
     /// Xor(NodeRef, NodeRef),
     /// AndNot(NodeRef, NodeRef),
+    /// NotAnd(NodeRef, NodeRef),
     /// Nand(NodeRef, NodeRef),
     /// Nor(NodeRef, NodeRef),
     /// Xnor(NodeRef, NodeRef),
     /// NandNot(NodeRef, NodeRef),
+    /// NNotAnd(NodeRef, NodeRef),
     /// ```
     Op2,
     /// ```text
@@ -54,7 +56,7 @@ pub enum NodeKind {
     Op1Usize,
 }
 
-pub static NODES: [Node; 24] = [
+pub static NODES: [Node; 26] = [
     Node::new(NodeKind::Number, "Number", "number"),
     Node::new(NodeKind::Error, "Error", "error"),
     Node::new(NodeKind::Op2, "Add", "add"),
@@ -66,10 +68,12 @@ pub static NODES: [Node; 24] = [
     Node::new(NodeKind::Op2, "Or", "or"),
     Node::new(NodeKind::Op2, "Xor", "xor"),
     Node::new(NodeKind::Op2, "AndNot", "andnot"),
+    Node::new(NodeKind::Op2, "NotAnd", "notand"),
     Node::new(NodeKind::Op2, "Nand", "nand"),
     Node::new(NodeKind::Op2, "Nor", "nor"),
     Node::new(NodeKind::Op2, "Xnor", "xnor"),
     Node::new(NodeKind::Op2, "NandNot", "nandnot"),
+    Node::new(NodeKind::Op2, "NNotAnd", "nnotand"),
     Node::new(NodeKind::Op2U32, "Shl", "shl"),
     Node::new(NodeKind::Op2U32, "Shr", "shr"),
     Node::new(NodeKind::Op2U32, "GetBit", "getbit"),
