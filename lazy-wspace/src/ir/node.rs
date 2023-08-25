@@ -109,9 +109,9 @@ pub enum Node {
     /// GMP `mpz_tstbit`
     GetBit(NodeRef, u32),
     /// ```ir
-    /// %r = notgetbit %v {bit}
+    /// %r = ngetbit %v {bit}
     /// ```
-    NotGetBit(NodeRef, u32),
+    NGetBit(NodeRef, u32),
 
     // Unary operations
     /// ```ir
@@ -193,7 +193,7 @@ impl Display for Node {
             Node::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
             Node::Neg(v) => write!(f, "neg {v}"),
             Node::GetBit(v, bit) => write!(f, "getbit {v}, {bit}"),
-            Node::NotGetBit(v, bit) => write!(f, "notgetbit {v}, {bit}"),
+            Node::NGetBit(v, bit) => write!(f, "ngetbit {v}, {bit}"),
             Node::Popcnt(v) => write!(f, "popcnt {v}"),
             Node::StackRef(n) => write!(f, "stack_ref {n}"),
             Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
@@ -225,7 +225,7 @@ macro_rules! NodeOp2U32(($lhs:pat, $rhs:pat) => {
     Node::Shl($lhs, $rhs)
     | Node::Shr($lhs, $rhs)
     | Node::GetBit($lhs, $rhs)
-    | Node::NotGetBit($lhs, $rhs)
+    | Node::NGetBit($lhs, $rhs)
 });
 pub(crate) use NodeOp2U32;
 

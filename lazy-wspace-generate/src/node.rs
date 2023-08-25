@@ -77,7 +77,7 @@ pub static NODES: [Node; 26] = [
     Node::new(NodeKind::Op2U32, "Shl", "shl"),
     Node::new(NodeKind::Op2U32, "Shr", "shr"),
     Node::new(NodeKind::Op2U32, "GetBit", "getbit"),
-    Node::new(NodeKind::Op2U32, "NotGetBit", "notgetbit"),
+    Node::new(NodeKind::Op2U32, "NGetBit", "ngetbit"),
     Node::new(NodeKind::Op1, "Neg", "neg"),
     Node::new(NodeKind::Op1, "Popcnt", "popcnt"),
     Node::new(NodeKind::Op1Usize, "StackRef", "stackref"),

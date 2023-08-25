@@ -1,0 +1,211 @@
+# All operations evaluate the RHS first, then the LHS. Errors in evaluation make
+# operations not commutative in the general case, so rules need to be manually
+# commuted.
+
+(add _ (e : error)) => e
+(sub _ (e : error)) => e
+(mul _ (e : error)) => e
+(div _ (e : error)) => e
+(mod _ (e : error)) => e
+(and _ (e : error)) => e
+(or _ (e : error)) => e
+(xor _ (e : error)) => e
+(andnot _ (e : error)) => e
+(notand _ (e : error)) => e
+(nand _ (e : error)) => e
+(nor _ (e : error)) => e
+(xnor _ (e : error)) => e
+(nandnot _ (e : error)) => e
+(nnotand _ (e : error)) => e
+(shl (e : error) _) => e
+(shr (e : error) _) => e
+(getbit (e : error) _) => e
+(ngetbit (e : error) _) => e
+(neg (e : error) _) => e
+(popcnt (e : error) _) => e
+
+(add (e : error) number) => e
+(sub (e : error) number) => e
+(mul (e : error) number) => e
+(div (e : error) number) => e
+(mod (e : error) number) => e
+(and (e : error) number) => e
+(or (e : error) number) => e
+(xor (e : error) number) => e
+(andnot (e : error) number) => e
+(notand (e : error) number) => e
+(nand (e : error) number) => e
+(nor (e : error) number) => e
+(xnor (e : error) number) => e
+(nandnot (e : error) number) => e
+(nnotand (e : error) number) => e
+
+(add (x : number) y) => (add y x)
+(mul (x : number) y) => (mul y x)
+(and (x : number) y) => (and y x)
+(or (x : number) y) => (or y x)
+(xor (x : number) y) => (xor y x)
+
+(add x 0) => x
+(sub x 0) => x
+(mul x 1) => x
+(div x 1) => x
+(and x x) => x
+(or x x) => x
+
+(div _ 0) => (error DivModZero)
+(mod _ 0) => (error DivModZero)
+
+(sub x x) => (error_or x 0)
+(mul x 0) => (error_or x 0)
+(mul 0 x) => (error_or x 0)
+(div x x) => (error_or x 1)
+(mod x x) => (error_or x 0)
+(mod x 1) => (error_or x 0)
+(xor x x) => (error_or x 0)
+(andnot x x) => (error_or x 0)
+
+(neg (neg x)) => x
+(sub 0 y => (neg y)
+(add x (neg y)) => (sub x y)
+(sub x (neg y)) => (add x y)
+# (add (neg x) y) => (sub y x) # unsound
+
+(mod x 2) => (getbit x 0)
+(and x 1) => (getbit x 0)
+
+(sub 1 (getbit x b)) => (ngetbit x b)
+(sub 1 (ngetbit x b)) => (getbit x b)
+
+(getbit (getbit x b) 0) => (getbit x b)
+(getbit (ngetbit x b) 0) => (ngetbit x b)
+(ngetbit (getbit x b) 0) => (ngetbit x b)
+(ngetbit (ngetbit x b) 0) => (getbit x b)
+
+(ngetbit (and x y) b) => (getbit (nand x y) b)
+(ngetbit (or x y) b) => (getbit (nor x y) b)
+(ngetbit (xor x y) b) => (getbit (xnor x y) b)
+(ngetbit (andnot x y) b) => (getbit (nandnot x y) b)
+(ngetbit (notand x y) b) => (getbit (nnotand x y) b)
+(ngetbit (nand x y) b) => (getbit (and x y) b)
+(ngetbit (nor x y) b) => (getbit (or x y) b)
+(ngetbit (xnor x y) b) => (getbit (xor x y) b)
+(ngetbit (nandnot x y) b) => (getbit (andnot x y) b)
+(ngetbit (nnotand x y) b) => (getbit (notand x y) b)
+
+(getbit (shr x b) 0) => (getbit x b)
+(ngetbit (shr x b) 0) => (ngetbit x b)
+(shl (getbit x b) b) => (and x (shl 1 b))
+
+# Shifts
+(mul x (number y : pow2 b)) => (shl x b)
+(div x (number y : pow2 b)) => (shr x b)
+
+# Single-bit AND
+# x * y == x & y
+(mul (getbit x b) (getbit y b)) => (getbit (and x y) b)
+
+# Single-bit AND
+# (x + y) / 2 == x & y
+(div (add (getbit x b) (getbit y b)) 2) => (getbit (and x y) b)
+
+# Single-bit OR
+# (x + y) - (x & y) = x | y
+(sub (add (getbit x b) (getbit y b)) (and (getbit x b) (getbit y b))) => (getbit (or x y) b)
+(sub (add (getbit x b) (getbit y b)) (and (getbit y b) (getbit x b))) => (getbit (or y x) b)
+(add (getbit x b) (sub (getbit y b) (and (getbit x b) (getbit y b)))) => (getbit (or x y) b)
+(add (getbit x b) (sub (getbit y b) (and (getbit y b) (getbit x b)))) => (getbit (or y x) b)
+(add (sub (getbit y b) (and (getbit x b) (getbit y b))) (getbit x b)) => (getbit (or y x) b)
+(add (sub (getbit y b) (and (getbit y b) (getbit x b))) (getbit x b)) => (getbit (or x y) b)
+
+# Single-bit XOR
+# (x + y) % 2 == x ^ y
+(mod (add (getbit x b) (getbit y b)) 2) => (getbit (xor x y) b)
+
+# Single-bit XOR
+# (x + y) * !(x & y) == x ^ y
+(mul (add (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(mul (add (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+(mul (nand (getbit x b) (getbit y b)) (add (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(mul (nand (getbit x b) (getbit y b)) (add (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+
+# Single-bit XOR
+# (x | y) * !(x & y) == x ^ y
+(mul (or (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(mul (or (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+(mul (nand (getbit x b) (getbit y b)) (or (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(mul (nand (getbit x b) (getbit y b)) (or (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+
+# Single-bit XOR
+# (x + y) & !(x & y) == x ^ y
+(and (add (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(and (add (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+(and (nand (getbit x b) (getbit y b)) (add (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(and (nand (getbit x b) (getbit y b)) (add (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+
+# Single-bit XOR
+# (x | y) & !(x & y) == x ^ y
+(and (or (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(and (or (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+(and (nand (getbit x b) (getbit y b)) (or (getbit x b) (getbit y b))) => (getbit (xor x y) b)
+(and (nand (getbit x b) (getbit y b)) (or (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+
+# Single-bit ANDNOT
+# x * !y == x & !y
+(mul (getbit x b) (ngetbit y b)) => (getbit (andnot x y) b)
+
+# Single-bit NOTAND
+# !x * y == y & !x
+# (mul (ngetbit x b) (getbit y b)) => (getbit (andnot y x) b) # unsound
+
+# Single-bit NOR
+# !x * !y == !x & !y == !(x | y)
+(mul (ngetbit x b) (ngetbit y b)) => (getbit (nor x y) b)
+
+# Single-bit distribution
+(and (getbit x b) (getbit x b)) => (getbit (and x y) b)
+(or (getbit x b) (getbit x b)) => (getbit (or x y) b)
+(xor (getbit x b) (getbit x b)) => (getbit (xor x y) b)
+(andnot (getbit x b) (getbit x b)) => (getbit (andnot x y) b)
+(notand (getbit x b) (getbit x b)) => (getbit (notand x y) b)
+(nand (getbit x b) (getbit x b)) => (getbit (nand x y) b)
+(nor (getbit x b) (getbit x b)) => (getbit (nor x y) b)
+(xnor (getbit x b) (getbit x b)) => (getbit (xnor x y) b)
+(nandnot (getbit x b) (getbit x b)) => (getbit (nandnot x y) b)
+(nnotand (getbit x b) (getbit x b)) => (getbit (nnotand x y) b)
+(and (ngetbit x b) (ngetbit x b)) => (ngetbit (and x y) b)
+(or (ngetbit x b) (ngetbit x b)) => (ngetbit (or x y) b)
+(xor (ngetbit x b) (ngetbit x b)) => (ngetbit (xor x y) b)
+(andnot (ngetbit x b) (ngetbit x b)) => (ngetbit (andnot x y) b)
+(notand (ngetbit x b) (ngetbit x b)) => (ngetbit (notand x y) b)
+(nand (ngetbit x b) (ngetbit x b)) => (ngetbit (nand x y) b)
+(nor (ngetbit x b) (ngetbit x b)) => (ngetbit (nor x y) b)
+(xnor (ngetbit x b) (ngetbit x b)) => (ngetbit (xnor x y) b)
+(nandnot (ngetbit x b) (ngetbit x b)) => (ngetbit (nandnot x y) b)
+(nnotand (ngetbit x b) (ngetbit x b)) => (ngetbit (nnotand x y) b)
+
+# Multi-bit AND
+(mod x (number y : pow2 b)) => (and x (sub y 1))
+(add (and x (number m)) (and x (number n))) if (eq? (and m n) 0) => (and x (or m n))
+(add (getbit x 0) (and x (number m))) if (eq? (getbit n 0) 0) => (and x (or m 1))
+(add (and x (number m)) (getbit x 0)) if (eq? (getbit n 0) 0) => (and x (or m 1))
+(or (getbit x 0) (and x (number m))) => (and x (or m 1))
+(or (and x (number m)) (getbit x 0)) => (and x (or m 1))
+
+# Popcnt
+(add (getbit x b1) (getbit x b2)) if (not (eq? b1 b2)) =>
+  (popcnt (and x (or (lsh 1 b1) (lsh 1 b2)))
+(add (popcnt (and x (number m))) (getbit x b)) if (eq? (getbit m b) 0) =>
+  (popcnt (and x (or m (lsh 1 b))))
+(add (getbit x b) (popcnt (and x (number m)))) if (eq? (getbit m b) 0) =>
+  (popcnt (and x (or m (lsh 1 b))))
+(add (popcnt (and x (number m))) (popcnt (and x (number n)))) if (eq? (and m n) 0) =>
+  (popcnt (and x (or m n)))
+(or (getbit x b1) (getbit x b2)) =>
+  (popcnt (and x (or (lsh 1 b1) (lsh 1 b2)))
+(or (popcnt (and x (number m))) (getbit x b)) =>
+  (popcnt (and x (or m (lsh 1 b))))
+(or (getbit x b) (popcnt (and x (number m)))) =>
+  (popcnt (and x (or m (lsh 1 b))))
+(or (popcnt (and x (number m))) (popcnt (and x (number n)))) =>
+  (popcnt (and x (or m n)))
