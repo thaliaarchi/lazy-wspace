@@ -260,3 +260,11 @@ macro_rules! InstOp1(($v:pat) => {
     | Inst::Popcnt($v)
 });
 pub(crate) use InstOp1;
+
+macro_rules! InstNoRef(() => {
+    Inst::Number(_)
+    | Inst::Error(_)
+    | Inst::StackRef(_)
+    | Inst::CheckedStackRef(_)
+});
+pub(crate) use InstNoRef;

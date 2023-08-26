@@ -366,7 +366,7 @@ impl<'g> IndexMut<BBlockId> for Cfg<'g> {
 impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fn visit_exp(root: NodeRef, graph: &Graph, visited: &mut BitBox, new_visited: &mut BitBox) {
-            use crate::ir::{Inst, InstOp1, InstOp2, InstOp2U32};
+            use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32};
             if visited[root.index()] {
                 return;
             }
@@ -380,7 +380,7 @@ impl Display for Cfg<'_> {
                 InstOp2U32!(v, _) | InstOp1!(v) | Inst::HeapRef(v) => {
                     visit_exp(*v, graph, visited, new_visited);
                 }
-                _ => {}
+                InstNoRef!() => {}
             }
         }
 

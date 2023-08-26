@@ -7,7 +7,7 @@ use std::vec;
 
 use static_assertions::assert_not_impl_any;
 
-use crate::ir::Inst;
+use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32};
 
 /// Graph of IR nodes, indexed by [`NodeRef`].
 #[repr(transparent)]
@@ -20,6 +20,7 @@ pub struct Graph {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Node {
     inst: Inst,
+    def_uses: Vec<NodeRef>,
 }
 
 /// Reference to a [`Node`] in a [`Graph`].
@@ -52,9 +53,22 @@ impl Graph {
         // SAFETY: Graph is !Sync and any references are by slice.
         let nodes = unsafe { &mut *self.nodes.get() };
         let i = nodes.len();
+        let node = NodeRef::new(i);
         assert!(i as u32 != u32::MAX, "number of nodes exceeds u32");
+
+        match &inst {
+            InstOp2!(lhs, rhs) => {
+                nodes[lhs.index()].def_uses.push(node);
+                nodes[rhs.index()].def_uses.push(node);
+            }
+            InstOp2U32!(v, _) | InstOp1!(v) | Inst::HeapRef(v) => {
+                nodes[v.index()].def_uses.push(node);
+            }
+            InstNoRef!() => {}
+        }
+
         nodes.push(Node::new(inst));
-        NodeRef::new(i)
+        node
     }
 
     #[inline]
@@ -176,12 +190,20 @@ impl Debug for Graph {
 impl Node {
     #[inline]
     fn new(inst: Inst) -> Self {
-        Node { inst }
+        Node {
+            inst,
+            def_uses: Vec::new(),
+        }
     }
 
     #[inline]
     pub fn inst(&self) -> &Inst {
         &self.inst
+    }
+
+    #[inline]
+    pub fn def_uses(&self) -> &[NodeRef] {
+        &self.def_uses
     }
 }
 

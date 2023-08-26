@@ -4,7 +4,7 @@ use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer};
 
 use crate::error::NumberError;
-use crate::ir::{Inst, InstOp1, InstOp2, InstOp2U32, NodeRef, NodeTable};
+use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32, NodeRef, NodeTable};
 
 include!(concat!(env!("OUT_DIR"), "/rewrites.rs"));
 
@@ -20,7 +20,7 @@ impl NodeTable<'_> {
             InstOp2!(lhs, rhs) => self.insert_op2(inst, lhs, rhs),
             InstOp2U32!(lhs, rhs) => self.insert_op2_u32(inst, lhs, rhs),
             InstOp1!(v) => self.insert_op1(inst, v),
-            _ => self.insert(inst),
+            InstNoRef!() | Inst::HeapRef(_) => self.insert(inst),
         }
     }
 
