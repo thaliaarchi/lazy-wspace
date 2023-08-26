@@ -11,11 +11,11 @@ keywords = ["whitespace", "compiler", "interpreter"]
 categories = ["compilers"]
 
 [dependencies]
-arrayvec = "0.7"
 bitvec = "1.0"
 hashbrown = { version = "0.14", features = ["raw"] }
 rug = "1.20"
 simdutf8 = "0.1"
+smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"
 strum = { version = "0.25", features = ["derive"] }
 thiserror = "1.0"

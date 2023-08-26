@@ -5,7 +5,8 @@ use std::ops::{Deref, Index};
 use std::rc::Rc;
 use std::vec;
 
-use static_assertions::assert_not_impl_any;
+use smallvec::SmallVec;
+use static_assertions::{assert_eq_size, assert_not_impl_any};
 
 use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32};
 
@@ -20,7 +21,7 @@ pub struct Graph {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Node {
     inst: Inst,
-    def_uses: Vec<NodeRef>,
+    def_uses: SmallVec<[NodeRef; 4]>,
 }
 
 /// Reference to a [`Node`] in a [`Graph`].
@@ -31,6 +32,7 @@ pub struct NodeRef {
 }
 
 assert_not_impl_any!(Graph: Send, Sync);
+assert_eq_size!(SmallVec<[NodeRef; 4]>, Vec<NodeRef>);
 
 impl Graph {
     /// Construct a graph.
@@ -192,7 +194,7 @@ impl Node {
     fn new(inst: Inst) -> Self {
         Node {
             inst,
-            def_uses: Vec::new(),
+            def_uses: SmallVec::new(),
         }
     }
 

@@ -85,12 +85,12 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 name = "lazy-wspace"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "bitvec",
  "hashbrown",
  "lazy-wspace-generate",
  "rug",
  "simdutf8",
+ "smallvec",
  "static_assertions",
  "strum",
  "thiserror",
@@ -175,6 +175,12 @@ name = "simdutf8"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27f6278552951f1f2b8cf9da965d10969b2efdea95a6ec47987ab46edfe263a"
+
+[[package]]
+name = "smallvec"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
 
 [[package]]
 name = "static_assertions"
