@@ -6,14 +6,14 @@ use crate::ast::NumberLit;
 use crate::error::NumberError;
 use crate::ir::NodeRef;
 
-/// A node in a graph.
+/// An IR instruction.
 ///
 /// All operations evaluate the RHS first, then the LHS. In Whitespace, `mul`
 /// evaluates the LHS first, but its operands are swapped when constructing the
 /// IR, so it is also right-first. Synthetic operations have right-first
 /// evaluation order for consistency.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Node {
+pub enum Inst {
     // Values
     /// A constant number.
     ///
@@ -149,67 +149,67 @@ pub enum Node {
     HeapRef(NodeRef),
 }
 
-impl Node {
+impl Inst {
     #[inline]
     pub fn number<T: Into<Integer>>(v: T) -> Self {
-        Node::Number(Box::new(v.into()))
+        Inst::Number(Box::new(v.into()))
     }
 }
 
-impl From<&NumberLit> for Node {
+impl From<&NumberLit> for Inst {
     #[inline]
     fn from(n: &NumberLit) -> Self {
         match n {
-            NumberLit::Number(n) => Node::Number(Box::new(n.as_ref().clone())),
-            NumberLit::Empty => Node::Error(NumberError::EmptyLit),
+            NumberLit::Number(n) => Inst::Number(Box::new(n.as_ref().clone())),
+            NumberLit::Empty => Inst::Error(NumberError::EmptyLit),
         }
     }
 }
 
-impl From<NumberError> for Node {
+impl From<NumberError> for Inst {
     #[inline]
     fn from(err: NumberError) -> Self {
-        Node::Error(err)
+        Inst::Error(err)
     }
 }
 
-impl Display for Node {
+impl Display for Inst {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Node::Number(n) => write!(f, "number {n}"),
-            Node::Error(err) => write!(f, "error {err:?}"),
-            Node::Add(lhs, rhs) => write!(f, "add {lhs}, {rhs}"),
-            Node::Sub(lhs, rhs) => write!(f, "sub {lhs}, {rhs}"),
-            Node::Mul(lhs, rhs) => write!(f, "mul {lhs}, {rhs}"),
-            Node::Div(lhs, rhs) => write!(f, "div {lhs}, {rhs}"),
-            Node::Mod(lhs, rhs) => write!(f, "mod {lhs}, {rhs}"),
-            Node::And(lhs, rhs) => write!(f, "and {lhs}, {rhs}"),
-            Node::Or(lhs, rhs) => write!(f, "or {lhs}, {rhs}"),
-            Node::Xor(lhs, rhs) => write!(f, "xor {lhs}, {rhs}"),
-            Node::AndNot(lhs, rhs) => write!(f, "andnot {lhs}, {rhs}"),
-            Node::NotAnd(lhs, rhs) => write!(f, "notand {lhs}, {rhs}"),
-            Node::Nand(lhs, rhs) => write!(f, "nand {lhs}, {rhs}"),
-            Node::Nor(lhs, rhs) => write!(f, "nor {lhs}, {rhs}"),
-            Node::Xnor(lhs, rhs) => write!(f, "xnor {lhs}, {rhs}"),
-            Node::NandNot(lhs, rhs) => write!(f, "nandnot {lhs}, {rhs}"),
-            Node::NNotAnd(lhs, rhs) => write!(f, "nnotand {lhs}, {rhs}"),
-            Node::Shl(lhs, rhs) => write!(f, "shl {lhs}, {rhs}"),
-            Node::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
-            Node::Neg(v) => write!(f, "neg {v}"),
-            Node::GetBit(v, bit) => write!(f, "getbit {v}, {bit}"),
-            Node::NGetBit(v, bit) => write!(f, "ngetbit {v}, {bit}"),
-            Node::Popcnt(v) => write!(f, "popcnt {v}"),
-            Node::StackRef(n) => write!(f, "stack_ref {n}"),
-            Node::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
-            Node::HeapRef(addr) => write!(f, "heap_ref {addr}"),
+            Inst::Number(n) => write!(f, "number {n}"),
+            Inst::Error(err) => write!(f, "error {err:?}"),
+            Inst::Add(lhs, rhs) => write!(f, "add {lhs}, {rhs}"),
+            Inst::Sub(lhs, rhs) => write!(f, "sub {lhs}, {rhs}"),
+            Inst::Mul(lhs, rhs) => write!(f, "mul {lhs}, {rhs}"),
+            Inst::Div(lhs, rhs) => write!(f, "div {lhs}, {rhs}"),
+            Inst::Mod(lhs, rhs) => write!(f, "mod {lhs}, {rhs}"),
+            Inst::And(lhs, rhs) => write!(f, "and {lhs}, {rhs}"),
+            Inst::Or(lhs, rhs) => write!(f, "or {lhs}, {rhs}"),
+            Inst::Xor(lhs, rhs) => write!(f, "xor {lhs}, {rhs}"),
+            Inst::AndNot(lhs, rhs) => write!(f, "andnot {lhs}, {rhs}"),
+            Inst::NotAnd(lhs, rhs) => write!(f, "notand {lhs}, {rhs}"),
+            Inst::Nand(lhs, rhs) => write!(f, "nand {lhs}, {rhs}"),
+            Inst::Nor(lhs, rhs) => write!(f, "nor {lhs}, {rhs}"),
+            Inst::Xnor(lhs, rhs) => write!(f, "xnor {lhs}, {rhs}"),
+            Inst::NandNot(lhs, rhs) => write!(f, "nandnot {lhs}, {rhs}"),
+            Inst::NNotAnd(lhs, rhs) => write!(f, "nnotand {lhs}, {rhs}"),
+            Inst::Shl(lhs, rhs) => write!(f, "shl {lhs}, {rhs}"),
+            Inst::Shr(lhs, rhs) => write!(f, "shr {lhs}, {rhs}"),
+            Inst::Neg(v) => write!(f, "neg {v}"),
+            Inst::GetBit(v, bit) => write!(f, "getbit {v}, {bit}"),
+            Inst::NGetBit(v, bit) => write!(f, "ngetbit {v}, {bit}"),
+            Inst::Popcnt(v) => write!(f, "popcnt {v}"),
+            Inst::StackRef(n) => write!(f, "stack_ref {n}"),
+            Inst::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
+            Inst::HeapRef(addr) => write!(f, "heap_ref {addr}"),
         }
     }
 }
 
-impl PartialEq<Integer> for Node {
+impl PartialEq<Integer> for Inst {
     #[inline]
     fn eq(&self, other: &Integer) -> bool {
-        if let Node::Number(n) = self {
+        if let Inst::Number(n) = self {
             &**n == other
         } else {
             false
@@ -217,10 +217,10 @@ impl PartialEq<Integer> for Node {
     }
 }
 
-impl PartialEq<NumberError> for Node {
+impl PartialEq<NumberError> for Inst {
     #[inline]
     fn eq(&self, other: &NumberError) -> bool {
-        if let Node::Error(err) = self {
+        if let Inst::Error(err) = self {
             err == other
         } else {
             false
@@ -228,35 +228,35 @@ impl PartialEq<NumberError> for Node {
     }
 }
 
-macro_rules! NodeOp2(($lhs:pat, $rhs:pat) => {
-    Node::Add($lhs, $rhs)
-    | Node::Sub($lhs, $rhs)
-    | Node::Mul($lhs, $rhs)
-    | Node::Div($lhs, $rhs)
-    | Node::Mod($lhs, $rhs)
-    | Node::And($lhs, $rhs)
-    | Node::Or($lhs, $rhs)
-    | Node::Xor($lhs, $rhs)
-    | Node::AndNot($lhs, $rhs)
-    | Node::NotAnd($lhs, $rhs)
-    | Node::Nand($lhs, $rhs)
-    | Node::Nor($lhs, $rhs)
-    | Node::Xnor($lhs, $rhs)
-    | Node::NandNot($lhs, $rhs)
-    | Node::NNotAnd($lhs, $rhs)
+macro_rules! InstOp2(($lhs:pat, $rhs:pat) => {
+    Inst::Add($lhs, $rhs)
+    | Inst::Sub($lhs, $rhs)
+    | Inst::Mul($lhs, $rhs)
+    | Inst::Div($lhs, $rhs)
+    | Inst::Mod($lhs, $rhs)
+    | Inst::And($lhs, $rhs)
+    | Inst::Or($lhs, $rhs)
+    | Inst::Xor($lhs, $rhs)
+    | Inst::AndNot($lhs, $rhs)
+    | Inst::NotAnd($lhs, $rhs)
+    | Inst::Nand($lhs, $rhs)
+    | Inst::Nor($lhs, $rhs)
+    | Inst::Xnor($lhs, $rhs)
+    | Inst::NandNot($lhs, $rhs)
+    | Inst::NNotAnd($lhs, $rhs)
 });
-pub(crate) use NodeOp2;
+pub(crate) use InstOp2;
 
-macro_rules! NodeOp2U32(($lhs:pat, $rhs:pat) => {
-    Node::Shl($lhs, $rhs)
-    | Node::Shr($lhs, $rhs)
-    | Node::GetBit($lhs, $rhs)
-    | Node::NGetBit($lhs, $rhs)
+macro_rules! InstOp2U32(($lhs:pat, $rhs:pat) => {
+    Inst::Shl($lhs, $rhs)
+    | Inst::Shr($lhs, $rhs)
+    | Inst::GetBit($lhs, $rhs)
+    | Inst::NGetBit($lhs, $rhs)
 });
-pub(crate) use NodeOp2U32;
+pub(crate) use InstOp2U32;
 
-macro_rules! NodeOp1(($v:pat) => {
-    Node::Neg($v)
-    | Node::Popcnt($v)
+macro_rules! InstOp1(($v:pat) => {
+    Inst::Neg($v)
+    | Inst::Popcnt($v)
 });
-pub(crate) use NodeOp1;
+pub(crate) use InstOp1;

@@ -10,7 +10,7 @@ use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
 use rug::Integer;
 
-use crate::ir::{Graph, Node, NodeRef};
+use crate::ir::{Graph, Inst, Node, NodeRef};
 
 pub struct NodeTable<'g> {
     // Essentially a `HashMap<Node, NodeRef>`, that doesn't store a redundant
@@ -35,42 +35,42 @@ impl<'g> NodeTable<'g> {
     }
 
     #[inline]
-    pub fn get(&self, node: &Node) -> Option<NodeRef> {
-        let hash = make_hash(node);
-        match self.table.find(hash, |&key| &self.graph[key] == node) {
+    pub fn get(&self, inst: &Inst) -> Option<NodeRef> {
+        let hash = make_hash(inst);
+        match self.table.find(hash, |&key| &*self.graph[key] == inst) {
             Some(bucket) => Some(*unsafe { bucket.as_ref() }),
             None => None,
         }
     }
 
     #[inline]
-    pub fn insert(&mut self, node: Node) -> NodeRef {
-        let hash = make_hash(&node);
+    pub fn insert(&mut self, inst: Inst) -> NodeRef {
+        let hash = make_hash(&inst);
         match self.table.find_or_find_insert_slot(
             hash,
-            |&key| self.graph[key] == node,
-            |&key| make_hash(&self.graph[key]),
+            |&key| *self.graph[key] == inst,
+            |&key| make_hash(&*self.graph[key]),
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
-                let i = self.graph.push(node);
-                unsafe { self.table.insert_in_slot(hash, slot, i) };
-                i
+                let node = self.graph.insert(inst);
+                unsafe { self.table.insert_in_slot(hash, slot, node) };
+                node
             }
         }
     }
 
-    /// A specialization of `insert`, that avoids cloning `n` and constructing a
-    /// `Node::Number`, when an equivalent node already has been inserted.
+    /// A specialization of `insert`, that avoids cloning `n` and constructing
+    /// an `Inst::Number`, when an equivalent number has already been inserted.
     #[inline]
     pub fn insert_number(&mut self, n: &Integer) -> NodeRef {
         struct NodeNumberRef<'a>(&'a Integer);
         impl Hash for NodeNumberRef<'_> {
             #[inline]
             fn hash<H: Hasher>(&self, state: &mut H) {
-                let node = unsafe { Node::Number(Box::from_raw(NonNull::dangling().as_mut())) };
-                mem::discriminant(&node).hash(state);
-                mem::forget(node);
+                let inst = unsafe { Inst::Number(Box::from_raw(NonNull::dangling().as_mut())) };
+                mem::discriminant(&inst).hash(state);
+                mem::forget(inst);
                 self.0.hash(state);
             }
         }
@@ -78,21 +78,21 @@ impl<'g> NodeTable<'g> {
         let hash = make_hash(&NodeNumberRef(n));
         match self.table.find_or_find_insert_slot(
             hash,
-            |&key| &self.graph[key] == n,
-            |&key| make_hash(&self.graph[key]),
+            |&key| &*self.graph[key] == n,
+            |&key| make_hash(&*self.graph[key]),
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
-                let i = self.graph.push(Node::Number(Box::new(n.clone())));
-                unsafe { self.table.insert_in_slot(hash, slot, i) };
-                i
+                let node = self.graph.insert(Inst::Number(Box::new(n.clone())));
+                unsafe { self.table.insert_in_slot(hash, slot, node) };
+                node
             }
         }
     }
 
     #[inline]
-    pub fn insert_unique(&mut self, node: Node) -> NodeRef {
-        self.graph.push(node)
+    pub fn insert_unique(&mut self, inst: Inst) -> NodeRef {
+        self.graph.insert(inst)
     }
 
     #[inline]
@@ -190,12 +190,12 @@ mod tests {
     fn unique() {
         let graph = unsafe { Graph::new() };
         let mut table = NodeTable::new(&graph);
-        let x = table.insert(Node::number(1));
-        let y = table.insert(Node::number(2));
-        let z = table.insert(Node::Add(x, y));
-        let y2 = table.insert(Node::number(2));
-        let x2 = table.insert(Node::number(1));
-        let z2 = table.insert(Node::Add(x2, y2));
+        let x = table.insert(Inst::number(1));
+        let y = table.insert(Inst::number(2));
+        let z = table.insert(Inst::Add(x, y));
+        let y2 = table.insert(Inst::number(2));
+        let x2 = table.insert(Inst::number(1));
+        let z2 = table.insert(Inst::Add(x2, y2));
         assert_eq!(3, table.len());
         assert_eq!(x, x2);
         assert_eq!(y, y2);

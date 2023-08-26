@@ -1,6 +1,6 @@
 use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::ir::{Node, NodeRef, NodeTable};
+use crate::ir::{Inst, NodeRef, NodeTable};
 use crate::number::Op;
 
 /// Abstract stack for stack operations in a basic block.
@@ -153,13 +153,13 @@ impl AbstractStack {
             };
             let i = add_or_underflow(drops, n)?;
             let size = add_or_underflow(i, 1)?;
-            let node = if i >= self.accessed && lazy {
-                Node::CheckedStackRef(i)
+            let inst = if i >= self.accessed && lazy {
+                Inst::CheckedStackRef(i)
             } else {
                 self.accessed = self.accessed.max(size);
-                Node::StackRef(i)
+                Inst::StackRef(i)
             };
-            Ok(table.insert(node))
+            Ok(table.insert(inst))
         }
     }
 
@@ -188,16 +188,16 @@ impl AbstractStack {
     #[inline]
     pub fn apply_op(&mut self, op: Op, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
         let (x, y) = self.pop2(table)?;
-        let node = match op {
-            Op::Add => Node::Add(x, y),
-            Op::Sub => Node::Sub(x, y),
+        let inst = match op {
+            Op::Add => Inst::Add(x, y),
+            Op::Sub => Inst::Sub(x, y),
             // Mul has left-first evaluation order in Whitespace, unlike the
             // others, so the operands are swapped to make the IR consistent.
-            Op::Mul => Node::Mul(y, x),
-            Op::Div => Node::Div(x, y),
-            Op::Mod => Node::Mod(x, y),
+            Op::Mul => Inst::Mul(y, x),
+            Op::Div => Inst::Div(x, y),
+            Op::Mod => Inst::Mod(x, y),
         };
-        self.push(table.insert_peephole(node));
+        self.push(table.insert_peephole(inst));
         Ok(())
     }
 
@@ -272,8 +272,8 @@ impl AbstractStack {
                 let mut shift = 0;
                 for &v in &self.values[0..drops.min(self.values.len())] {
                     let i = drops - (shift + 1);
-                    if table[v] == Node::StackRef(i)
-                        || (i < self.accessed && table[v] == Node::CheckedStackRef(i))
+                    if *table[v] == Inst::StackRef(i)
+                        || (i < self.accessed && *table[v] == Inst::CheckedStackRef(i))
                     {
                         shift += 1;
                     } else {
@@ -370,7 +370,7 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            let r1 = graph1.push(Node::StackRef(0));
+            let r1 = graph1.insert(Inst::StackRef(0));
             let s1 = stack!([], 1, 1, Finite(0));
             (s1, r1)
         };
@@ -381,16 +381,16 @@ mod tests {
         let graph = unsafe { Graph::new() };
         let (s, top) = {
             let mut table = NodeTable::new(&graph);
-            let v0 = table.insert(Node::number(1));
-            let v1 = table.insert(Node::number(2));
+            let v0 = table.insert(Inst::number(1));
+            let v1 = table.insert(Inst::number(2));
             let mut s = stack!([v0, v1], 0, 0, Finite(0));
             let top = s.pop(&mut table).unwrap();
             (s, top)
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            let v0 = graph1.push(Node::number(1));
-            let v1 = graph1.push(Node::number(2));
+            let v0 = graph1.insert(Inst::number(1));
+            let v1 = graph1.insert(Inst::number(2));
             let s1 = stack!([v0], 0, 0, Finite(0));
             (s1, v1)
         };
@@ -401,15 +401,15 @@ mod tests {
         let graph = unsafe { Graph::new() };
         let (s, top) = {
             let mut table = NodeTable::new(&graph);
-            table.insert(Node::StackRef(1));
+            table.insert(Inst::StackRef(1));
             let mut s = stack!([], 3, 3, Finite(0));
             let top = s.pop(&mut table).unwrap();
             (s, top)
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            graph1.push(Node::StackRef(1));
-            let r1 = graph1.push(Node::StackRef(3));
+            graph1.insert(Inst::StackRef(1));
+            let r1 = graph1.insert(Inst::StackRef(3));
             let s1 = stack!([], 4, 4, Finite(0));
             (s1, r1)
         };
@@ -504,8 +504,8 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let s1 = {
-            graph1.push(Node::StackRef(0));
-            graph1.push(Node::StackRef(1));
+            graph1.insert(Inst::StackRef(0));
+            graph1.insert(Inst::StackRef(1));
             stack!([], 2, 0, Finite(0))
         };
         assert_eq!(s1, s);
@@ -530,9 +530,9 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let s1 = {
-            graph1.push(Node::CheckedStackRef(1));
-            graph1.push(Node::CheckedStackRef(2));
-            graph1.push(Node::StackRef(0));
+            graph1.insert(Inst::CheckedStackRef(1));
+            graph1.insert(Inst::CheckedStackRef(2));
+            graph1.insert(Inst::StackRef(0));
             stack!([], 3, 0, Finite(0))
         };
         assert_eq!(s1, s);

@@ -1,3 +1,3 @@
-mod node;
+mod inst;
 
-pub use node::*;
+pub use inst::*;

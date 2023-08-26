@@ -6,10 +6,7 @@ use bitvec::prelude::*;
 
 use crate::ast::{Inst, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
-use crate::ir::{
-    AbstractHeap, AbstractStack, Graph, LazySize, Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef,
-    NodeTable,
-};
+use crate::ir::{AbstractHeap, AbstractStack, Graph, LazySize, NodeRef, NodeTable};
 use crate::number::Op;
 
 /// Control-flow graph of IR basic blocks.
@@ -369,17 +366,18 @@ impl<'g> IndexMut<BBlockId> for Cfg<'g> {
 impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fn visit_exp(root: NodeRef, graph: &Graph, visited: &mut BitBox, new_visited: &mut BitBox) {
+            use crate::ir::{Inst, InstOp1, InstOp2, InstOp2U32};
             if visited[root.index()] {
                 return;
             }
             visited.set(root.index(), true);
             new_visited.set(root.index(), true);
-            match &graph[root] {
-                NodeOp2!(lhs, rhs) => {
+            match graph[root].inst() {
+                InstOp2!(lhs, rhs) => {
                     visit_exp(*lhs, graph, visited, new_visited);
                     visit_exp(*rhs, graph, visited, new_visited);
                 }
-                NodeOp2U32!(v, _) | NodeOp1!(v) | Node::HeapRef(v) => {
+                InstOp2U32!(v, _) | InstOp1!(v) | Inst::HeapRef(v) => {
                     visit_exp(*v, graph, visited, new_visited);
                 }
                 _ => {}
@@ -416,8 +414,8 @@ impl Display for Cfg<'_> {
                     }
                 }
                 for i in new_visited.iter_ones() {
-                    let i = NodeRef::new(i);
-                    writeln!(f, "    {i} = {}", self.graph[i])?;
+                    let node = NodeRef::new(i);
+                    writeln!(f, "    {node} = {}", self.graph[node].inst())?;
                 }
                 writeln!(f, "    {stmt}")?;
             }
@@ -433,8 +431,8 @@ impl Display for Cfg<'_> {
                 new_visited.fill(false);
                 visit_exp(val, self.graph, &mut visited, &mut new_visited);
                 for i in new_visited.iter_ones() {
-                    let i = NodeRef::new(i);
-                    writeln!(f, "    {i} = {}", self.graph[i])?;
+                    let node = NodeRef::new(i);
+                    writeln!(f, "    {node} = {}", self.graph[node].inst())?;
                 }
                 writeln!(f, "    push {val}")?;
             }
@@ -447,8 +445,8 @@ impl Display for Cfg<'_> {
                     let mut new_visited = bitbox![0; bb.table.len()];
                     visit_exp(*val, self.graph, &mut visited, &mut new_visited);
                     for i in new_visited.iter_ones() {
-                        let i = NodeRef::new(i);
-                        writeln!(f, "    {i} = {}", self.graph[i])?;
+                        let node = NodeRef::new(i);
+                        writeln!(f, "    {node} = {}", self.graph[node].inst())?;
                     }
                     write!(f, "br {cond:?} {val} {} {}", self[*l1], self[*l2])
                 }

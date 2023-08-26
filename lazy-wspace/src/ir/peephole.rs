@@ -4,53 +4,53 @@ use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer};
 
 use crate::error::NumberError;
-use crate::ir::{Node, NodeOp1, NodeOp2, NodeOp2U32, NodeRef, NodeTable};
+use crate::ir::{Inst, InstOp1, InstOp2, InstOp2U32, NodeRef, NodeTable};
 
 include!(concat!(env!("OUT_DIR"), "/rewrites.rs"));
 
 enum Action {
     New,
-    Insert(Node),
+    Insert(Inst),
     Use(NodeRef),
 }
 
 impl NodeTable<'_> {
-    pub fn insert_peephole(&mut self, node: Node) -> NodeRef {
-        match node {
-            NodeOp2!(lhs, rhs) => self.insert_op2(node, lhs, rhs),
-            NodeOp2U32!(lhs, rhs) => self.insert_op2_u32(node, lhs, rhs),
-            NodeOp1!(v) => self.insert_op1(node, v),
-            _ => self.insert(node),
+    pub fn insert_peephole(&mut self, inst: Inst) -> NodeRef {
+        match inst {
+            InstOp2!(lhs, rhs) => self.insert_op2(inst, lhs, rhs),
+            InstOp2U32!(lhs, rhs) => self.insert_op2_u32(inst, lhs, rhs),
+            InstOp1!(v) => self.insert_op1(inst, v),
+            _ => self.insert(inst),
         }
     }
 
-    fn insert_op2(&mut self, node: Node, lhs: NodeRef, rhs: NodeRef) -> NodeRef {
+    fn insert_op2(&mut self, inst: Inst, lhs: NodeRef, rhs: NodeRef) -> NodeRef {
         use Action::*;
-        use Node::*;
+        use Inst::*;
 
         macro_rules! getbit_op(
-            ($Node:ident ($x:expr, $y:expr)) => {
-                match (&self[*$x], &self[*$y]) {
+            ($Inst:ident ($x:expr, $y:expr)) => {
+                match (&*self[*$x], &*self[*$y]) {
                     (GetBit(x, bx), GetBit(y, by)) if bx == by => {
                         let b = *bx;
-                        Insert(GetBit(self.insert_peephole($Node(*x, *y)), b))
+                        Insert(GetBit(self.insert_peephole($Inst(*x, *y)), b))
                     }
                     _ => New,
                 }
             };
-            ($Node:ident ($x:expr, $y:expr), $b:expr) => {
+            ($Inst:ident ($x:expr, $y:expr), $b:expr) => {
                 {
                     let b = *$b;
-                    Insert(GetBit(self.insert_peephole($Node(*$x, *$y)), b))
+                    Insert(GetBit(self.insert_peephole($Inst(*$x, *$y)), b))
                 }
             };
         );
 
-        let action = match (&node, &self[lhs], &self[rhs]) {
+        let action = match (&inst, &*self[lhs], &*self[rhs]) {
             // Constant expressions
             (_, Number(lhs), Number(rhs)) => {
                 let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
-                let res = match &node {
+                let res = match &inst {
                     Add(..) => Ok((lhs + rhs).complete()),
                     Sub(..) => Ok((lhs - rhs).complete()),
                     Mul(..) => Ok((lhs * rhs).complete()),
@@ -66,13 +66,13 @@ impl NodeTable<'_> {
                     Nor(..) => Ok(!(lhs | rhs).complete()),
                     Xnor(..) => Ok(!(lhs ^ rhs).complete()),
                     NandNot(..) => Ok(!(lhs & (!rhs).complete())),
-                    _ => panic!("not a binary operator: {node}"),
+                    _ => panic!("not a binary operator: {inst}"),
                 };
-                let node = match res {
+                let inst = match res {
                     Ok(r) => Number(Box::new(r)),
                     Err(err) => Error(err),
                 };
-                Insert(node)
+                Insert(inst)
             }
 
             // Errors
@@ -129,7 +129,7 @@ impl NodeTable<'_> {
             // x + (y - (x & y)) = x | y
             (Add(..), GetBit(..), Sub(y1, z)) => {
                 let x1 = &lhs;
-                match &self[*z] {
+                match &*self[*z] {
                     And(x2, y2) if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 => {
                         getbit_op!(Or(x2, y2))
                     }
@@ -240,33 +240,33 @@ impl NodeTable<'_> {
 
             // Multi-bit AND
             (Mod(..), _, Number(rhs)) if rhs.is_power_of_two() => {
-                Insert(And(lhs, self.insert(Node::number(&**rhs - 1))))
+                Insert(And(lhs, self.insert(Inst::number(&**rhs - 1))))
             }
-            (Add(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&self[*m1], &self[*m2]) {
+            (Add(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&*self[*m1], &*self[*m2]) {
                 (Number(m), Number(n)) if (&**m & &**n).complete().cmp0() == Ordering::Equal => {
-                    Insert(And(*x1, self.insert(Node::number(&**m | &**n))))
+                    Insert(And(*x1, self.insert(Inst::number(&**m | &**n))))
                 }
                 _ => New,
             },
             (Add(..), GetBit(x1, 0), And(x2, m)) | (Add(..), And(x2, m), GetBit(x1, 0))
                 if x1 == x2 =>
             {
-                match &self[*m] {
+                match &*self[*m] {
                     Number(m) if !m.get_bit(0) => {
-                        Insert(And(*x1, self.insert(Node::number(&**m | 1))))
+                        Insert(And(*x1, self.insert(Inst::number(&**m | 1))))
                     }
                     _ => New,
                 }
             }
-            (Or(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&self[*m1], &self[*m2]) {
-                (Number(m), Number(n)) => Insert(And(*x1, self.insert(Node::number(&**m | &**n)))),
+            (Or(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&*self[*m1], &*self[*m2]) {
+                (Number(m), Number(n)) => Insert(And(*x1, self.insert(Inst::number(&**m | &**n)))),
                 _ => New,
             },
             (Or(..), GetBit(x1, 0), And(x2, m)) | (Add(..), And(x2, m), GetBit(x1, 0))
                 if x1 == x2 =>
             {
-                match &self[*m] {
-                    Number(m) => Insert(And(*x1, self.insert(Node::number(&**m | 1)))),
+                match &*self[*m] {
+                    Number(m) => Insert(And(*x1, self.insert(Inst::number(&**m | 1)))),
                     _ => New,
                 }
             }
@@ -274,18 +274,18 @@ impl NodeTable<'_> {
             // Popcnt
             (Add(..), GetBit(x1, bit1), GetBit(x2, bit2)) if x1 == x2 && bit1 != bit2 => {
                 let x = *x1;
-                let m = self.insert(Node::number(
+                let m = self.insert(Inst::number(
                     (Integer::ONE << bit1).complete() | (Integer::ONE << bit2).complete(),
                 ));
                 Insert(Popcnt(self.insert_peephole(And(x, m))))
             }
             (Add(..), Popcnt(a), GetBit(x2, bit)) | (Add(..), GetBit(x2, bit), Popcnt(a)) => {
-                match &self[*a] {
-                    And(x1, m) if x1 == x2 => match &self[*m] {
+                match &*self[*a] {
+                    And(x1, m) if x1 == x2 => match &*self[*m] {
                         Number(m) if !m.get_bit(*bit) => {
                             let x = *x1;
                             let m =
-                                self.insert(Node::number(&**m | (Integer::ONE << bit).complete()));
+                                self.insert(Inst::number(&**m | (Integer::ONE << bit).complete()));
                             Insert(Popcnt(self.insert_peephole(And(x, m))))
                         }
                         _ => New,
@@ -293,13 +293,13 @@ impl NodeTable<'_> {
                     _ => New,
                 }
             }
-            (Add(..), Popcnt(a), Popcnt(b)) => match (&self[*a], &self[*b]) {
-                (And(x1, m), And(x2, n)) if x1 == x2 => match (&self[*m], &self[*n]) {
+            (Add(..), Popcnt(a), Popcnt(b)) => match (&*self[*a], &*self[*b]) {
+                (And(x1, m), And(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
                     (Number(m), Number(n))
                         if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
                     {
                         let x = *x1;
-                        let mn = self.insert(Node::number(&**m | &**n));
+                        let mn = self.insert(Inst::number(&**m | &**n));
                         Insert(Popcnt(self.insert_peephole(And(x, mn))))
                     }
                     _ => New,
@@ -308,18 +308,18 @@ impl NodeTable<'_> {
             },
             (Or(..), GetBit(x1, bit1), GetBit(x2, bit2)) if x1 == x2 => {
                 let x = *x1;
-                let m = self.insert(Node::number(
+                let m = self.insert(Inst::number(
                     (Integer::ONE << bit1).complete() | (Integer::ONE << bit2).complete(),
                 ));
                 Insert(Popcnt(self.insert_peephole(And(x, m))))
             }
             (Or(..), Popcnt(a), GetBit(x2, bit)) | (Or(..), GetBit(x2, bit), Popcnt(a)) => {
-                match &self[*a] {
-                    And(x1, m) if x1 == x2 => match &self[*m] {
+                match &*self[*a] {
+                    And(x1, m) if x1 == x2 => match &*self[*m] {
                         Number(m) => {
                             let x = *x1;
                             let m =
-                                self.insert(Node::number(&**m | (Integer::ONE << bit).complete()));
+                                self.insert(Inst::number(&**m | (Integer::ONE << bit).complete()));
                             Insert(Popcnt(self.insert_peephole(And(x, m))))
                         }
                         _ => New,
@@ -327,11 +327,11 @@ impl NodeTable<'_> {
                     _ => New,
                 }
             }
-            (Or(..), Popcnt(a), Popcnt(b)) => match (&self[*a], &self[*b]) {
-                (And(x1, m), And(x2, n)) if x1 == x2 => match (&self[*m], &self[*n]) {
+            (Or(..), Popcnt(a), Popcnt(b)) => match (&*self[*a], &*self[*b]) {
+                (And(x1, m), And(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
                     (Number(m), Number(n)) => {
                         let x = *x1;
-                        let mn = self.insert(Node::number(&**m | &**n));
+                        let mn = self.insert(Inst::number(&**m | &**n));
                         Insert(Popcnt(self.insert_peephole(And(x, mn))))
                     }
                     _ => New,
@@ -343,22 +343,22 @@ impl NodeTable<'_> {
         };
 
         match action {
-            Action::New => self.insert(node),
-            Action::Insert(node) => self.insert_peephole(node),
+            Action::New => self.insert(inst),
+            Action::Insert(inst) => self.insert_peephole(inst),
             Action::Use(i) => return i,
         }
     }
 
-    fn insert_op2_u32(&mut self, node: Node, lhs: NodeRef, rhs: u32) -> NodeRef {
+    fn insert_op2_u32(&mut self, inst: Inst, lhs: NodeRef, rhs: u32) -> NodeRef {
         use Action::*;
-        use Node::*;
+        use Inst::*;
 
-        let action = match (&node, &self[lhs], rhs) {
+        let action = match (&inst, &*self[lhs], rhs) {
             // Constant expressions
-            (Shl(..), Number(lhs), _) => Insert(Node::number(&**lhs << rhs)),
-            (Shr(..), Number(lhs), _) => Insert(Node::number(&**lhs >> rhs)),
-            (GetBit(_, bit), Number(lhs), _) => Insert(Node::number(lhs.get_bit(*bit))),
-            (NGetBit(_, bit), Number(lhs), _) => Insert(Node::number(!lhs.get_bit(*bit))),
+            (Shl(..), Number(lhs), _) => Insert(Inst::number(&**lhs << rhs)),
+            (Shr(..), Number(lhs), _) => Insert(Inst::number(&**lhs >> rhs)),
+            (GetBit(_, bit), Number(lhs), _) => Insert(Inst::number(lhs.get_bit(*bit))),
+            (NGetBit(_, bit), Number(lhs), _) => Insert(Inst::number(!lhs.get_bit(*bit))),
 
             // Identities
             (GetBit(..), GetBit(..) | NGetBit(..), 0) => Use(lhs),
@@ -369,7 +369,7 @@ impl NodeTable<'_> {
             (GetBit(..), Shr(v, bit), 0) => Insert(GetBit(*v, *bit)),
             (NGetBit(..), Shr(v, bit), 0) => Insert(NGetBit(*v, *bit)),
             (Shl(..), GetBit(v, bit1), bit) if bit == *bit1 => {
-                Insert(And(*v, self.insert(Node::number(Integer::ONE << bit1))))
+                Insert(And(*v, self.insert(Inst::number(Integer::ONE << bit1))))
             }
 
             // Negation
@@ -404,24 +404,24 @@ impl NodeTable<'_> {
         };
 
         match action {
-            Action::New => self.insert(node),
-            Action::Insert(node) => self.insert_peephole(node),
+            Action::New => self.insert(inst),
+            Action::Insert(inst) => self.insert_peephole(inst),
             Action::Use(i) => return i,
         }
     }
 
-    fn insert_op1(&mut self, node: Node, v: NodeRef) -> NodeRef {
+    fn insert_op1(&mut self, inst: Inst, v: NodeRef) -> NodeRef {
         use Action::*;
-        use Node::*;
+        use Inst::*;
 
-        let action = match (&node, &self[v]) {
+        let action = match (&inst, &*self[v]) {
             // Constant expressions
             (_, Number(n)) => {
                 let n = &**n;
-                let r = match node {
+                let r = match inst {
                     Neg(_) => (-n).complete(),
                     Popcnt(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
-                    _ => panic!("not a unary operator: {node}"),
+                    _ => panic!("not a unary operator: {inst}"),
                 };
                 Insert(Number(r.into()))
             }
@@ -433,8 +433,8 @@ impl NodeTable<'_> {
         };
 
         match action {
-            Action::New => self.insert(node),
-            Action::Insert(node) => self.insert_peephole(node),
+            Action::New => self.insert(inst),
+            Action::Insert(inst) => self.insert_peephole(inst),
             Action::Use(i) => return i,
         }
     }

@@ -1,13 +1,13 @@
 use std::cell::UnsafeCell;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::ops::Index;
+use std::ops::{Deref, Index};
 use std::rc::Rc;
 use std::vec;
 
 use static_assertions::assert_not_impl_any;
 
-use crate::ir::Node;
+use crate::ir::Inst;
 
 /// Graph of IR nodes, indexed by [`NodeRef`].
 #[repr(transparent)]
@@ -15,6 +15,11 @@ pub struct Graph {
     nodes: UnsafeCell<Vec<Node>>,
     // Mark as !Sync
     marker: PhantomData<Rc<Node>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Node {
+    inst: Inst,
 }
 
 /// Reference to a [`Node`] in a [`Graph`].
@@ -43,12 +48,12 @@ impl Graph {
     }
 
     #[inline]
-    pub fn push(&self, node: Node) -> NodeRef {
+    pub fn insert(&self, inst: Inst) -> NodeRef {
         // SAFETY: Graph is !Sync and any references are by slice.
         let nodes = unsafe { &mut *self.nodes.get() };
         let i = nodes.len();
         assert!(i as u32 != u32::MAX, "number of nodes exceeds u32");
-        nodes.push(node);
+        nodes.push(Node::new(inst));
         NodeRef::new(i)
     }
 
@@ -67,6 +72,11 @@ impl Graph {
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &Node> {
         self.nodes().iter()
+    }
+
+    #[inline]
+    pub fn iter_insts(&self) -> impl Iterator<Item = &Inst> {
+        self.nodes().iter().map(Node::inst)
     }
 
     #[inline]
@@ -154,11 +164,33 @@ impl Debug for Graph {
 
             let entries = self
                 .iter_entries()
-                .map(|(i, node)| (DisplayDebug(i), DisplayDebug(node)));
+                .map(|(i, node)| (DisplayDebug(i), DisplayDebug(node.inst())));
             f.debug_map().entries(entries).finish()
         } else {
-            f.debug_map().entries(self.iter().enumerate()).finish()
+            let entries = self.iter_insts().enumerate();
+            f.debug_map().entries(entries).finish()
         }
+    }
+}
+
+impl Node {
+    #[inline]
+    fn new(inst: Inst) -> Self {
+        Node { inst }
+    }
+
+    #[inline]
+    pub fn inst(&self) -> &Inst {
+        &self.inst
+    }
+}
+
+impl Deref for Node {
+    type Target = Inst;
+
+    #[inline]
+    fn deref(&self) -> &Inst {
+        &self.inst
     }
 }
 
