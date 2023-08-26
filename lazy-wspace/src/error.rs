@@ -1,7 +1,9 @@
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::io::{self, stderr, stdout, ErrorKind, Write};
+use std::mem;
+use std::process;
 use std::rc::Rc;
-use std::{mem, process};
 use thiserror::Error;
 
 use rug::Integer;
@@ -9,7 +11,7 @@ use rug::Integer;
 use crate::ast::{ArgKind, Inst, LabelLit, PrintableInst};
 use crate::number::IntegerExt;
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
     #[error("incorrect usage")]
     Usage,
@@ -21,7 +23,7 @@ pub enum Error {
     Eager(#[from] EagerError),
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum ParseError {
     #[error("incomplete instruction opcode")]
     IncompleteInst,
@@ -77,7 +79,7 @@ pub enum EagerError {
     ReadInvalidUtf8,
 }
 
-#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
 pub enum UnderflowError {
     #[error("stack underflow")]
     Normal,
@@ -85,7 +87,7 @@ pub enum UnderflowError {
     SlideEmpty,
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 #[error("{msg}")]
 pub struct HaskellError {
     out: OutKind,
@@ -93,7 +95,7 @@ pub struct HaskellError {
     code: i32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OutKind {
     Stdout,
     Stderr,
@@ -129,6 +131,22 @@ impl PartialEq for EagerError {
 }
 
 impl Eq for EagerError {}
+
+impl Hash for EagerError {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        mem::discriminant(self).hash(state);
+        match self {
+            EagerError::Underflow(inst) => inst.hash(state),
+            EagerError::StoreOverflow => {}
+            EagerError::StoreNegative => {}
+            EagerError::RetUnderflow => {}
+            EagerError::Io(err) => Rc::as_ptr(err).hash(state),
+            EagerError::PrintcInvalid(_) => {}
+            EagerError::ReadEof => {}
+            EagerError::ReadInvalidUtf8 => {}
+        }
+    }
+}
 
 impl UnderflowError {
     #[inline]

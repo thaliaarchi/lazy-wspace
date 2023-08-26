@@ -3,9 +3,9 @@ use quote::quote;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Inst {
-    pub kind: InstKind,
     pub variant: &'static str,
     pub mnemonic: &'static str,
+    pub kind: InstKind,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -34,63 +34,112 @@ pub enum InstKind {
     /// Xnor(NodeRef, NodeRef),
     /// NandNot(NodeRef, NodeRef),
     /// NNotAnd(NodeRef, NodeRef),
+    /// Store(NodeRef, NodeRef),
     /// ```
     Op2,
     /// ```text
     /// Shl(NodeRef, u32),
     /// Shr(NodeRef, u32),
     /// GetBit(NodeRef, u32),
-    /// NotGetBit(NodeRef, u32),
+    /// NGetBit(NodeRef, u32),
     /// ```
     Op2U32,
     /// ```text
+    /// Eval(NodeRef),
     /// Neg(NodeRef),
     /// Popcnt(NodeRef),
+    /// Push(NodeRef),
     /// HeapRef(NodeRef),
     /// ```
     Op1,
     /// ```text
     /// StackRef(usize),
     /// CheckedStackRef(usize),
+    /// GuardStack(usize),
+    /// Drop(usize),
+    /// DropLazy(usize),
     /// ```
     Op1Usize,
+    /// ```text
+    /// Ret,
+    /// Exit,
+    /// ```
+    Op0,
+    /// ```text
+    /// Print(IoKind, NodeRef),
+    /// ```
+    Print,
+    /// ```text
+    /// Read(IoKind),
+    /// ```
+    Read,
+    /// ```text
+    /// Call(BBlockId, BBlockId),
+    /// ```
+    Call,
+    /// ```text
+    /// Jmp(BBlockId),
+    /// ```
+    Jmp,
+    /// ```text
+    /// Br(Cond, NodeRef, BBlockId, BBlockId),
+    /// ```
+    Br,
+    /// ```text
+    /// Panic(Box<Error>),
+    /// ```
+    Panic,
 }
 
-pub static NODES: [Inst; 26] = [
-    Inst::new(InstKind::Number, "Number", "number"),
-    Inst::new(InstKind::Error, "Error", "error"),
-    Inst::new(InstKind::Op2, "Add", "add"),
-    Inst::new(InstKind::Op2, "Sub", "sub"),
-    Inst::new(InstKind::Op2, "Mul", "mul"),
-    Inst::new(InstKind::Op2, "Div", "div"),
-    Inst::new(InstKind::Op2, "Mod", "mod"),
-    Inst::new(InstKind::Op2, "And", "and"),
-    Inst::new(InstKind::Op2, "Or", "or"),
-    Inst::new(InstKind::Op2, "Xor", "xor"),
-    Inst::new(InstKind::Op2, "AndNot", "andnot"),
-    Inst::new(InstKind::Op2, "NotAnd", "notand"),
-    Inst::new(InstKind::Op2, "Nand", "nand"),
-    Inst::new(InstKind::Op2, "Nor", "nor"),
-    Inst::new(InstKind::Op2, "Xnor", "xnor"),
-    Inst::new(InstKind::Op2, "NandNot", "nandnot"),
-    Inst::new(InstKind::Op2, "NNotAnd", "nnotand"),
-    Inst::new(InstKind::Op2U32, "Shl", "shl"),
-    Inst::new(InstKind::Op2U32, "Shr", "shr"),
-    Inst::new(InstKind::Op2U32, "GetBit", "getbit"),
-    Inst::new(InstKind::Op2U32, "NGetBit", "ngetbit"),
-    Inst::new(InstKind::Op1, "Neg", "neg"),
-    Inst::new(InstKind::Op1, "Popcnt", "popcnt"),
-    Inst::new(InstKind::Op1Usize, "StackRef", "stackref"),
-    Inst::new(InstKind::Op1Usize, "CheckedStackRef", "checkedstackref"),
-    Inst::new(InstKind::Op1, "HeapRef", "heapref"),
+pub static NODES: [Inst; 40] = [
+    Inst::new("Number", "value", InstKind::Number),
+    Inst::new("Error", "error", InstKind::Error),
+    Inst::new("Eval", "eval", InstKind::Op1),
+    Inst::new("Add", "add", InstKind::Op2),
+    Inst::new("Sub", "sub", InstKind::Op2),
+    Inst::new("Mul", "mul", InstKind::Op2),
+    Inst::new("Div", "div", InstKind::Op2),
+    Inst::new("Mod", "mod", InstKind::Op2),
+    Inst::new("And", "and", InstKind::Op2),
+    Inst::new("Or", "or", InstKind::Op2),
+    Inst::new("Xor", "xor", InstKind::Op2),
+    Inst::new("AndNot", "andnot", InstKind::Op2),
+    Inst::new("NotAnd", "notand", InstKind::Op2),
+    Inst::new("Nand", "nand", InstKind::Op2),
+    Inst::new("Nor", "nor", InstKind::Op2),
+    Inst::new("Xnor", "xnor", InstKind::Op2),
+    Inst::new("NandNot", "nandnot", InstKind::Op2),
+    Inst::new("NNotAnd", "nnotand", InstKind::Op2),
+    Inst::new("Shl", "shl", InstKind::Op2U32),
+    Inst::new("Shr", "shr", InstKind::Op2U32),
+    Inst::new("GetBit", "getbit", InstKind::Op2U32),
+    Inst::new("NGetBit", "ngetbit", InstKind::Op2U32),
+    Inst::new("Neg", "neg", InstKind::Op1),
+    Inst::new("Popcnt", "popcnt", InstKind::Op1),
+    Inst::new("StackRef", "stack_ref", InstKind::Op1Usize),
+    Inst::new("CheckedStackRef", "checked_stack_ref", InstKind::Op1Usize),
+    Inst::new("GuardStack", "guard_stack", InstKind::Op1Usize),
+    Inst::new("Push", "push", InstKind::Op1),
+    Inst::new("Drop", "drop", InstKind::Op1Usize),
+    Inst::new("DropLazy", "drop_lazy", InstKind::Op1Usize),
+    Inst::new("HeapRef", "heap_ref", InstKind::Op1),
+    Inst::new("Store", "store", InstKind::Op2),
+    Inst::new("Print", "print", InstKind::Print),
+    Inst::new("Read", "read", InstKind::Read),
+    Inst::new("Call", "call", InstKind::Call),
+    Inst::new("Jmp", "jmp", InstKind::Jmp),
+    Inst::new("Br", "br", InstKind::Br),
+    Inst::new("Ret", "ret", InstKind::Op0),
+    Inst::new("Exit", "exit", InstKind::Op0),
+    Inst::new("Panic", "panic", InstKind::Panic),
 ];
 
 impl Inst {
-    pub const fn new(kind: InstKind, variant: &'static str, mnemonic: &'static str) -> Self {
+    pub const fn new(variant: &'static str, mnemonic: &'static str, kind: InstKind) -> Self {
         Inst {
-            kind,
             variant,
             mnemonic,
+            kind,
         }
     }
 
@@ -99,28 +148,53 @@ impl Inst {
             let variant = syn::Ident::new(inst.variant, Span::call_site());
             match inst.kind {
                 InstKind::Number => quote! {
-                    Inst::#variant(n) => { let _: Box<Integer> = n; },
+                    Inst::#variant(n) => { let _: Box<Integer> = n; }
                 },
                 InstKind::Error => quote! {
-                    Inst::#variant(err) => { let _: NumberError = err; },
+                    Inst::#variant(err) => { let _: NumberError = err; }
                 },
                 InstKind::Op2 => quote! {
-                    Inst::#variant(lhs, rhs) => { let _: (NodeRef, NodeRef) = (lhs, rhs); },
+                    Inst::#variant(lhs, rhs) => { let _: (NodeRef, NodeRef) = (lhs, rhs); }
                 },
                 InstKind::Op2U32 => quote! {
-                    Inst::#variant(lhs, rhs) => { let _: (NodeRef, u32) = (lhs, rhs); },
+                    Inst::#variant(lhs, rhs) => { let _: (NodeRef, u32) = (lhs, rhs); }
                 },
                 InstKind::Op1 => quote! {
-                    Inst::#variant(v) => { let _: NodeRef = v; },
+                    Inst::#variant(v) => { let _: NodeRef = v; }
                 },
                 InstKind::Op1Usize => quote! {
-                    Inst::#variant(v) => { let _: usize = v; },
+                    Inst::#variant(v) => { let _: usize = v; }
+                },
+                InstKind::Op0 => quote! {
+                    Inst::#variant => { }
+                },
+                InstKind::Print => quote! {
+                    Inst::#variant(kind, v) => { let _: (IoKind, NodeRef) = (kind, v); }
+                },
+                InstKind::Read => quote! {
+                    Inst::#variant(kind) => { let _: IoKind = kind; }
+                },
+                InstKind::Call => quote! {
+                    Inst::#variant(target, next) => { let _: (BBlockId, BBlockId) = (target, next); }
+                },
+                InstKind::Jmp => quote! {
+                    Inst::#variant(target) => { let _: BBlockId = target; }
+                },
+                InstKind::Br => quote! {
+                    Inst::#variant(cond, v, t, e) => { let _: (Cond, NodeRef, BBlockId, BBlockId) = (cond, v, t, e); }
+                },
+                InstKind::Panic => quote! {
+                    Inst::#variant(err) => { let _: Box<Error> = err; }
                 },
             }
         });
         quote! {
-            const _: fn(Inst) = |inst| match inst {
-                #(#cases)*
+            const _: fn(Inst) = |inst| {
+                use crate::error::Error;
+                use crate::ir::*;
+                match inst {
+                    #(#cases)*
+                }
             };
         }
     }

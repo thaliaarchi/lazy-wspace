@@ -11,7 +11,7 @@ use strum::Display;
 use crate::error::{Error, NumberError, ParseError};
 use crate::number::IntegerExt;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
     Push(NumberLit),
     Dup,
@@ -40,7 +40,7 @@ pub enum Inst {
     ParseError(ParseError),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PrintableInst {
     Push(Rc<Integer>),
     Dup,
@@ -68,14 +68,14 @@ pub enum PrintableInst {
     Readi,
 }
 
-#[derive(Display, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum ArgKind {
     Number,
     Label,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NumberLit {
     Number(Rc<Integer>),
     Empty,

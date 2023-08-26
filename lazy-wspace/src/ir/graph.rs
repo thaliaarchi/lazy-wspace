@@ -8,7 +8,7 @@ use std::vec;
 use smallvec::SmallVec;
 use static_assertions::{assert_eq_size, assert_not_impl_any};
 
-use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32};
+use crate::ir::{Inst, InstUses0, InstUses1, InstUses2};
 
 /// Graph of IR nodes, indexed by [`NodeRef`].
 #[repr(transparent)]
@@ -59,14 +59,14 @@ impl Graph {
         assert!(i as u32 != u32::MAX, "number of nodes exceeds u32");
 
         match &inst {
-            InstOp2!(lhs, rhs) => {
+            InstUses0!() => {}
+            InstUses1!(v) => {
+                nodes[v.index()].def_uses.push(node);
+            }
+            InstUses2!(lhs, rhs) => {
                 nodes[lhs.index()].def_uses.push(node);
                 nodes[rhs.index()].def_uses.push(node);
             }
-            InstOp2U32!(v, _) | InstOp1!(v) | Inst::HeapRef(v) => {
-                nodes[v.index()].def_uses.push(node);
-            }
-            InstNoRef!() => {}
         }
 
         nodes.push(Node::new(inst));

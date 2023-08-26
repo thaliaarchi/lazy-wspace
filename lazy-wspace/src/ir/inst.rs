@@ -1,10 +1,11 @@
 use std::fmt::{self, Debug, Display, Formatter};
 
 use rug::Integer;
+use strum::Display;
 
 use crate::ast::NumberLit;
-use crate::error::NumberError;
-use crate::ir::NodeRef;
+use crate::error::{Error, NumberError};
+use crate::ir::{BBlockId, NodeRef};
 
 /// An IR instruction.
 ///
@@ -28,6 +29,11 @@ pub enum Inst {
     /// %r = error {kind}
     /// ```
     Error(NumberError),
+
+    /// ```ir
+    /// eval %v
+    /// ```
+    Eval(NodeRef),
 
     // Binary operations
     /// ```ir
@@ -140,6 +146,22 @@ pub enum Inst {
     /// %r = checked_stack_ref {index}
     /// ```
     CheckedStackRef(usize),
+    /// ```ir
+    /// guard_stack {size}
+    /// ```
+    GuardStack(usize),
+    /// ```ir
+    /// push %v
+    /// ```
+    Push(NodeRef),
+    /// ```ir
+    /// drop {count}
+    /// ```
+    Drop(usize),
+    /// ```ir
+    /// drop_lazy {count}
+    /// ```
+    DropLazy(usize),
 
     /// Heap reference.
     ///
@@ -147,6 +169,59 @@ pub enum Inst {
     /// %r = heap_ref %addr
     /// ```
     HeapRef(NodeRef),
+    /// ```ir
+    /// store %addr, %v
+    /// ```
+    Store(NodeRef, NodeRef),
+
+    /// ```ir
+    /// print {kind}, %v
+    /// ```
+    Print(IoKind, NodeRef),
+    /// ```ir
+    /// %r = read {kind}
+    /// ```
+    Read(IoKind),
+
+    /// ```ir
+    /// call @target, @next
+    /// ```
+    Call(BBlockId, BBlockId),
+    /// ```ir
+    /// jmp @target
+    /// ```
+    Jmp(BBlockId),
+    /// ```ir
+    /// br {cond}, %v, @then, @else
+    /// ```
+    Br(Cond, NodeRef, BBlockId, BBlockId),
+    /// ```ir
+    /// ret
+    /// ```
+    Ret,
+    /// ```ir
+    /// exit
+    /// ```
+    Exit,
+    /// ```ir
+    /// panic {err}
+    /// ```
+    // Boxed to keep the size smaller.
+    Panic(Box<Error>),
+}
+
+#[derive(Copy, Clone, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
+pub enum Cond {
+    Zero,
+    Neg,
+}
+
+#[derive(Copy, Clone, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
+pub enum IoKind {
+    Char,
+    Int,
 }
 
 impl Inst {
@@ -178,6 +253,7 @@ impl Display for Inst {
         match self {
             Inst::Number(n) => write!(f, "number {n}"),
             Inst::Error(err) => write!(f, "error {err:?}"),
+            Inst::Eval(v) => write!(f, "eval {v}"),
             Inst::Add(lhs, rhs) => write!(f, "add {lhs}, {rhs}"),
             Inst::Sub(lhs, rhs) => write!(f, "sub {lhs}, {rhs}"),
             Inst::Mul(lhs, rhs) => write!(f, "mul {lhs}, {rhs}"),
@@ -201,7 +277,20 @@ impl Display for Inst {
             Inst::Popcnt(v) => write!(f, "popcnt {v}"),
             Inst::StackRef(n) => write!(f, "stack_ref {n}"),
             Inst::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
+            Inst::GuardStack(size) => write!(f, "guard_stack {size}"),
+            Inst::Push(v) => write!(f, "push {v}"),
+            Inst::Drop(count) => write!(f, "drop {count}"),
+            Inst::DropLazy(count) => write!(f, "drop_lazy {count}"),
             Inst::HeapRef(addr) => write!(f, "heap_ref {addr}"),
+            Inst::Store(addr, v) => write!(f, "store {addr}, {v}"),
+            Inst::Print(kind, v) => write!(f, "print {kind}, {v}"),
+            Inst::Read(kind) => write!(f, "read {kind}"),
+            Inst::Call(target, next) => write!(f, "call {target}, {next}"),
+            Inst::Jmp(target) => write!(f, "jmp {target}"),
+            Inst::Br(cond, v, t, e) => write!(f, "br {cond}, {v}, {t}, {e}"),
+            Inst::Ret => write!(f, "ret"),
+            Inst::Exit => write!(f, "exit"),
+            Inst::Panic(err) => write!(f, "panic {err:?}"),
         }
     }
 }
@@ -228,7 +317,39 @@ impl PartialEq<NumberError> for Inst {
     }
 }
 
-macro_rules! InstOp2(($lhs:pat, $rhs:pat) => {
+macro_rules! InstUses0(() => {
+    Inst::Number(_)
+    | Inst::Error(_)
+    | Inst::StackRef(_)
+    | Inst::CheckedStackRef(_)
+    | Inst::GuardStack(_)
+    | Inst::Drop(_)
+    | Inst::DropLazy(_)
+    | Inst::Read(_)
+    | Inst::Call(_, _)
+    | Inst::Jmp(_)
+    | Inst::Ret
+    | Inst::Exit
+    | Inst::Panic(_)
+});
+pub(crate) use InstUses0;
+
+macro_rules! InstUses1(($v:pat) => {
+    Inst::Eval($v)
+    | Inst::Neg($v)
+    | Inst::Popcnt($v)
+    | Inst::Shl($v, _)
+    | Inst::Shr($v, _)
+    | Inst::GetBit($v, _)
+    | Inst::NGetBit($v, _)
+    | Inst::Push($v)
+    | Inst::HeapRef($v)
+    | Inst::Print(_, $v)
+    | Inst::Br(_, $v, _, _)
+});
+pub(crate) use InstUses1;
+
+macro_rules! InstUses2(($lhs:pat, $rhs:pat) => {
     Inst::Add($lhs, $rhs)
     | Inst::Sub($lhs, $rhs)
     | Inst::Mul($lhs, $rhs)
@@ -244,27 +365,6 @@ macro_rules! InstOp2(($lhs:pat, $rhs:pat) => {
     | Inst::Xnor($lhs, $rhs)
     | Inst::NandNot($lhs, $rhs)
     | Inst::NNotAnd($lhs, $rhs)
+    | Inst::Store($lhs, $rhs)
 });
-pub(crate) use InstOp2;
-
-macro_rules! InstOp2U32(($lhs:pat, $rhs:pat) => {
-    Inst::Shl($lhs, $rhs)
-    | Inst::Shr($lhs, $rhs)
-    | Inst::GetBit($lhs, $rhs)
-    | Inst::NGetBit($lhs, $rhs)
-});
-pub(crate) use InstOp2U32;
-
-macro_rules! InstOp1(($v:pat) => {
-    Inst::Neg($v)
-    | Inst::Popcnt($v)
-});
-pub(crate) use InstOp1;
-
-macro_rules! InstNoRef(() => {
-    Inst::Number(_)
-    | Inst::Error(_)
-    | Inst::StackRef(_)
-    | Inst::CheckedStackRef(_)
-});
-pub(crate) use InstNoRef;
+pub(crate) use InstUses2;

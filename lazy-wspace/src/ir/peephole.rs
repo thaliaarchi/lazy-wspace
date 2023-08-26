@@ -4,7 +4,7 @@ use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer};
 
 use crate::error::NumberError;
-use crate::ir::{Inst, InstNoRef, InstOp1, InstOp2, InstOp2U32, NodeRef, NodeTable};
+use crate::ir::{Inst, NodeRef, NodeTable};
 
 include!(concat!(env!("OUT_DIR"), "/rewrites.rs"));
 
@@ -17,10 +17,45 @@ enum Action {
 impl NodeTable<'_> {
     pub fn insert_peephole(&mut self, inst: Inst) -> NodeRef {
         match inst {
-            InstOp2!(lhs, rhs) => self.insert_op2(inst, lhs, rhs),
-            InstOp2U32!(lhs, rhs) => self.insert_op2_u32(inst, lhs, rhs),
-            InstOp1!(v) => self.insert_op1(inst, v),
-            InstNoRef!() | Inst::HeapRef(_) => self.insert(inst),
+            Inst::Add(lhs, rhs)
+            | Inst::Sub(lhs, rhs)
+            | Inst::Mul(lhs, rhs)
+            | Inst::Div(lhs, rhs)
+            | Inst::Mod(lhs, rhs)
+            | Inst::And(lhs, rhs)
+            | Inst::Or(lhs, rhs)
+            | Inst::Xor(lhs, rhs)
+            | Inst::AndNot(lhs, rhs)
+            | Inst::NotAnd(lhs, rhs)
+            | Inst::Nand(lhs, rhs)
+            | Inst::Nor(lhs, rhs)
+            | Inst::Xnor(lhs, rhs)
+            | Inst::NandNot(lhs, rhs)
+            | Inst::NNotAnd(lhs, rhs) => self.insert_op2(inst, lhs, rhs),
+            Inst::Shl(lhs, rhs)
+            | Inst::Shr(lhs, rhs)
+            | Inst::GetBit(lhs, rhs)
+            | Inst::NGetBit(lhs, rhs) => self.insert_op2_u32(inst, lhs, rhs),
+            Inst::Neg(v) | Inst::Popcnt(v) => self.insert_op1(inst, v),
+            Inst::Number(_)
+            | Inst::Error(_)
+            | Inst::Eval(_)
+            | Inst::StackRef(_)
+            | Inst::CheckedStackRef(_)
+            | Inst::GuardStack(_)
+            | Inst::Push(_)
+            | Inst::Drop(_)
+            | Inst::DropLazy(_)
+            | Inst::HeapRef(_)
+            | Inst::Store(_, _)
+            | Inst::Print(_, _)
+            | Inst::Read(_)
+            | Inst::Call(_, _)
+            | Inst::Jmp(_)
+            | Inst::Br(_, _, _, _)
+            | Inst::Ret
+            | Inst::Exit
+            | Inst::Panic(_) => self.insert(inst),
         }
     }
 
