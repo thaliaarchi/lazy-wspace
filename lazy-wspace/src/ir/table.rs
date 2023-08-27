@@ -112,6 +112,22 @@ impl<'g> NodeTable<'g> {
     pub fn graph(&self) -> &'g Graph {
         self.graph
     }
+
+    /// Clones the table for use with another graph. It is intended to be used
+    /// in tests, with a clone of the graph.
+    ///
+    /// # Safety
+    ///
+    /// The new graph must be a superset of the old graph, for all contained
+    /// `NodeRef`s to be valid.
+    #[cfg(test)]
+    #[inline]
+    pub(crate) unsafe fn clone_with_graph<'a>(&self, graph: &'a Graph) -> NodeTable<'a> {
+        NodeTable {
+            table: self.table.clone(),
+            graph,
+        }
+    }
 }
 
 #[inline]

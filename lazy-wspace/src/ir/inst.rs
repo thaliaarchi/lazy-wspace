@@ -137,9 +137,9 @@ pub enum Inst {
     /// `guard_stack`.
     ///
     /// ```ir
-    /// %r = stack_ref {index}
+    /// %r = stack_ref {index} %guard
     /// ```
-    StackRef(usize),
+    StackRef(usize, NodeRef),
     /// Checked stack reference.
     ///
     /// ```ir
@@ -147,7 +147,7 @@ pub enum Inst {
     /// ```
     CheckedStackRef(usize),
     /// ```ir
-    /// guard_stack {size}
+    /// %guard = guard_stack {size}
     /// ```
     GuardStack(usize),
     /// ```ir
@@ -210,14 +210,14 @@ pub enum Inst {
     Panic(Box<Error>),
 }
 
-#[derive(Copy, Clone, Debug, Display, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum Cond {
     Zero,
     Neg,
 }
 
-#[derive(Copy, Clone, Debug, Display, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum IoKind {
     Char,
@@ -275,7 +275,7 @@ impl Display for Inst {
             Inst::GetBit(v, bit) => write!(f, "getbit {v}, {bit}"),
             Inst::NGetBit(v, bit) => write!(f, "ngetbit {v}, {bit}"),
             Inst::Popcnt(v) => write!(f, "popcnt {v}"),
-            Inst::StackRef(n) => write!(f, "stack_ref {n}"),
+            Inst::StackRef(n, guard) => write!(f, "stack_ref {n}, {guard}"),
             Inst::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
             Inst::GuardStack(size) => write!(f, "guard_stack {size}"),
             Inst::Push(v) => write!(f, "push {v}"),
@@ -320,7 +320,6 @@ impl PartialEq<NumberError> for Inst {
 macro_rules! InstUses0(() => {
     Inst::Number(_)
     | Inst::Error(_)
-    | Inst::StackRef(_)
     | Inst::CheckedStackRef(_)
     | Inst::GuardStack(_)
     | Inst::Drop(_)
@@ -338,6 +337,7 @@ macro_rules! InstUses1(($v:pat) => {
     Inst::Eval($v)
     | Inst::Neg($v)
     | Inst::Popcnt($v)
+    | Inst::StackRef(_, $v)
     | Inst::Shl($v, _)
     | Inst::Shr($v, _)
     | Inst::GetBit($v, _)

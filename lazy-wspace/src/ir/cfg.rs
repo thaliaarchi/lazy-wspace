@@ -238,7 +238,7 @@ impl<'g> BBlockBuilder<'g> {
             Ast::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
             Ast::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
             Ast::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
-            Ast::Drop => self.do_stack(inst, |s, _| s.drop_eager(1))?,
+            Ast::Drop => self.do_stack(inst, |s, t| s.drop_eager(1, t))?,
             Ast::Slide(n) => self.do_stack(inst, |s, t| s.slide(n.into(), t))?,
             Ast::Add => self.do_stack(inst, |s, t| s.apply_op(Op::Add, t))?,
             Ast::Sub => self.do_stack(inst, |s, t| s.apply_op(Op::Sub, t))?,
@@ -300,14 +300,7 @@ impl<'g> BBlockBuilder<'g> {
     where
         F: FnOnce(&mut AbstractStack, &mut NodeTable) -> Result<T, UnderflowError>,
     {
-        let pre = self.stack.accessed();
-        let res = f(&mut self.stack, &mut self.table);
-        let post = self.stack.accessed();
-        if post > pre {
-            let guard = self.table.insert_unique(Inst::GuardStack(post));
-            self.stmts.push(guard);
-        }
-        res.map_err(|err| err.to_error(inst))
+        f(&mut self.stack, &mut self.table).map_err(|err| err.to_error(inst))
     }
 
     fn finish(mut self) -> BBlock<'g> {

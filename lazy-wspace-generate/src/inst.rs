@@ -8,7 +8,7 @@ pub struct Inst {
     pub kind: InstKind,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InstKind {
     /// ```text
     /// Number(Box<Integer>),
@@ -53,7 +53,6 @@ pub enum InstKind {
     /// ```
     Op1,
     /// ```text
-    /// StackRef(usize),
     /// CheckedStackRef(usize),
     /// GuardStack(usize),
     /// Drop(usize),
@@ -65,6 +64,10 @@ pub enum InstKind {
     /// Exit,
     /// ```
     Op0,
+    /// ```text
+    /// StackRef(usize, NodeRef),
+    /// ```
+    StackRef,
     /// ```text
     /// Print(IoKind, NodeRef),
     /// ```
@@ -116,7 +119,7 @@ pub static NODES: [Inst; 40] = [
     Inst::new("NGetBit", "ngetbit", InstKind::Op2U32),
     Inst::new("Neg", "neg", InstKind::Op1),
     Inst::new("Popcnt", "popcnt", InstKind::Op1),
-    Inst::new("StackRef", "stack_ref", InstKind::Op1Usize),
+    Inst::new("StackRef", "stack_ref", InstKind::StackRef),
     Inst::new("CheckedStackRef", "checked_stack_ref", InstKind::Op1Usize),
     Inst::new("GuardStack", "guard_stack", InstKind::Op1Usize),
     Inst::new("Push", "push", InstKind::Op1),
@@ -167,6 +170,9 @@ impl Inst {
                 },
                 InstKind::Op0 => quote! {
                     Inst::#variant => { }
+                },
+                InstKind::StackRef => quote! {
+                    Inst::#variant(n, guard) => { let _: (usize, NodeRef) = (n, guard); }
                 },
                 InstKind::Print => quote! {
                     Inst::#variant(kind, v) => { let _: (IoKind, NodeRef) = (kind, v); }

@@ -40,7 +40,7 @@ impl NodeTable<'_> {
             Inst::Number(_)
             | Inst::Error(_)
             | Inst::Eval(_)
-            | Inst::StackRef(_)
+            | Inst::StackRef(_, _)
             | Inst::CheckedStackRef(_)
             | Inst::GuardStack(_)
             | Inst::Push(_)
