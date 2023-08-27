@@ -147,7 +147,7 @@ pub enum Inst {
     /// ```
     CheckedStackRef(usize),
     /// ```ir
-    /// %guard = guard_stack {size}
+    /// %guard = guard_stack {len}
     /// ```
     GuardStack(usize),
     /// ```ir
@@ -277,7 +277,7 @@ impl Display for Inst {
             Inst::Popcnt(v) => write!(f, "popcnt {v}"),
             Inst::StackRef(n, guard) => write!(f, "stack_ref {n}, {guard}"),
             Inst::CheckedStackRef(n) => write!(f, "checked_stack_ref {n}"),
-            Inst::GuardStack(size) => write!(f, "guard_stack {size}"),
+            Inst::GuardStack(len) => write!(f, "guard_stack {len}"),
             Inst::Push(v) => write!(f, "push {v}"),
             Inst::Drop(count) => write!(f, "drop {count}"),
             Inst::DropLazy(count) => write!(f, "drop_lazy {count}"),
