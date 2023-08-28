@@ -8,6 +8,16 @@ use syn::{
     PathArguments, Type, TypePath, Visibility,
 };
 
+// TODO:
+// - Display impl
+// - #[output] fields
+// - #[doc] support
+// - Initialization of and pushing to dynamic-length inputs
+//   - Impl From<Vec<NodeRef>>, when it has only one #[input], a Vec<NodeRef>
+// - Impl a Node trait
+// - Marking non-#[input] field as #[default] to exclude it from new
+// - Support for arrayvec/smallvec/tinyvec backing structures
+
 pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     if !input.generics.params.is_empty() {
         emit_error!(input.generics.params, "generics are not allowed");
@@ -196,7 +206,6 @@ enum Input {
     Array(usize),
     Tuple(usize),
     Vec,
-    // TODO: arrayvec/smallvec/tinyvec
 }
 
 fn process_fields(fields: impl IntoIterator<Item = Field>) -> Vec<(Field, Option<Input>)> {
