@@ -1,3 +1,5 @@
+pub mod nodes;
+
 mod cfg;
 mod graph;
 mod heap;

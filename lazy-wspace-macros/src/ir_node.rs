@@ -4,8 +4,8 @@ use proc_macro2::TokenStream;
 use proc_macro_error::{abort, emit_error};
 use quote::quote;
 use syn::{
-    Expr, Field, Fields, GenericArgument, Index, ItemStruct, Lit, PathArguments, Type, TypePath,
-    Visibility,
+    punctuated::Punctuated, Expr, Field, Fields, GenericArgument, Index, ItemStruct, Lit,
+    PathArguments, Type, TypePath, Visibility,
 };
 
 pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
@@ -16,18 +16,20 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     }
 
     let fields = match input.fields {
-        Fields::Named(fields) => {
-            let mut idents = HashSet::new();
-            for field in &fields.named {
-                if !idents.insert(field.ident.as_ref().unwrap().to_string()) {
-                    emit_error!(field, "duplicate field name");
-                }
-            }
-            process_fields(fields.named)
-        }
+        Fields::Named(fields) => fields.named,
         Fields::Unnamed(_) => abort!(input.ident, "tuple structs are not supported"),
-        Fields::Unit => abort!(input.ident, "unit structs are not supported"),
+        Fields::Unit => Punctuated::new(),
     };
+
+    let mut idents = HashSet::new();
+    for field in &fields {
+        let ident = field.ident.as_ref().unwrap().to_string();
+        if !idents.insert(ident) {
+            emit_error!(field, "duplicate field name");
+        }
+    }
+
+    let fields = process_fields(fields);
 
     let mut min_len = 0;
     let mut fixed_len = true;
@@ -50,23 +52,26 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     let mut new_params = Vec::new();
     let mut new_elements = Vec::new();
     let mut methods = Vec::new();
+    let mut debug_fields = Vec::new();
     let mut other_fields = Vec::new();
+
     let mut i = 0;
     for (field, input) in &fields {
         let ident = field.ident.as_ref().unwrap();
         let start = i;
-        let (ty, elems, getter) = match input {
+        let (ty, elems, getter, debug) = match input {
             Some(Input::Single) => {
                 i += 1;
                 (
                     quote! { NodeRef },
                     quote! { #ident },
                     quote! { *self._inputs.get_unchecked(#start) },
+                    quote! { &self.#ident() },
                 )
             }
             Some(Input::Array(n)) => {
                 i += n;
-                let elements = (start..start + n).map(|i| quote! { #ident[#i] });
+                let elements = (0..*n).map(|i| quote! { #ident[#i] });
                 (
                     quote! { &[NodeRef; #n] },
                     quote! { #(#elements),* },
@@ -74,6 +79,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                         let slice = self._inputs.get_unchecked(#start..#start + #n);
                         &*(slice as *const [NodeRef] as *const [NodeRef; #n])
                     },
+                    quote! { &self.#ident() },
                 )
             }
             Some(Input::Tuple(n)) => {
@@ -82,7 +88,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                 let values = (start..start + n).map(|i| {
                     quote! { *self._inputs.get_unchecked(#i) }
                 });
-                let elements = (start..start + n).map(|i| {
+                let elements = (0..*n).map(|i| {
                     let index = Index::from(i);
                     quote! { #ident.#index }
                 });
@@ -90,29 +96,42 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                     quote! { (#(#types),*) },
                     quote! { #(#elements),* },
                     quote! { (#(#values),*) },
+                    quote! { &self.#ident() },
                 )
             }
             Some(Input::Vec) => (
                 quote! { &[NodeRef] },
                 quote! {},
                 quote! { self._inputs.get_unchecked(#min_len..) },
+                quote! { &self.#ident() },
             ),
             None => {
                 other_fields.push(field);
-                continue;
+                let ty = &field.ty;
+                (
+                    quote! { #ty },
+                    quote! {},
+                    quote! {},
+                    quote! { &self.#ident },
+                )
             }
         };
 
         if input != &Some(Input::Vec) {
             new_params.push(quote! { #ident: #ty });
-            new_elements.push(elems);
-        }
-        methods.push(quote! {
-            #[inline]
-            pub fn #ident(&self) -> #ty {
-                unsafe { #getter }
+            if input.is_some() {
+                new_elements.push(elems);
             }
-        });
+        }
+        if input.is_some() {
+            methods.push(quote! {
+                #[inline]
+                pub fn #ident(&self) -> #ty {
+                    unsafe { #getter }
+                }
+            });
+        }
+        debug_fields.push(quote! { stringify!(#ident), #debug });
     }
 
     let inputs_ty = if fixed_len {
@@ -125,13 +144,14 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     } else {
         quote! { vec! }
     };
-    let others = other_fields
+    let other_idents = other_fields
         .iter()
         .map(|field| field.ident.as_ref().unwrap());
 
     let vis = input.vis;
     let node = input.ident;
     let output = quote! {
+        #[derive(Clone, PartialEq, Eq, Hash)]
         #vis struct #node {
             _inputs: #inputs_ty,
             #(#other_fields),*
@@ -142,7 +162,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
             pub fn new(#(#new_params),*) -> Self {
                 #node {
                     _inputs: #inputs_new[#(#new_elements),*],
-                    #(#others: Default::default()),*
+                    #(#other_idents),*
                 }
             }
 
@@ -156,6 +176,14 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
             #[inline]
             pub const fn min_inputs() -> usize {
                 #min_len
+            }
+        }
+
+        impl ::std::fmt::Debug for #node {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.debug_struct(stringify!(#node))
+                    #(.field(#debug_fields))*
+                    .finish()
             }
         }
     };
