@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use proc_macro_error::{abort, emit_error};
 use quote::quote;
 use syn::{
-    Expr, Field, Fields, GenericArgument, Ident, ItemStruct, Lit, PathArguments, Type, TypePath,
+    Expr, Field, Fields, GenericArgument, Index, ItemStruct, Lit, PathArguments, Type, TypePath,
     Visibility,
 };
 
@@ -15,7 +15,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
         emit_error!(input.generics.where_clause, "where clauses are not allowed");
     }
 
-    let (inputs, other_fields) = match input.fields {
+    let fields = match input.fields {
         Fields::Named(fields) => {
             let mut idents = HashSet::new();
             for field in &fields.named {
@@ -31,88 +31,122 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
 
     let mut min_len = 0;
     let mut fixed_len = true;
-    for (input, ident) in &inputs {
-        match input {
-            Input::Single => min_len += 1,
-            Input::Array(n) => min_len += n,
-            Input::Tuple(n) => min_len += n,
-            Input::Vec => {
-                if !fixed_len {
-                    emit_error!(ident, "only one input field may have a dynamic length");
+    for (field, input) in &fields {
+        if let Some(input) = &input {
+            match input {
+                Input::Single => min_len += 1,
+                Input::Array(n) => min_len += n,
+                Input::Tuple(n) => min_len += n,
+                Input::Vec => {
+                    if !fixed_len {
+                        emit_error!(field, "only one input field may have a dynamic length");
+                    }
+                    fixed_len = false;
                 }
-                fixed_len = false;
             }
         }
     }
 
-    let mut input_methods = Vec::new();
+    let mut new_params = Vec::new();
+    let mut new_elements = Vec::new();
+    let mut methods = Vec::new();
+    let mut other_fields = Vec::new();
     let mut i = 0;
-    for (input, ident) in inputs {
+    for (field, input) in &fields {
+        let ident = field.ident.as_ref().unwrap();
         let start = i;
-        let method = match input {
-            Input::Single => {
+        let (ty, elems, getter) = match input {
+            Some(Input::Single) => {
                 i += 1;
-                quote! {
-                    #[inline]
-                    pub fn #ident(&self) -> NodeRef {
-                        unsafe { *self._inputs.get_unchecked(#start) }
-                    }
-                }
+                (
+                    quote! { NodeRef },
+                    quote! { #ident },
+                    quote! { *self._inputs.get_unchecked(#start) },
+                )
             }
-            Input::Array(n) => {
-                let end = start + n;
+            Some(Input::Array(n)) => {
                 i += n;
-                quote! {
-                    #[inline]
-                    pub fn #ident(&self) -> &[NodeRef; #n] {
-                        unsafe {
-                            let slice = self._inputs.get_unchecked(#start..#end);
-                            &*(slice as *const [NodeRef] as *const [NodeRef; #n])
-                        }
-                    }
-                }
+                let elements = (start..start + n).map(|i| quote! { #ident[#i] });
+                (
+                    quote! { &[NodeRef; #n] },
+                    quote! { #(#elements),* },
+                    quote! {
+                        let slice = self._inputs.get_unchecked(#start..#start + #n);
+                        &*(slice as *const [NodeRef] as *const [NodeRef; #n])
+                    },
+                )
             }
-            Input::Tuple(n) => {
-                let types = iter::repeat(quote! { NodeRef }).take(n);
+            Some(Input::Tuple(n)) => {
+                i += n;
+                let types = iter::repeat(quote! { NodeRef }).take(*n);
                 let values = (start..start + n).map(|i| {
                     quote! { *self._inputs.get_unchecked(#i) }
                 });
-                i += n;
-                quote! {
-                    #[inline]
-                    pub fn #ident(&self) -> (#(#types),*) {
-                        unsafe { (#(#values),*) }
-                    }
-                }
+                let elements = (start..start + n).map(|i| {
+                    let index = Index::from(i);
+                    quote! { #ident.#index }
+                });
+                (
+                    quote! { (#(#types),*) },
+                    quote! { #(#elements),* },
+                    quote! { (#(#values),*) },
+                )
             }
-            Input::Vec => {
-                quote! {
-                    #[inline]
-                    pub fn #ident(&self) -> &[NodeRef] {
-                        unsafe { self._inputs.get_unchecked(#min_len..) }
-                    }
-                }
+            Some(Input::Vec) => (
+                quote! { &[NodeRef] },
+                quote! {},
+                quote! { self._inputs.get_unchecked(#min_len..) },
+            ),
+            None => {
+                other_fields.push(field);
+                continue;
             }
         };
-        input_methods.push(method);
+
+        if input != &Some(Input::Vec) {
+            new_params.push(quote! { #ident: #ty });
+            new_elements.push(elems);
+        }
+        methods.push(quote! {
+            #[inline]
+            pub fn #ident(&self) -> #ty {
+                unsafe { #getter }
+            }
+        });
     }
 
-    let inputs_type = if fixed_len {
+    let inputs_ty = if fixed_len {
         quote! { [NodeRef; #min_len] }
     } else {
         quote! { Vec<NodeRef> }
     };
+    let inputs_new = if fixed_len {
+        quote! {}
+    } else {
+        quote! { vec! }
+    };
+    let others = other_fields
+        .iter()
+        .map(|field| field.ident.as_ref().unwrap());
 
     let vis = input.vis;
     let node = input.ident;
     let output = quote! {
         #vis struct #node {
-            _inputs: #inputs_type,
+            _inputs: #inputs_ty,
             #(#other_fields),*
         }
 
         impl #node {
-            #(#input_methods)*
+            #[inline]
+            pub fn new(#(#new_params),*) -> Self {
+                #node {
+                    _inputs: #inputs_new[#(#new_elements),*],
+                    #(#others: Default::default()),*
+                }
+            }
+
+            #(#methods)*
 
             #[inline]
             pub fn inputs(&self) -> &[NodeRef] {
@@ -128,6 +162,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     output
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum Input {
     Single,
     Array(usize),
@@ -136,9 +171,8 @@ enum Input {
     // TODO: arrayvec/smallvec/tinyvec
 }
 
-fn process_fields(fields: impl IntoIterator<Item = Field>) -> (Vec<(Input, Ident)>, Vec<Field>) {
-    let mut inputs = Vec::new();
-    let mut other_fields = Vec::new();
+fn process_fields(fields: impl IntoIterator<Item = Field>) -> Vec<(Field, Option<Input>)> {
+    let mut node_fields = Vec::new();
 
     for field in fields {
         let mut is_input = false;
@@ -163,18 +197,18 @@ fn process_fields(fields: impl IntoIterator<Item = Field>) -> (Vec<(Input, Ident
 
         if is_input {
             match get_input_type(&field.ty) {
-                Some(input) => inputs.push((input, field.ident.unwrap())),
+                Some(input) => node_fields.push((field, Some(input))),
                 None => emit_error!(
                     field.ty,
                     "type must be NodeRef, an array or tuple of NodeRef, or Vec<NodeRef>",
                 ),
             }
         } else {
-            other_fields.push(field);
+            node_fields.push((field, None));
         }
     }
 
-    (inputs, other_fields)
+    node_fields
 }
 
 fn get_input_type(ty: &Type) -> Option<Input> {
