@@ -9,6 +9,7 @@ use crate::ir::NodeRef;
 /// %r = stack_ref {index} %guard
 /// ```
 #[ir_node]
+#[display("stack_ref {index} {guard}")]
 pub struct StackRefNode {
     index: usize,
     #[input]
@@ -21,6 +22,7 @@ pub struct StackRefNode {
 /// %r = checked_stack_ref {index}
 /// ```
 #[ir_node]
+#[display("checked_stack_ref {index}")]
 pub struct CheckedStackRefNode {
     index: usize,
 }
@@ -29,6 +31,7 @@ pub struct CheckedStackRefNode {
 /// %guard = guard_stack {len}
 /// ```
 #[ir_node]
+#[display("guard_stack {len}")]
 pub struct GuardStackNode {
     len: usize,
 }
@@ -37,6 +40,7 @@ pub struct GuardStackNode {
 /// push %value
 /// ```
 #[ir_node]
+#[display("push {value}")]
 pub struct PushNode {
     #[input]
     value: NodeRef,
@@ -46,6 +50,7 @@ pub struct PushNode {
 /// drop {count}
 /// ```
 #[ir_node]
+#[display("drop {count}")]
 pub struct DropNode {
     count: usize,
 }
@@ -54,6 +59,7 @@ pub struct DropNode {
 /// drop_lazy {count}
 /// ```
 #[ir_node]
+#[display("drop_lazy {count}")]
 pub struct DropLazyNode {
     count: usize,
 }

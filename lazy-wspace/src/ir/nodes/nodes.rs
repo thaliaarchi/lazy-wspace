@@ -13,6 +13,7 @@ use crate::ir::NodeRef;
 /// %r = value {number}
 /// ```
 #[ir_node]
+#[display("value {number}")]
 pub struct NumberNode {
     number: Integer,
 }
@@ -23,6 +24,7 @@ pub struct NumberNode {
 /// %r = error {kind}
 /// ```
 #[ir_node]
+#[display("error {kind:?}")]
 pub struct ErrorNode {
     kind: NumberError,
 }
@@ -31,15 +33,17 @@ pub struct ErrorNode {
 /// eval %value
 /// ```
 #[ir_node]
+#[display("eval {value}")]
 pub struct EvalNode {
     #[input]
     value: NodeRef,
 }
 
 /// ```ir
-/// %v = error_or %maybe_error %or_value
+/// %v = error_or %maybe_error, %or_value
 /// ```
 #[ir_node]
+#[display("error_or {maybe_error}, {or_value}")]
 pub struct ErrorOrNode {
     #[input]
     maybe_error: NodeRef,
@@ -53,6 +57,7 @@ pub struct ErrorOrNode {
 /// %r = heap_ref %address
 /// ```
 #[ir_node]
+#[display("heap_ref {address}")]
 pub struct HeapRefNode {
     #[input]
     address: NodeRef,
@@ -62,6 +67,7 @@ pub struct HeapRefNode {
 /// store %address, %value
 /// ```
 #[ir_node]
+#[display("store {address}, {value}")]
 pub struct StoreNode {
     #[input]
     address: NodeRef,
@@ -73,6 +79,7 @@ pub struct StoreNode {
 /// print {kind}, %value
 /// ```
 #[ir_node]
+#[display("print {kind}, {value}")]
 pub struct PrintNode {
     kind: IoKind,
     #[input]
@@ -83,6 +90,7 @@ pub struct PrintNode {
 /// %r = read {kind}
 /// ```
 #[ir_node]
+#[display("read {kind}")]
 pub struct ReadNode {
     kind: IoKind,
 }

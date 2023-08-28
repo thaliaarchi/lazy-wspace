@@ -5,9 +5,10 @@ use crate::ir::NodeRef;
 // Binary operations
 
 /// ```ir
-/// %r = add %lhs %rhs
+/// %r = add %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("add {lhs}, {rhs}")]
 pub struct AddNode {
     #[input]
     lhs: NodeRef,
@@ -16,9 +17,10 @@ pub struct AddNode {
 }
 
 /// ```ir
-/// %r = sub %lhs %rhs
+/// %r = sub %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("sub {lhs}, {rhs}")]
 pub struct SubNode {
     #[input]
     lhs: NodeRef,
@@ -27,9 +29,10 @@ pub struct SubNode {
 }
 
 /// ```ir
-/// %r = mul %lhs %rhs
+/// %r = mul %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("mul {lhs}, {rhs}")]
 pub struct MulNode {
     #[input]
     lhs: NodeRef,
@@ -38,9 +41,10 @@ pub struct MulNode {
 }
 
 /// ```ir
-/// %r = div %lhs %rhs
+/// %r = div %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("div {lhs}, {rhs}")]
 pub struct DivNode {
     #[input]
     lhs: NodeRef,
@@ -49,9 +53,10 @@ pub struct DivNode {
 }
 
 /// ```ir
-/// %r = mod %lhs %rhs
+/// %r = mod %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("mod {lhs}, {rhs}")]
 pub struct ModNode {
     #[input]
     lhs: NodeRef,
@@ -60,9 +65,10 @@ pub struct ModNode {
 }
 
 /// ```ir
-/// %r = and %lhs %rhs
+/// %r = and %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("and {lhs}, {rhs}")]
 pub struct AndNode {
     #[input]
     lhs: NodeRef,
@@ -71,9 +77,10 @@ pub struct AndNode {
 }
 
 /// ```ir
-/// %r = or %lhs %rhs
+/// %r = or %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("or {lhs}, {rhs}")]
 pub struct OrNode {
     #[input]
     lhs: NodeRef,
@@ -82,9 +89,10 @@ pub struct OrNode {
 }
 
 /// ```ir
-/// %r = xor %lhs %rhs
+/// %r = xor %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("xor {lhs}, {rhs}")]
 pub struct XorNode {
     #[input]
     lhs: NodeRef,
@@ -93,9 +101,10 @@ pub struct XorNode {
 }
 
 /// ```ir
-/// %r = andnot %lhs %rhs
+/// %r = andnot %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("andnot {lhs}, {rhs}")]
 pub struct AndNotNode {
     #[input]
     lhs: NodeRef,
@@ -104,9 +113,10 @@ pub struct AndNotNode {
 }
 
 /// ```ir
-/// %r = notand %lhs %rhs
+/// %r = notand %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("notand {lhs}, {rhs}")]
 pub struct NotAndNode {
     #[input]
     lhs: NodeRef,
@@ -115,9 +125,10 @@ pub struct NotAndNode {
 }
 
 /// ```ir
-/// %r = nand %lhs %rhs
+/// %r = nand %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("nand {lhs}, {rhs}")]
 pub struct NandNode {
     #[input]
     lhs: NodeRef,
@@ -126,9 +137,10 @@ pub struct NandNode {
 }
 
 /// ```ir
-/// %r = nor %lhs %rhs
+/// %r = nor %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("nor {lhs}, {rhs}")]
 pub struct NorNode {
     #[input]
     lhs: NodeRef,
@@ -137,9 +149,10 @@ pub struct NorNode {
 }
 
 /// ```ir
-/// %r = xnor %lhs %rhs
+/// %r = xnor %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("xnor {lhs}, {rhs}")]
 pub struct XnorNode {
     #[input]
     lhs: NodeRef,
@@ -148,9 +161,10 @@ pub struct XnorNode {
 }
 
 /// ```ir
-/// %r = nandnot %lhs %rhs
+/// %r = nandnot %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("nandnot {lhs}, {rhs}")]
 pub struct NandNotNode {
     #[input]
     lhs: NodeRef,
@@ -159,9 +173,10 @@ pub struct NandNotNode {
 }
 
 /// ```ir
-/// %r = nnotand %lhs %rhs
+/// %r = nnotand %lhs, %rhs
 /// ```
 #[ir_node]
+#[display("nnotand {lhs}, {rhs}")]
 pub struct NNotAndNode {
     #[input]
     lhs: NodeRef,
@@ -170,11 +185,12 @@ pub struct NNotAndNode {
 }
 
 /// ```ir
-/// %r = shl %lhs {rhs}
+/// %r = shl %lhs, {rhs}
 /// ```
 ///
 /// GMP `mpz_mul_2exp`
 #[ir_node]
+#[display("shl {lhs}, {rhs}")]
 pub struct ShlNode {
     #[input]
     lhs: NodeRef,
@@ -182,11 +198,12 @@ pub struct ShlNode {
 }
 
 /// ```ir
-/// %r = shr %lhs {rhs}
+/// %r = shr %lhs, {rhs}
 /// ```
 ///
 /// GMP `mpz_fdiv_q_2exp`
 #[ir_node]
+#[display("shr {lhs}, {rhs}")]
 pub struct ShrNode {
     #[input]
     lhs: NodeRef,
@@ -194,22 +211,24 @@ pub struct ShrNode {
 }
 
 /// ```ir
-/// %r = getbit %value {bit}
+/// %r = testbit %value, {bit}
 /// ```
 ///
 /// GMP `mpz_tstbit`
 #[ir_node]
-pub struct GetBitNode {
+#[display("testbit {value}, {bit}")]
+pub struct TestBitNode {
     #[input]
     value: NodeRef,
     bit: u32,
 }
 
 /// ```ir
-/// %r = ngetbit %value {bit}
+/// %r = ntestbit %value, {bit}
 /// ```
 #[ir_node]
-pub struct NGetBitNode {
+#[display("ntestbit {value}, {bit}")]
+pub struct NTestBitNode {
     #[input]
     value: NodeRef,
     bit: u32,
@@ -221,6 +240,7 @@ pub struct NGetBitNode {
 /// %r = neg %value
 /// ```
 #[ir_node]
+#[display("neg {value}")]
 pub struct NegNode {
     #[input]
     value: NodeRef,
@@ -234,6 +254,7 @@ pub struct NegNode {
 /// returns the maximum `mp_bitcnt_t` for v < 0. This instead returns 0 for
 /// v < 0.
 #[ir_node]
+#[display("popcnt {value}")]
 pub struct PopcntNode {
     #[input]
     value: NodeRef,

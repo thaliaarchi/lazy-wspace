@@ -8,6 +8,7 @@ use crate::ir::{BBlockId, NodeRef};
 /// call @target, @next
 /// ```
 #[ir_node]
+#[display("call {target}, {next}")]
 pub struct CallNode {
     target: BBlockId,
     next: BBlockId,
@@ -17,6 +18,7 @@ pub struct CallNode {
 /// jmp @target
 /// ```
 #[ir_node]
+#[display("jmp {target}")]
 pub struct JmpNode {
     target: BBlockId,
 }
@@ -25,6 +27,7 @@ pub struct JmpNode {
 /// br {cond}, %value, @if_true, @if_false
 /// ```
 #[ir_node]
+#[display("br {cond}, {value}, {if_true}, {if_false}")]
 pub struct BrNode {
     cond: Cond,
     #[input]
@@ -37,12 +40,14 @@ pub struct BrNode {
 /// ret
 /// ```
 #[ir_node]
+#[display("ret")]
 pub struct RetNode;
 
 /// ```ir
 /// exit
 /// ```
 #[ir_node]
+#[display("exit")]
 pub struct ExitNode;
 
 /// ```ir
@@ -50,6 +55,7 @@ pub struct ExitNode;
 /// ```
 // Boxed to keep the size smaller.
 #[ir_node]
+#[display("panic {error}")]
 pub struct PanicNode {
     error: Box<Error>,
 }
