@@ -1,14 +1,15 @@
-[workspace]
-members = [
-  "lazy-wspace",
-  "lazy-wspace-generate"
-]
-
 [workspace.package]
 authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "MPL-2.0"
+
+[workspace]
+members = [
+  "lazy-wspace",
+  "lazy-wspace-generate",
+  "lazy-wspace-macros",
+]
 
 [profile.release]
 lto = true

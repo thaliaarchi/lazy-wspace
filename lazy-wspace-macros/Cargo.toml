@@ -1,0 +1,20 @@
+[package]
+name = "lazy-wspace-macros"
+version = "0.1.0"
+authors = ["Thalia Archibald <thalia@archibald.dev>"]
+edition = "2021"
+rust-version = "1.70"
+description = "Macros for lazy-wspace"
+repository = "https://github.com/thaliaarchi/lazy-wspace"
+license = "MPL-2.0"
+keywords = ["whitespace", "macros"]
+categories = ["compilers", "development-tools"]
+
+[dependencies]
+proc-macro-error = "1.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+
+[lib]
+proc-macro = true
