@@ -7,6 +7,11 @@ use crate::ir::NodeRef;
 /// ```ir
 /// %r = add %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`AddNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/AddNode.java)
+/// - HotSpot [`AddNode`, `AddINode`, and `AddLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp)
 #[ir_node]
 #[display("add {lhs}, {rhs}")]
 pub struct AddNode {
@@ -19,6 +24,11 @@ pub struct AddNode {
 /// ```ir
 /// %r = sub %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`SubNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SubNode.java)
+/// - HotSpot [`SubINode` and `SubLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/subnode.hpp)
 #[ir_node]
 #[display("sub {lhs}, {rhs}")]
 pub struct SubNode {
@@ -31,6 +41,11 @@ pub struct SubNode {
 /// ```ir
 /// %r = mul %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`MulNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/MulNode.java)
+/// - HotSpot [`MulINode`, `MulLNode`, `MulHiLNode`, and `UMulHiLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp)
 #[ir_node]
 #[display("mul {lhs}, {rhs}")]
 pub struct MulNode {
@@ -43,6 +58,16 @@ pub struct MulNode {
 /// ```ir
 /// %r = div %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`IntegerDivRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/IntegerDivRemNode.java),
+///   [`SignedDivNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SignedDivNode.java),
+///   [`UnsignedDivNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/UnsignedDivNode.java),
+///   [`FloatingIntegerDivRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/FloatingIntegerDivRemNode.java),
+///   and [`SignedFloatingIntegerDivNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SignedFloatingIntegerDivNode.java)
+/// - HotSpot [`DivINode`, `DivLNode`, `UDivINode`, `UDivLNode`,  `DivModINode`,
+///   `DivModLNode`, `UDivModINode`, and `UDivModLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/divnode.hpp)
 #[ir_node]
 #[display("div {lhs}, {rhs}")]
 pub struct DivNode {
@@ -55,6 +80,17 @@ pub struct DivNode {
 /// ```ir
 /// %r = mod %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`RemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/RemNode.java),
+///   [`IntegerDivRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/IntegerDivRemNode.java),
+///   [`SignedRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SignedRemNode.java),
+///   [`UnsignedRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/UnsignedRemNode.java),
+///   [`FloatingIntegerDivRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/FloatingIntegerDivRemNode.java),
+///   and [`SignedFloatingIntegerRemNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SignedFloatingIntegerRemNode.java)
+/// - HotSpot [`ModINode`, `ModLNode`, `UModINode`, `UModLNode`,  `DivModINode`,
+///   `DivModLNode`, `UDivModINode`, and `UDivModLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/divnode.hpp)
 #[ir_node]
 #[display("mod {lhs}, {rhs}")]
 pub struct ModNode {
@@ -67,6 +103,11 @@ pub struct ModNode {
 /// ```ir
 /// %r = and %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`AndNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/AndNode.java)
+/// - HotSpot [`AndINode` and `AndLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp)
 #[ir_node]
 #[display("and {lhs}, {rhs}")]
 pub struct AndNode {
@@ -79,6 +120,11 @@ pub struct AndNode {
 /// ```ir
 /// %r = or %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`OrNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/OrNode.java)
+/// - HotSpot [`OrINode` and `OrLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp)
 #[ir_node]
 #[display("or {lhs}, {rhs}")]
 pub struct OrNode {
@@ -91,6 +137,11 @@ pub struct OrNode {
 /// ```ir
 /// %r = xor %lhs, %rhs
 /// ```
+///
+/// # See also
+///
+/// - Graal [`XorNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/XorNode.java)
+/// - HotSpot [`XorINode` and `XOrLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp)
 #[ir_node]
 #[display("xor {lhs}, {rhs}")]
 pub struct XorNode {
@@ -189,6 +240,11 @@ pub struct NNotAndNode {
 /// ```
 ///
 /// GMP `mpz_mul_2exp`
+///
+/// # See also
+///
+/// - Graal [`LeftShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/LeftShiftNode.java)
+/// - HotSpot [`LShiftINode` and LShiftLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp)
 #[ir_node]
 #[display("shl {lhs}, {rhs}")]
 pub struct ShlNode {
@@ -202,6 +258,12 @@ pub struct ShlNode {
 /// ```
 ///
 /// GMP `mpz_fdiv_q_2exp`
+///
+/// # See also
+///
+/// - Graal [`RightShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/RightShiftNode.java)
+///   and [`UnsignedRightShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/UnsignedRightShiftNode.java)
+/// - HotSpot [`RShiftINode`, `RShiftLNode`, `URShiftINode`, and `URShiftINode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp)
 #[ir_node]
 #[display("shr {lhs}, {rhs}")]
 pub struct ShrNode {
@@ -239,6 +301,11 @@ pub struct NTestBitNode {
 /// ```ir
 /// %r = neg %value
 /// ```
+///
+/// # See also
+///
+/// - Graal [`NegateNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/NegateNode.java)
+/// - HotSpot [`NegINode` and `NegLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/subnode.hpp)
 #[ir_node]
 #[display("neg {value}")]
 pub struct NegNode {
