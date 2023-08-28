@@ -38,7 +38,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
             Input::Tuple(n) => min_len += n,
             Input::Vec => {
                 if !fixed_len {
-                    emit_error!(ident, "only one input field may be dynamically sized");
+                    emit_error!(ident, "only one input field may have a dynamic length");
                 }
                 fixed_len = false;
             }
@@ -55,7 +55,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                 quote! {
                     #[inline]
                     pub fn #ident(&self) -> NodeRef {
-                        self.inputs[#start]
+                        unsafe { *self._inputs.get_unchecked(#start) }
                     }
                 }
             }
@@ -65,18 +65,23 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                 quote! {
                     #[inline]
                     pub fn #ident(&self) -> &[NodeRef; #n] {
-                        unsafe { &*(&self.inputs[#start..#end] as *const [NodeRef] as *const [NodeRef; #n]) }
+                        unsafe {
+                            let slice = self._inputs.get_unchecked(#start..#end);
+                            &*(slice as *const [NodeRef] as *const [NodeRef; #n])
+                        }
                     }
                 }
             }
             Input::Tuple(n) => {
                 let types = iter::repeat(quote! { NodeRef }).take(n);
-                let values = (start..start + n).map(|i| quote! { self.inputs[#i] });
+                let values = (start..start + n).map(|i| {
+                    quote! { *self._inputs.get_unchecked(#i) }
+                });
                 i += n;
                 quote! {
                     #[inline]
                     pub fn #ident(&self) -> (#(#types),*) {
-                        (#(#values),*)
+                        unsafe { (#(#values),*) }
                     }
                 }
             }
@@ -84,7 +89,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
                 quote! {
                     #[inline]
                     pub fn #ident(&self) -> &[NodeRef] {
-                        &self.inputs[#min_len..]
+                        unsafe { self._inputs.get_unchecked(#min_len..) }
                     }
                 }
             }
@@ -102,7 +107,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     let node = input.ident;
     let output = quote! {
         #vis struct #node {
-            inputs: #inputs_type,
+            _inputs: #inputs_type,
             #(#other_fields),*
         }
 
@@ -111,7 +116,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
 
             #[inline]
             pub fn inputs(&self) -> &[NodeRef] {
-                &self.inputs
+                &self._inputs
             }
 
             #[inline]
