@@ -177,15 +177,19 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
             }
 
             #(#methods)*
+        }
+
+        impl crate::ir::nodes::Node for #node {
+            const MIN_INPUTS: usize = #min_len;
 
             #[inline]
-            pub fn inputs(&self) -> &[NodeRef] {
+            fn inputs(&self) -> &[NodeRef] {
                 &self._inputs
             }
 
             #[inline]
-            pub const fn min_inputs() -> usize {
-                #min_len
+            fn as_exp(&self) -> crate::ir::nodes::Exp<'_> {
+                crate::ir::nodes::Exp::from(self)
             }
         }
 

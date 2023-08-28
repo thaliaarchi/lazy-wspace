@@ -63,3 +63,38 @@ pub struct DropNode {
 pub struct DropLazyNode {
     count: usize,
 }
+
+impl StackRefNode {
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+}
+
+impl CheckedStackRefNode {
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+}
+
+impl GuardStackNode {
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl DropNode {
+    #[inline]
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
+
+impl DropLazyNode {
+    #[inline]
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}

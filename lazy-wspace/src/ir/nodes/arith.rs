@@ -326,3 +326,31 @@ pub struct PopcntNode {
     #[input]
     value: NodeRef,
 }
+
+impl ShlNode {
+    #[inline]
+    pub fn rhs(&self) -> u32 {
+        self.rhs
+    }
+}
+
+impl ShrNode {
+    #[inline]
+    pub fn rhs(&self) -> u32 {
+        self.rhs
+    }
+}
+
+impl TestBitNode {
+    #[inline]
+    pub fn bit(&self) -> u32 {
+        self.bit
+    }
+}
+
+impl NTestBitNode {
+    #[inline]
+    pub fn bit(&self) -> u32 {
+        self.bit
+    }
+}
