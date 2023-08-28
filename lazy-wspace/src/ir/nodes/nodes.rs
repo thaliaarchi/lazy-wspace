@@ -36,6 +36,17 @@ pub struct EvalNode {
     value: NodeRef,
 }
 
+/// ```ir
+/// %v = error_or %maybe_error %or_value
+/// ```
+#[ir_node]
+pub struct ErrorOrNode {
+    #[input]
+    maybe_error: NodeRef,
+    #[input]
+    or_value: NodeRef,
+}
+
 /// Heap reference.
 ///
 /// ```ir
