@@ -1,211 +1,288 @@
-# All operations evaluate the RHS first, then the LHS. Errors in evaluation make
-# operations not commutative in the general case, so rules need to be manually
-# commuted.
+;; All operations evaluate the RHS first, then the LHS. Errors in evaluation make
+;; operations not commutative in the general case, so rules need to be manually
+;; commuted.
 
-(add _ (e : error)) => e
-(sub _ (e : error)) => e
-(mul _ (e : error)) => e
-(div _ (e : error)) => e
-(mod _ (e : error)) => e
-(and _ (e : error)) => e
-(or _ (e : error)) => e
-(xor _ (e : error)) => e
-(andnot _ (e : error)) => e
-(notand _ (e : error)) => e
-(nand _ (e : error)) => e
-(nor _ (e : error)) => e
-(xnor _ (e : error)) => e
-(nandnot _ (e : error)) => e
-(nnotand _ (e : error)) => e
+(=> (add     (number $x) (number $y))  $(add     $x $y))
+(=> (sub     (number $x) (number $y))  $(sub     $x $y))
+(=> (mul     (number $x) (number $y))  $(mul     $x $y))
+(=> (div     (number $x) (number $y))  $(div     $x $y))
+(=> (mod     (number $x) (number $y))  $(mod     $x $y))
+(=> (and     (number $x) (number $y))  $(and     $x $y))
+(=> (or      (number $x) (number $y))  $(or      $x $y))
+(=> (xor     (number $x) (number $y))  $(xor     $x $y))
+(=> (andnot  (number $x) (number $y))  $(andnot  $x $y))
+(=> (notand  (number $x) (number $y))  $(notand  $x $y))
+(=> (nand    (number $x) (number $y))  $(nand    $x $y))
+(=> (nor     (number $x) (number $y))  $(nor     $x $y))
+(=> (xnor    (number $x) (number $y))  $(xnor    $x $y))
+(=> (nandnot (number $x) (number $y))  $(nandnot $x $y))
+(=> (nnotand (number $x) (number $y))  $(nnotand $x $y))
 
-(add (e : error) number) => e
-(sub (e : error) number) => e
-(mul (e : error) number) => e
-(div (e : error) (y : number)) if (not (eq? y 0)) => e
-(mod (e : error) (y : number)) if (not (eq? y 0)) => e
-(and (e : error) number) => e
-(or (e : error) number) => e
-(xor (e : error) number) => e
-(andnot (e : error) number) => e
-(notand (e : error) number) => e
-(nand (e : error) number) => e
-(nor (e : error) number) => e
-(xnor (e : error) number) => e
-(nandnot (e : error) number) => e
-(nnotand (e : error) number) => e
+(=> (testbit  (number $x) $b)  $(testbit  $x $b))
+(=> (ntestbit (number $x) $b)  $(ntestbit $x $b))
 
-(shl (e : error) _) => e
-(shr (e : error) _) => e
-(getbit (e : error) _) => e
-(ngetbit (e : error) _) => e
-(neg (e : error) _) => e
-(popcnt (e : error) _) => e
+(=> (add     _ (error $e))  (error $e))
+(=> (sub     _ (error $e))  (error $e))
+(=> (mul     _ (error $e))  (error $e))
+(=> (div     _ (error $e))  (error $e))
+(=> (mod     _ (error $e))  (error $e))
+(=> (and     _ (error $e))  (error $e))
+(=> (or      _ (error $e))  (error $e))
+(=> (xor     _ (error $e))  (error $e))
+(=> (andnot  _ (error $e))  (error $e))
+(=> (notand  _ (error $e))  (error $e))
+(=> (nand    _ (error $e))  (error $e))
+(=> (nor     _ (error $e))  (error $e))
+(=> (xnor    _ (error $e))  (error $e))
+(=> (nandnot _ (error $e))  (error $e))
+(=> (nnotand _ (error $e))  (error $e))
 
-(add (x : number) y) => (add y x)
-(mul (x : number) y) => (mul y x)
-(and (x : number) y) => (and y x)
-(or (x : number) y) => (or y x)
-(xor (x : number) y) => (xor y x)
+(=> (add     (error $e) (number _))  $e)
+(=> (sub     (error $e) (number _))  $e)
+(=> (mul     (error $e) (number _))  $e)
+(=> (and     (error $e) (number _))  $e)
+(=> (or      (error $e) (number _))  $e)
+(=> (xor     (error $e) (number _))  $e)
+(=> (andnot  (error $e) (number _))  $e)
+(=> (notand  (error $e) (number _))  $e)
+(=> (nand    (error $e) (number _))  $e)
+(=> (nor     (error $e) (number _))  $e)
+(=> (xnor    (error $e) (number _))  $e)
+(=> (nandnot (error $e) (number _))  $e)
+(=> (nnotand (error $e) (number _))  $e)
 
-(add x 0) => x
-(sub x 0) => x
-(mul x 1) => x
-(div x 1) => x
-(and x x) => x
-(or x x) => x
+(=> (when (div (error $e) (number $y))  (neq? $y 0))  $e)
+(=> (when (mod (error $e) (number $y))  (neq? $y 0))  $e)
+(=> (div _ 0)  (error DivModZero))
+(=> (mod _ 0)  (error DivModZero))
 
-(div _ 0) => (error DivModZero)
-(mod _ 0) => (error DivModZero)
+(=> (shl      (error $e) _)  $e)
+(=> (shr      (error $e) _)  $e)
+(=> (testbit  (error $e) _)  $e)
+(=> (ntestbit (error $e) _)  $e)
+(=> (neg      (error $e) _)  $e)
+(=> (popcnt   (error $e) _)  $e)
 
-(sub x x) => (error_or x 0)
-(mul x 0) => (error_or x 0)
-(div x x) => (error_or x 1)
-(mod x x) => (error_or x 0)
-(mod x 1) => (error_or x 0)
-(xor x x) => (error_or x 0)
-(andnot x x) => (error_or x 0)
+(=> (add (number $x) $y)  (add $y (number $x)))
+(=> (mul (number $x) $y)  (mul $y (number $x)))
+(=> (and (number $x) $y)  (and $y (number $x)))
+(=> (or  (number $x) $y)  (or  $y (number $x)))
+(=> (xor (number $x) $y)  (xor $y (number $x)))
 
-(neg (neg x)) => x
-(sub 0 y => (neg y)
-(add x (neg y)) => (sub x y)
-(sub x (neg y)) => (add x y)
-# (add (neg x) y) => (sub y x) # unsound
+(=> (add $x 0)   $x)
+(=> (sub $x 0)   $x)
+(=> (mul $x 1)   $x)
+(=> (div $x 1)   $x)
+(=> (and $x $x)  $x)
+(=> (or  $x $x)  $x)
 
-(mod x 2) => (getbit x 0)
-(and x 1) => (getbit x 0)
+(=> (sub    $x $x)  (error_or $x 0))
+(=> (mul    $x 0)   (error_or $x 0))
+(=> (div    $x $x)  (error_or $x 1))
+(=> (mod    $x $x)  (error_or $x 0))
+(=> (mod    $x 1)   (error_or $x 0))
+(=> (xor    $x $x)  (error_or $x 0))
+(=> (andnot $x $x)  (error_or $x 0))
 
-(sub 1 (getbit x b)) => (ngetbit x b)
-(sub 1 (ngetbit x b)) => (getbit x b)
+(=> (neg (neg $x))     $x)
+(=> (sub 0 $y)         (neg $y))
+(=> (add $x (neg $y))  (sub $x $y))
+(=> (sub $x (neg $y))  (add $x $y))
+(=> (add (neg $x) $y)  (sub $y (error_or $y $x)))
 
-(getbit (getbit x b) 0) => (getbit x b)
-(getbit (ngetbit x b) 0) => (ngetbit x b)
-(ngetbit (getbit x b) 0) => (ngetbit x b)
-(ngetbit (ngetbit x b) 0) => (getbit x b)
+(=> (mod $x 2)  (testbit $x 0))
+(=> (and $x 1)  (testbit $x 0))
 
-(ngetbit (and x y) b) => (getbit (nand x y) b)
-(ngetbit (or x y) b) => (getbit (nor x y) b)
-(ngetbit (xor x y) b) => (getbit (xnor x y) b)
-(ngetbit (andnot x y) b) => (getbit (nandnot x y) b)
-(ngetbit (notand x y) b) => (getbit (nnotand x y) b)
-(ngetbit (nand x y) b) => (getbit (and x y) b)
-(ngetbit (nor x y) b) => (getbit (or x y) b)
-(ngetbit (xnor x y) b) => (getbit (xor x y) b)
-(ngetbit (nandnot x y) b) => (getbit (andnot x y) b)
-(ngetbit (nnotand x y) b) => (getbit (notand x y) b)
+(=> (sub 1 (testbit  $x $b))  (ntestbit $x $b))
+(=> (sub 1 (ntestbit $x $b))  (testbit  $x $b))
 
-(getbit (shr x b) 0) => (getbit x b)
-(ngetbit (shr x b) 0) => (ngetbit x b)
-(shl (getbit x b) b) => (and x (shl 1 b))
+(=> (testbit  (testbit  $x $b) 0)  (testbit  $x $b))
+(=> (testbit  (ntestbit $x $b) 0)  (ntestbit $x $b))
+(=> (ntestbit (testbit  $x $b) 0)  (ntestbit $x $b))
+(=> (ntestbit (ntestbit $x $b) 0)  (testbit  $x $b))
 
-# Shifts
-(mul x (number y : pow2 b)) => (shl x b)
-(div x (number y : pow2 b)) => (shr x b)
+(=> (ntestbit (and     $x $y) $b)
+    (testbit  (nand    $x $y) $b))
+(=> (ntestbit (or      $x $y) $b)
+    (testbit  (nor     $x $y) $b))
+(=> (ntestbit (xor     $x $y) $b)
+    (testbit  (xnor    $x $y) $b))
+(=> (ntestbit (andnot  $x $y) $b)
+    (testbit  (nandnot $x $y) $b))
+(=> (ntestbit (notand  $x $y) $b)
+    (testbit  (nnotand $x $y) $b))
+(=> (ntestbit (nand    $x $y) $b)
+    (testbit  (and     $x $y) $b))
+(=> (ntestbit (nor     $x $y) $b)
+    (testbit  (or      $x $y) $b))
+(=> (ntestbit (xnor    $x $y) $b)
+    (testbit  (xor     $x $y) $b))
+(=> (ntestbit (nandnot $x $y) $b)
+    (testbit  (andnot  $x $y) $b))
+(=> (ntestbit (nnotand $x $y) $b)
+    (testbit  (notand  $x $y) $b))
 
-# Single-bit AND
-# x * y == x & y
-(mul (getbit x b) (getbit y b)) => (getbit (and x y) b)
+(=> (testbit  (shr $x $b) 0)  (testbit  $x $b))
+(=> (ntestbit (shr $x $b) 0)  (ntestbit $x $b))
+(=> (shl (testbit $x $b) $b)  (and $x (shl 1 $b)))
 
-# Single-bit AND
-# (x + y) / 2 == x & y
-(div (add (getbit x b) (getbit y b)) 2) => (getbit (and x y) b)
+;; Shifts
+(=> (mul $x (number $y : pow2 $b))  (shl $x $b))
+(=> (div $x (number $y : pow2 $b))  (shr $x $b))
 
-# Single-bit OR
-# (x + y) - (x & y) = x | y
-(sub (add (getbit x b) (getbit y b)) (and (getbit x b) (getbit y b))) => (getbit (or x y) b)
-(sub (add (getbit x b) (getbit y b)) (and (getbit y b) (getbit x b))) => (getbit (or y x) b)
-(add (getbit x b) (sub (getbit y b) (and (getbit x b) (getbit y b)))) => (getbit (or x y) b)
-(add (getbit x b) (sub (getbit y b) (and (getbit y b) (getbit x b)))) => (getbit (or y x) b)
-(add (sub (getbit y b) (and (getbit x b) (getbit y b))) (getbit x b)) => (getbit (or y x) b)
-(add (sub (getbit y b) (and (getbit y b) (getbit x b))) (getbit x b)) => (getbit (or x y) b)
+;; Single-bit AND
+;; x * y => x & y
+(=> (mul (testbit $x $b) (testbit $y $b))
+    (testbit (and $x $y) $b))
 
-# Single-bit XOR
-# (x + y) % 2 == x ^ y
-(mod (add (getbit x b) (getbit y b)) 2) => (getbit (xor x y) b)
+;; Single-bit AND
+;; (x + y) / 2 => x & y
+(=> (div (add (testbit $x $b) (testbit $y $b)) 2)
+    (testbit (and $x $y) $b))
 
-# Single-bit XOR
-# (x + y) * !(x & y) == x ^ y
-(mul (add (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(mul (add (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
-(mul (nand (getbit x b) (getbit y b)) (add (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(mul (nand (getbit x b) (getbit y b)) (add (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+;; Single-bit OR
+;; (x + y) - (x & y) = x | y, commuted and associated
+(=> (sub (add (testbit $x $b) (testbit $y $b))
+         (and (testbit $x $b) (testbit $y $b)))
+    (testbit (or $x $y) $b))
+(=> (sub (add (testbit $x $b) (testbit $y $b))
+         (and (testbit $y $b) (testbit $x $b)))
+    (testbit (or $y $x) $b))
+(=> (add (testbit $x $b)
+         (sub (testbit $y $b)
+              (and (testbit $x $b) (testbit $y $b))))
+    (testbit (or $x $y) $b))
+(=> (add (testbit $x $b)
+         (sub (testbit $y $b)
+              (and (testbit $y $b) (testbit $x $b))))
+    (testbit (or $y $x) $b))
+(=> (add (sub (testbit $y $b)
+              (and (testbit $x $b) (testbit $y $b)))
+         (testbit $x $b))
+    (testbit (or $y $x) $b))
+(=> (add (sub (testbit $y $b)
+              (and (testbit $y $b) (testbit $x $b)))
+         (testbit $x $b))
+    (testbit (or $x $y) $b))
 
-# Single-bit XOR
-# (x | y) * !(x & y) == x ^ y
-(mul (or (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(mul (or (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
-(mul (nand (getbit x b) (getbit y b)) (or (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(mul (nand (getbit x b) (getbit y b)) (or (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+;; Single-bit XOR
+;; (x + y) % 2 => x ^ y
+(=> (mod (add (testbit $x $b) (testbit $y $b)) 2)
+    (testbit (xor $x $y) $b))
 
-# Single-bit XOR
-# (x + y) & !(x & y) == x ^ y
-(and (add (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(and (add (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
-(and (nand (getbit x b) (getbit y b)) (add (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(and (nand (getbit x b) (getbit y b)) (add (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+;; Single-bit XOR
+;; (x + y) * !(x & y) => x ^ y, commuted
+(=> (mul (add (testbit $x $b) (testbit $y $b))
+         (testbit (nand $x $y) $b)))
+    (testbit (xor $x $y) $b))
+(=> (mul (add (testbit $x $b) (testbit $y $b))
+         (testbit (nand $y $x) $b))
+    (testbit (xor $y $x) $b))
+(=> (mul (testbit (nand $x $y) $b))
+         (add (testbit $x $b) (testbit $y $b)))
+    (testbit (xor $x $y) $b))
+(=> (mul (testbit (nand $x $y) $b))
+         (add (testbit $y $b) (testbit $x $b)))
+    (testbit (xor $y $x) $b))
 
-# Single-bit XOR
-# (x | y) & !(x & y) == x ^ y
-(and (or (getbit x b) (getbit y b)) (nand (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(and (or (getbit x b) (getbit y b)) (nand (getbit y b) (getbit x b))) => (getbit (xor y x) b)
-(and (nand (getbit x b) (getbit y b)) (or (getbit x b) (getbit y b))) => (getbit (xor x y) b)
-(and (nand (getbit x b) (getbit y b)) (or (getbit y b) (getbit x b))) => (getbit (xor y x) b)
+;; Single-bit XOR
+;; (x + y) & !(x & y) => x ^ y, commuted
+(=> (and (add (testbit $x $b) (testbit $y $b))
+         (testbit (nand $x $y) $b))
+    (testbit (xor $x $y) $b))
+(=> (and (add (testbit $x $b) (testbit $y $b))
+         (testbit (nand $y $x) $b))
+    (testbit (xor $y $x) $b))
+(=> (and (testbit (nand $x $y) $b))
+         (add (testbit $x $b) (testbit $y $b)))
+    (testbit (xor $x $y) $b))
+(=> (and (testbit (nand $x $y) $b))
+         (add (testbit $y $b) (testbit $x $b)))
+    (testbit (xor $y $x) $b))
 
-# Single-bit ANDNOT
-# x * !y == x & !y
-(mul (getbit x b) (ngetbit y b)) => (getbit (andnot x y) b)
+;; XOR
+;; (x | y) & !(x & y) => x ^ y, commuted
+(=> (and (or $x $y) (nand $x $y))
+    (xor $x $y))
+(=> (and (or $x $y) (nand $y $x))
+    (xor $y $x)))
+(=> (and (nand $x $y) (or $x $y))
+    (xor $x $y)))
+(=> (and (nand $x $y) (or $y $x))
+    (xor $y $x)))
 
-# Single-bit NOTAND
-# !x * y == y & !x
-# (mul (ngetbit x b) (getbit y b)) => (getbit (andnot y x) b) # unsound
+;; Single-bit ANDNOT
+;; x * !y => x & !y
+(=> (mul (testbit $x $b) (ntestbit $y $b))
+    (testbit (andnot $x $y) $b))
 
-# Single-bit NOR
-# !x * !y == !x & !y == !(x | y)
-(mul (ngetbit x b) (ngetbit y b)) => (getbit (nor x y) b)
+;; Single-bit NOTAND
+;; !x * y => !x & y
+(=> (mul (ntestbit $x $b) (testbit $y $b))
+    (testbit (notand $x $y) $b))
 
-# Single-bit distribution
-(and (getbit x b) (getbit x b)) => (getbit (and x y) b)
-(or (getbit x b) (getbit x b)) => (getbit (or x y) b)
-(xor (getbit x b) (getbit x b)) => (getbit (xor x y) b)
-(andnot (getbit x b) (getbit x b)) => (getbit (andnot x y) b)
-(notand (getbit x b) (getbit x b)) => (getbit (notand x y) b)
-(nand (getbit x b) (getbit x b)) => (getbit (nand x y) b)
-(nor (getbit x b) (getbit x b)) => (getbit (nor x y) b)
-(xnor (getbit x b) (getbit x b)) => (getbit (xnor x y) b)
-(nandnot (getbit x b) (getbit x b)) => (getbit (nandnot x y) b)
-(nnotand (getbit x b) (getbit x b)) => (getbit (nnotand x y) b)
-(and (ngetbit x b) (ngetbit x b)) => (ngetbit (and x y) b)
-(or (ngetbit x b) (ngetbit x b)) => (ngetbit (or x y) b)
-(xor (ngetbit x b) (ngetbit x b)) => (ngetbit (xor x y) b)
-(andnot (ngetbit x b) (ngetbit x b)) => (ngetbit (andnot x y) b)
-(notand (ngetbit x b) (ngetbit x b)) => (ngetbit (notand x y) b)
-(nand (ngetbit x b) (ngetbit x b)) => (ngetbit (nand x y) b)
-(nor (ngetbit x b) (ngetbit x b)) => (ngetbit (nor x y) b)
-(xnor (ngetbit x b) (ngetbit x b)) => (ngetbit (xnor x y) b)
-(nandnot (ngetbit x b) (ngetbit x b)) => (ngetbit (nandnot x y) b)
-(nnotand (ngetbit x b) (ngetbit x b)) => (ngetbit (nnotand x y) b)
+;; Single-bit NOR
+;; !x * !y => !x & !y => !(x | $y)
+(mul (ntestbit $x $b) (ntestbit $y $b)) => (testbit (nor $x $y) $b)
 
-# Multi-bit AND
-(mod x (number y : pow2 b)) => (and x (sub y 1))
-(add (and x (number m)) (and x (number n))) if (eq? (and m n) 0) => (and x (or m n))
-(add (getbit x 0) (and x (number m))) if (eq? (getbit n 0) 0) => (and x (or m 1))
-(add (and x (number m)) (getbit x 0)) if (eq? (getbit n 0) 0) => (and x (or m 1))
-(or (getbit x 0) (and x (number m))) => (and x (or m 1))
-(or (and x (number m)) (getbit x 0)) => (and x (or m 1))
+;; Single-bit distribution
+(=> (and      (testbit  $x $b) (testbit  $x $b))  (testbit  (and     $x $y) $b)
+(=> (or       (testbit  $x $b) (testbit  $x $b))  (testbit  (or      $x $y) $b)
+(=> (xor      (testbit  $x $b) (testbit  $x $b))  (testbit  (xor     $x $y) $b)
+(=> (andnot   (testbit  $x $b) (testbit  $x $b))  (testbit  (andnot  $x $y) $b)
+(=> (notand   (testbit  $x $b) (testbit  $x $b))  (testbit  (notand  $x $y) $b)
+(=> (nand     (testbit  $x $b) (testbit  $x $b))  (testbit  (nand    $x $y) $b)
+(=> (nor      (testbit  $x $b) (testbit  $x $b))  (testbit  (nor     $x $y) $b)
+(=> (xnor     (testbit  $x $b) (testbit  $x $b))  (testbit  (xnor    $x $y) $b)
+(=> (nandnot  (testbit  $x $b) (testbit  $x $b))  (testbit  (nandnot $x $y) $b)
+(=> (nnotand  (testbit  $x $b) (testbit  $x $b))  (testbit  (nnotand $x $y) $b)
+(=> (and      (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (and     $x $y) $b)
+(=> (or       (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (or      $x $y) $b)
+(=> (xor      (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (xor     $x $y) $b)
+(=> (andnot   (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (andnot  $x $y) $b)
+(=> (notand   (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (notand  $x $y) $b)
+(=> (nand     (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (nand    $x $y) $b)
+(=> (nor      (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (nor     $x $y) $b)
+(=> (xnor     (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (xnor    $x $y) $b)
+(=> (nandnot  (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (nandnot $x $y) $b)
+(=> (nnotand  (ntestbit $x $b) (ntestbit $x $b))  (ntestbit (nnotand $x $y) $b)
 
-# Popcnt
-(add (getbit x b1) (getbit x b2)) if (not (eq? b1 b2)) =>
-  (popcnt (and x (or (lsh 1 b1) (lsh 1 b2)))
-(add (popcnt (and x (number m))) (getbit x b)) if (eq? (getbit m b) 0) =>
-  (popcnt (and x (or m (lsh 1 b))))
-(add (getbit x b) (popcnt (and x (number m)))) if (eq? (getbit m b) 0) =>
-  (popcnt (and x (or m (lsh 1 b))))
-(add (popcnt (and x (number m))) (popcnt (and x (number n)))) if (eq? (and m n) 0) =>
-  (popcnt (and x (or m n)))
-(or (getbit x b1) (getbit x b2)) =>
-  (popcnt (and x (or (lsh 1 b1) (lsh 1 b2)))
-(or (popcnt (and x (number m))) (getbit x b)) =>
-  (popcnt (and x (or m (lsh 1 b))))
-(or (getbit x b) (popcnt (and x (number m)))) =>
-  (popcnt (and x (or m (lsh 1 b))))
-(or (popcnt (and x (number m))) (popcnt (and x (number n)))) =>
-  (popcnt (and x (or m n)))
+;; Multi-bit AND
+(=> (where (mod $x (number $y))
+           (is-power-of-two $y))
+    (and $x (sub $y 1)))
+(=> (where (add (and $x (number $m)) (and $x (number $n)))
+           (eq? (and $m $n) 0))
+    (and $x (or $m $n)))
+(=> (where (add (testbit $x 0) (and $x (number $m)))
+           (eq? (testbit $m 0) 0))
+    (and $x (or $m 1)))
+(=> (where (add (and $x (number $m)) (testbit $x 0))
+           (eq? (testbit $m 0) 0))
+    (and $x (or $m 1)))
+(=> (or (testbit $x 0) (and $x (number $m)))
+    (and $x (or $m 1)))
+(=> (or (and $x (number $m)) (testbit $x 0))
+    (and $x (or $m 1)))
+
+;; Popcnt
+(=> (where (add (testbit $x $b1) (testbit $x $b2))
+           (not (eq? $b1 $b2)))
+    (popcnt (and $x (or (lsh 1 $b1) (lsh 1 $b2))))
+(=> (where (add (popcnt (and $x (number $m))) (testbit $x $b))
+           (eq? (testbit $m $b) 0))
+    (popcnt (and $x (or $m (lsh 1 $b)))))
+(=> (where (add (testbit $x $b) (popcnt (and $x (number $m))))
+           (eq? (testbit $m $b) 0))
+    (popcnt (and $x (or $m (lsh 1 $b)))))
+(=> (where (add (popcnt (and $x (number $m))) (popcnt (and $x (number $n))))
+           (eq? (and $m $n) 0))
+    (popcnt (and $x (or $m $n))))
+(=> (or (testbit $x $b1) (testbit $x $b2))
+    (popcnt (and $x (or $(lsh 1 $b1) $(lsh 1 $b2))))
+(=> (or (popcnt (and $x (number $m))) (testbit $x $b))
+    (popcnt (and $x (or $m $(lsh 1 $b)))))
+(=> (or (testbit $x $b) (popcnt (and $x (number $m))))
+    (popcnt (and $x (or $m $(lsh 1 $b)))))
+(=> (or (popcnt (and $x (number $m))) (popcnt (and $x (number $n))))
+    (popcnt (and $x (or $m $n))))
