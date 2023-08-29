@@ -35,9 +35,9 @@ Lemma shl_num : forall x y, eval (Shl (Num x) y) = VNum (ir_shl x y).
 Proof. reflexivity. Qed.
 Lemma shr_num : forall x y, eval (Shr (Num x) y) = VNum (ir_shr x y).
 Proof. reflexivity. Qed.
-Lemma getbit_num : forall x b, eval (GetBit (Num x) b) = VNum (ir_getbit x b).
+Lemma testbit_num : forall x b, eval (GetBit (Num x) b) = VNum (ir_testbit x b).
 Proof. reflexivity. Qed.
-Lemma ngetbit_num : forall x b, eval (NGetBit (Num x) b) = VNum (ir_ngetbit x b).
+Lemma ntestbit_num : forall x b, eval (NGetBit (Num x) b) = VNum (ir_ntestbit x b).
 Proof. reflexivity. Qed.
 Lemma neg_num : forall x, eval (Neg (Num x)) = VNum (ir_neg x).
 Proof. reflexivity. Qed.
@@ -111,9 +111,9 @@ Lemma shl_err : forall e n, eval (Shl (Err e) n) = VErr e.
 Proof. reflexivity. Qed.
 Lemma shr_err : forall e n, eval (Shr (Err e) n) = VErr e.
 Proof. reflexivity. Qed.
-Lemma getbit_err : forall e b, eval (GetBit (Err e) b) = VErr e.
+Lemma testbit_err : forall e b, eval (GetBit (Err e) b) = VErr e.
 Proof. reflexivity. Qed.
-Lemma ngetbit_err : forall e b, eval (NGetBit (Err e) b) = VErr e.
+Lemma ntestbit_err : forall e b, eval (NGetBit (Err e) b) = VErr e.
 Proof. reflexivity. Qed.
 Lemma neg_err : forall e, eval (Neg (Err e)) = VErr e.
 Proof. reflexivity. Qed.

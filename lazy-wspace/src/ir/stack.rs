@@ -32,13 +32,15 @@ pub struct AbstractStack {
 
 /// Stack index or length.
 ///
-// TODO: Haskell `Int` is not arbitrary precision, so the `Overflow` variant is
-// not possible.
+/// The reference interpreter uses Haskell [`Int`](crate::hs::Int) for the
+/// `copy` index and `slide` length, so larger values are wrapped and `Overflow`
+/// is not possible from literals, but can be obtained from successive large
+/// slides.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LazySize {
     Finite(usize),
-    /// A stack index (for `copy`) or length (for `slide`) larger than
-    /// `usize::MAX`, that always underflows when evaluated.
+    /// A stack index or length larger than `usize::MAX`, that always underflows
+    /// when evaluated.
     Overflow,
     /// An empty number literal, that errors when evaluated.
     EmptyLit,

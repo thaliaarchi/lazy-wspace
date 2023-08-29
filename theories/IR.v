@@ -5,32 +5,32 @@ Inductive val : Type :=
   | VNum (n : Z)
   | VErr (id : nat).
 
-Inductive exp : Type :=
+Inductive node : Type :=
   | Num (n : Z)
   | Err (id : nat)
   | Ref (v : val) (* StackRef, CheckedStackRef, and HeapRef *)
 
-  | Add (x y : exp)
-  | Sub (x y : exp)
-  | Mul (x y : exp)
-  | Div (x y : exp) (id : nat)
-  | Mod (x y : exp) (id : nat)
-  | And (x y : exp)
-  | Or (x y : exp)
-  | Xor (x y : exp)
-  | AndNot (x y : exp)
-  | NotAnd (x y : exp)
-  | Nand (x y : exp)
-  | Nor (x y : exp)
-  | Xnor (x y : exp)
-  | NandNot (x y : exp)
-  | NNotAnd  (x y : exp)
-  | Shl (x : exp) (y : N)
-  | Shr (x : exp) (y : N)
-  | GetBit (x : exp) (b : N)
-  | NGetBit (x : exp) (b : N)
-  | Neg (x : exp)
-  | Popcnt (x : exp).
+  | Add (x y : node)
+  | Sub (x y : node)
+  | Mul (x y : node)
+  | Div (x y : node) (id : nat)
+  | Mod (x y : node) (id : nat)
+  | And (x y : node)
+  | Or (x y : node)
+  | Xor (x y : node)
+  | AndNot (x y : node)
+  | NotAnd (x y : node)
+  | Nand (x y : node)
+  | Nor (x y : node)
+  | Xnor (x y : node)
+  | NandNot (x y : node)
+  | NNotAnd  (x y : node)
+  | Shl (x : node) (y : N)
+  | Shr (x : node) (y : N)
+  | TestBit (x : node) (b : N)
+  | NTestBit (x : node) (b : N)
+  | Neg (x : node)
+  | Popcnt (x : node).
 
 Definition Z_of_bool (b : bool) : Z :=
   if b then 1 else 0.
@@ -79,8 +79,8 @@ Definition ir_nandnot x y := Z.lnot (Z.land x (Z.lnot y)).
 Definition ir_nnotand x y := Z.lnot (Z.land (Z.lnot x) y).
 Definition ir_shl x y := Z.shiftl x (Z.of_N y).
 Definition ir_shr x y := Z.shiftr x (Z.of_N y).
-Definition ir_getbit x b := Z_of_bool (Z_testbit x b).
-Definition ir_ngetbit x b := Z_of_bool (negb (Z_testbit x b)).
+Definition ir_testbit x b := Z_of_bool (Z_testbit x b).
+Definition ir_ntestbit x b := Z_of_bool (negb (Z_testbit x b)).
 Definition ir_neg x := Z.opp x.
 Definition ir_popcnt x := Z_popcnt x.
 
@@ -106,7 +106,7 @@ Definition eval_op1 op x :=
   | VErr e => VErr e
   end.
 
-Fixpoint eval (e : exp) : val :=
+Fixpoint eval (e : node) : val :=
   match e with
   | Num n => VNum n
   | Err e => VErr e
@@ -128,8 +128,8 @@ Fixpoint eval (e : exp) : val :=
   | NNotAnd x y => eval_op2 ir_nnotand (eval x) (eval y)
   | Shl x y => eval_op2N ir_shl (eval x) y
   | Shr x y => eval_op2N ir_shr (eval x) y
-  | GetBit x b => eval_op2N ir_getbit (eval x) b
-  | NGetBit x b => eval_op2N ir_ngetbit (eval x) b
+  | TestBit x b => eval_op2N ir_testbit (eval x) b
+  | NTestBit x b => eval_op2N ir_ntestbit (eval x) b
   | Neg x => eval_op1 ir_neg (eval x)
   | Popcnt x => eval_op1 ir_popcnt (eval x)
   end.

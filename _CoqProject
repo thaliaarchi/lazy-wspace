@@ -1,3 +1,4 @@
 -R . Wspace
 theories/IR.v
+theories/AStack.v
 theories/Arith.v
