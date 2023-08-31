@@ -1,25 +1,14 @@
-[package]
-name = "wspace-syntax"
-version = "0.1.0"
+[workspace.package]
 authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
-description = "Parsing and syntax trees for the Whitespace programming language and its various syntaxes"
 repository = "https://github.com/thaliaarchi/wspace-syntax"
 license = "MPL-2.0"
-keywords = ["whitespace", "syntax", "parsing"]
-categories = ["parser-implementations"]
 
 [workspace]
-members = ["wspace-syntax-test"]
-
-[dependencies]
-aho-corasick = "1.0"
-bitvec = "1.0"
-memchr = "2.6"
-phf = { version = "0.11", features = ["macros", "uncased"] }
-rug = "1.21"
-uncased = "0.9"
-unicode-ident = "1.0"
+members = [
+  "wspace-syntax",
+  "wspace-syntax-test",
+]
 
 [patch.crates-io]
 # Waiting on rust-phf/rust-phf#289

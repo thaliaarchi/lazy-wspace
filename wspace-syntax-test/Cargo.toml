@@ -1,9 +1,13 @@
 [package]
 name = "wspace-syntax-test"
 version = "0.1.0"
+authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
+description = "Tests for wspace-syntax"
+repository = "https://github.com/thaliaarchi/wspace-syntax"
+license = "MPL-2.0"
 publish = false
 
 [dependencies]
 rug = "1.19"
-wspace-syntax = { path = ".." }
+wspace-syntax = { path = "../wspace-syntax" }
