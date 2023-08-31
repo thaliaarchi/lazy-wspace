@@ -9,7 +9,13 @@ members = [
   "lazy-wspace",
   "lazy-wspace-generate",
   "lazy-wspace-macros",
+  "wspace-syntax",
+  "wspace-syntax-test",
 ]
+
+[patch.crates-io]
+# Waiting on rust-phf/rust-phf#289
+phf = { git = "https://github.com/thaliaarchi/rust-phf" }
 
 [profile.release]
 lto = true
