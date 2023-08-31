@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
+use std::slice::Iter;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
-use memchr::memchr3;
 
 use crate::ws::MappingWriter;
 
@@ -23,16 +23,19 @@ pub struct Mapping {
 }
 
 impl Mapping {
+    #[inline]
     pub fn new(s: Vec<u8>, t: Vec<u8>, l: Vec<u8>) -> Self {
         Mapping { s, t, l }
     }
 
+    #[inline]
     pub fn writer(&self) -> MappingWriter<'_> {
         MappingWriter::new(self)
     }
 }
 
 impl Default for Mapping {
+    #[inline]
     fn default() -> Self {
         Mapping {
             s: b" ".to_vec(),
@@ -48,11 +51,13 @@ pub trait Scanner: Iterator<Item = Token> {
 }
 
 /// Scan with the default space, tab, and LF lexemes.
+#[inline]
 pub fn scan_default(src: &str) -> ByteScanner<'_> {
     ByteScanner::new(b' ', b'\t', b'\n', src.as_bytes())
 }
 
 /// Scan with the given lexemes, choosing the more efficient algorithm.
+#[inline]
 pub fn scan<'a>(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Box<dyn Scanner + 'a> {
     if s.len() == 1 && t.len() == 1 && l.len() == 1 {
         Box::new(ByteScanner::new(s[0], t[1], l[1], src))
@@ -68,54 +73,45 @@ pub struct ByteScanner<'a> {
     s: u8,
     t: u8,
     l: u8,
-    src: &'a [u8],
-    offset: usize,
+    iter: Iter<'a, u8>,
+    len: usize,
 }
 
 impl<'a> ByteScanner<'a> {
+    #[inline]
     pub fn new(s: u8, t: u8, l: u8, src: &'a [u8]) -> Self {
         ByteScanner {
             s,
             t,
             l,
-            src,
-            offset: 0,
+            iter: src.iter(),
+            len: src.len(),
         }
     }
 }
 
 impl Scanner for ByteScanner<'_> {
+    #[inline]
     fn offset(&self) -> usize {
-        self.offset
+        self.len - self.iter.as_slice().len()
     }
 }
 
 impl Iterator for ByteScanner<'_> {
     type Item = Token;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        match memchr3(self.s, self.t, self.l, self.src) {
-            Some(i) => {
-                let ch = self.src[i];
-                let tok = if ch == self.s {
-                    Token::S
-                } else if ch == self.t {
-                    Token::T
-                } else if ch == self.l {
-                    Token::L
-                } else {
-                    unreachable!()
-                };
-                self.offset += i + 1;
-                self.src = &self.src[i + 1..];
-                Some(tok)
-            }
-            None => {
-                self.offset += self.src.len();
-                self.src = &self.src[self.src.len()..];
-                None
+        while let Some(ch) = self.iter.next() {
+            if ch == &self.s {
+                return Some(Token::S);
+            } else if ch == &self.t {
+                return Some(Token::T);
+            } else if ch == &self.l {
+                return Some(Token::L);
             }
         }
+        None
     }
 }
 
@@ -131,6 +127,7 @@ pub struct StringScanner<'a> {
 }
 
 impl<'a> StringScanner<'a> {
+    #[inline]
     pub fn new(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Self {
         let ac = AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostLongest)
@@ -141,6 +138,7 @@ impl<'a> StringScanner<'a> {
 }
 
 impl Scanner for StringScanner<'_> {
+    #[inline]
     fn offset(&self) -> usize {
         self.offset
     }
@@ -149,6 +147,7 @@ impl Scanner for StringScanner<'_> {
 impl Iterator for StringScanner<'_> {
     type Item = Token;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self.ac.find(self.src) {
             Some(m) => {
@@ -159,7 +158,7 @@ impl Iterator for StringScanner<'_> {
                     _ => unreachable!(),
                 };
                 self.offset += m.end();
-                self.src = &self.src[m.end()..];
+                self.src = unsafe { self.src.get_unchecked(m.end()..) };
                 Some(tok)
             }
             None => {
