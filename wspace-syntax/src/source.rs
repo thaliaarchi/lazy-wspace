@@ -1,6 +1,7 @@
 //! Source location tracking.
 
 use std::cmp::Ordering;
+use std::num::NonZeroU16;
 use std::ops::Index;
 use std::path::{Path, PathBuf};
 
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 pub struct Span {
     file: FileId,
     offset: BytePos,
-    len: u16,
+    len: NonZeroU16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -43,11 +44,12 @@ pub struct FileInfo {
 impl Span {
     #[inline]
     pub fn new(file: FileId, offset: usize, len: usize) -> Self {
-        Span {
-            file,
-            offset: BytePos(u32::try_from(offset).expect("offset exceeds u32")),
-            len: u16::try_from(len).expect("len exceeds u16"),
-        }
+        let offset = BytePos(u32::try_from(offset).expect("offset exceeds u32"));
+        let len = u16::try_from(len)
+            .expect("len exceeds u16")
+            .try_into()
+            .expect("len is 0");
+        Span { file, offset, len }
     }
 
     #[inline]
@@ -67,7 +69,7 @@ impl Span {
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.len as usize
+        self.len.get() as usize
     }
 
     #[inline]
@@ -82,9 +84,19 @@ impl Span {
 
     pub fn bounds(&self, files: &FileSet) -> (LineColumn, LineColumn) {
         let file = self.file_info(files);
-        let start = file.offset_line_column(self.offset);
-        let end =
-            file.offset_line_column(BytePos(self.offset.0 + self.len.saturating_sub(1) as u32));
+        let start = {
+            let line = file.lines.partition_point(|&line| line <= self.offset);
+            let line_start = file.lines[line - 1].0 as usize;
+            let column = (file.source_text[line_start..self.offset.0 as usize].chars()).count() + 1;
+            LineColumn { line, column }
+        };
+        let end = {
+            let offset = BytePos(self.offset.0 + self.len.get() as u32);
+            let line = file.lines.partition_point(|&line| line < offset);
+            let line_start = file.lines[line - 1].0 as usize;
+            let column = (file.source_text[line_start..offset.0 as usize].chars()).count() + 1;
+            LineColumn { line, column }
+        };
         (start, end)
     }
 }
@@ -123,11 +135,11 @@ impl FileSet {
         let file = FileId(self.files.len() as u16);
 
         let mut lines = vec![BytePos(0)];
-        let mut total = 0;
-        for ch in source_text.chars() {
-            total += 1;
-            if ch == '\n' {
-                lines.push(BytePos(total));
+        let mut len = 0;
+        for &b in source_text.as_bytes() {
+            len += 1;
+            if b == b'\n' {
+                lines.push(BytePos(len));
             }
         }
 
@@ -158,15 +170,5 @@ impl FileInfo {
     #[inline]
     pub fn source_text(&self) -> &str {
         &self.source_text
-    }
-
-    #[inline]
-    fn offset_line_column(&self, offset: BytePos) -> LineColumn {
-        let line = self.lines.partition_point(|&line| line <= offset);
-        let line_offset = self.lines[line - 1].0 as usize;
-        LineColumn {
-            line,
-            column: offset.0 as usize - line_offset + 1,
-        }
     }
 }
