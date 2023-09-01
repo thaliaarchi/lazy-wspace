@@ -357,10 +357,7 @@ impl AbstractStack {
             // Short-circuit common case
             return None;
         }
-        let i = match self.guards.binary_search_by(|(l, _)| l.cmp(&len)) {
-            Ok(i) => i,
-            Err(i) => i,
-        };
+        let i = self.guards.partition_point(|&(l, _)| l < len);
         self.guards.get(i).map(|&(_, guard)| guard)
     }
 
