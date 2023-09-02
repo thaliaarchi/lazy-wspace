@@ -1,8 +1,11 @@
+use std::iter::FusedIterator;
 use std::str::from_utf8_unchecked;
 
-pub struct Token<'a> {
-    pub token: TokenKind,
-    pub lexeme: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub start: usize,
+    pub end: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -11,7 +14,7 @@ pub enum TokenKind {
     String,
     UnterminatedString,
     Space,
-    LF,
+    Lf,
     LineComment,
     BlockComment,
     UnopenedBlockComment,
@@ -27,6 +30,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    #[inline]
     pub fn new(src: &'a str) -> Self {
         // Source files are required to be valid UTF-8, but the grammar is all
         // ASCII, so we can scan over bytes instead of chars.
@@ -36,14 +40,24 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Option<Token<'a>> {
+    #[inline]
+    pub fn source_text(&self) -> &'a str {
+        unsafe { from_utf8_unchecked(self.src) }
+    }
+}
+
+impl Iterator for Lexer<'_> {
+    type Item = Token;
+
+    #[inline]
+    fn next(&mut self) -> Option<Token> {
         let start = self.offset;
-        let token = match self.bump()? {
+        let kind = match self.bump()? {
             b' ' | b'\t' => {
                 self.eat_while(|b| b == b' ' || b == b'\t');
                 TokenKind::Space
             }
-            b'\n' => TokenKind::LF,
+            b'\n' => TokenKind::Lf,
             b'"' => self.string(),
             b';' => self.line_comment(),
             b'-' if self.peek() == b'-' => {
@@ -60,21 +74,31 @@ impl<'a> Lexer<'a> {
             }
             _ => self.word(),
         };
-        let lexeme = unsafe { from_utf8_unchecked(&self.src[start..self.offset]) };
-        Some(Token { token, lexeme })
+        Some(Token {
+            kind,
+            start,
+            end: self.offset,
+        })
     }
+}
 
+impl FusedIterator for Lexer<'_> {}
+
+impl Lexer<'_> {
+    #[inline]
     fn word(&mut self) -> TokenKind {
         loop {
             match self.peek() {
-                EOF_BYTE | b' ' | b'\t' | b'"' | b';' => break,
+                b' ' | b'\t' | b'\n' | b'"' | b';' => break,
                 b'{' | b'-' if self.peek_n(1) == b'-' => break,
+                EOF_BYTE if self.is_eof() => break,
                 _ => self.bump(),
             };
         }
         TokenKind::Word
     }
 
+    #[inline]
     fn string(&mut self) -> TokenKind {
         self.eat_while(|b| b != b'"');
         if self.peek() == b'"' {
@@ -85,11 +109,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[inline]
     fn line_comment(&mut self) -> TokenKind {
         self.eat_while(|b| b != b'\n');
         TokenKind::LineComment
     }
 
+    #[inline]
     fn block_comment(&mut self) -> TokenKind {
         let mut depth = 1usize;
         while let Some(c) = self.bump() {
@@ -111,6 +137,7 @@ impl<'a> Lexer<'a> {
         TokenKind::UnclosedBlockComment
     }
 
+    #[inline]
     fn bump(&mut self) -> Option<u8> {
         match self.src.get(self.offset) {
             Some(b) => {
@@ -121,18 +148,22 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[inline]
     fn peek(&self) -> u8 {
         self.peek_n(0)
     }
 
+    #[inline]
     fn peek_n(&self, n: usize) -> u8 {
         self.src.get(self.offset + n).copied().unwrap_or(EOF_BYTE)
     }
 
+    #[inline]
     fn is_eof(&self) -> bool {
         self.offset >= self.src.len()
     }
 
+    #[inline]
     fn eat_while(&mut self, mut predicate: impl FnMut(u8) -> bool) {
         while predicate(self.peek()) && !self.is_eof() {
             self.bump();

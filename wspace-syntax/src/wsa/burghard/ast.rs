@@ -115,8 +115,7 @@ insts! {
     ["endoption"] => EndOption,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Word<'a>(Cow<'a, str>);
+type Word<'a> = Cow<'a, str>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IntegerValue {
@@ -190,17 +189,11 @@ impl TryFrom<Word<'_>> for Variable {
     type Error = ArgError;
 
     fn try_from(word: Word<'_>) -> Result<Self, Self::Error> {
-        if let [b'_', ..] = word.0.as_bytes() {
-            Ok(Variable(word.0[1..].into()))
+        if let [b'_', ..] = word.as_bytes() {
+            Ok(Variable(word[1..].into()))
         } else {
             Err(ArgError::IdentMissingUnderscore)
         }
-    }
-}
-
-impl From<Word<'_>> for String {
-    fn from(word: Word<'_>) -> Self {
-        word.0.into()
     }
 }
 
@@ -210,7 +203,7 @@ impl TryFrom<Word<'_>> for IntegerValue {
     fn try_from(word: Word<'_>) -> Result<Self, Self::Error> {
         Variable::try_from(word.clone())
             .map(IntegerValue::Variable)
-            .or_else(|_| Ok(IntegerValue::Literal(read_integer_haskell(&word.0)?)))
+            .or_else(|_| Ok(IntegerValue::Literal(read_integer_haskell(&word)?)))
     }
 }
 
@@ -218,7 +211,7 @@ impl From<Word<'_>> for StringValue {
     fn from(word: Word<'_>) -> Self {
         Variable::try_from(word.clone())
             .map(StringValue::Variable)
-            .unwrap_or_else(|_| StringValue::Literal(word.0.into()))
+            .unwrap_or_else(|_| StringValue::Literal(word.into()))
     }
 }
 

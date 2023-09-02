@@ -474,6 +474,7 @@ dependencies = [
  "bitvec",
  "phf",
  "rug",
+ "thiserror",
  "uncased",
  "unicode-ident",
 ]
