@@ -1,96 +1,82 @@
 use bitvec::vec::BitVec;
+use lazy_wspace_macros::Opcode;
 
-use crate::ws::{
-    FormatTokens,
-    Token::{self, *},
-    TokenWriter,
-};
+use crate::ws::{FormatTokens, Token, TokenWriter};
 
-macro_rules! map(
-    ( , $then:tt) => {};
-    ($optional:tt, $then:tt) => { $then };
-);
-
-macro_rules! insts {
-    (
-        $(#[$inst_attr:meta])* $inst_vis:vis enum $Inst:ident
-        $(#[$opcode_attr:meta])* $opcode_vis:vis enum $Opcode:ident
-        $([$($tok:expr)+] =>
-            $Op:ident $(($($param:ty),+))?),* $(,)?
-    ) => {
-        $(#[$inst_attr])*
-        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-        $inst_vis enum $Inst {
-            $($Op $(($($param),+))?),*
-        }
-
-        $(#[$opcode_attr])*
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        $opcode_vis enum $Opcode {
-            $($Op),*
-        }
-
-        impl Inst {
-            pub fn opcode(&self) -> Opcode {
-                match self {
-                    $($Inst::$Op $(($(map!($param, _)),+))? => $Opcode::$Op,)*
-                }
-            }
-        }
-
-        impl Opcode {
-            pub fn tokens(&self) -> &[Token] {
-                match self {
-                    $($Opcode::$Op => &[$($tok),+],)*
-                }
-            }
-        }
-    };
+/// Whitespace instruction.
+///
+/// See [`Extension`] for documentation on the non-standard extension
+/// instructions.
+#[derive(Clone, Debug, Opcode, PartialEq, Eq, Hash)]
+pub enum Inst {
+    // Standard instructions
+    Push(IntegerLit),
+    Dup,
+    Copy(IntegerLit),
+    Swap,
+    Drop,
+    Slide(IntegerLit),
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Store,
+    Retrieve,
+    Label(LabelLit),
+    Call(LabelLit),
+    Jmp(LabelLit),
+    Jz(LabelLit),
+    Jn(LabelLit),
+    Ret,
+    End,
+    Printc,
+    Printi,
+    Readc,
+    Readi,
+    // Extension instructions
+    DebugPrintStack,
+    DebugPrintHeap,
+    Trace,
+    Shuffle,
+    Invert,
 }
 
-insts! {
-    /// Whitespace instruction.
-    ///
-    /// See [`Extension`] for documentation on the non-standard extension
-    /// instructions.
-    pub enum Inst
-
-    /// Whitespace instruction opcode.
-    ///
-    /// This is [`Inst`] without arguments.
-    pub enum Opcode
-
-    // Standard instructions
-    [S S] => Push(IntegerLit),
-    [S L S] => Dup,
-    [S T S] => Copy(IntegerLit),
-    [S L T] => Swap,
-    [S L L] => Drop,
-    [S T L] => Slide(IntegerLit),
-    [T S S S] => Add,
-    [T S S T] => Sub,
-    [T S S L] => Mul,
-    [T S T S] => Div,
-    [T S T T] => Mod,
-    [T T S] => Store,
-    [T T T] => Retrieve,
-    [L S S] => Label(LabelLit),
-    [L S T] => Call(LabelLit),
-    [L S L] => Jmp(LabelLit),
-    [L T S] => Jz(LabelLit),
-    [L T T] => Jn(LabelLit),
-    [L T L] => Ret,
-    [L L L] => End,
-    [T L S S] => Printc,
-    [T L S T] => Printi,
-    [T L T S] => Readc,
-    [T L T T] => Readi,
-    // Extension instructions
-    [L L S S S] => DebugPrintStack,
-    [L L S S T] => DebugPrintHeap,
-    [L L T] => Trace,
-    [S T T S] => Shuffle,
-    [S T T] => Invert,
+impl Opcode {
+    pub fn tokens(&self) -> &[Token] {
+        use Token::*;
+        match self {
+            Opcode::Push => &[S, S],
+            Opcode::Dup => &[S, L, S],
+            Opcode::Copy => &[S, T, S],
+            Opcode::Swap => &[S, L, T],
+            Opcode::Drop => &[S, L, L],
+            Opcode::Slide => &[S, T, L],
+            Opcode::Add => &[T, S, S, S],
+            Opcode::Sub => &[T, S, S, T],
+            Opcode::Mul => &[T, S, S, L],
+            Opcode::Div => &[T, S, T, S],
+            Opcode::Mod => &[T, S, T, T],
+            Opcode::Store => &[T, T, S],
+            Opcode::Retrieve => &[T, T, T],
+            Opcode::Label => &[L, S, S],
+            Opcode::Call => &[L, S, T],
+            Opcode::Jmp => &[L, S, L],
+            Opcode::Jz => &[L, T, S],
+            Opcode::Jn => &[L, T, T],
+            Opcode::Ret => &[L, T, L],
+            Opcode::End => &[L, L, L],
+            Opcode::Printc => &[T, L, S, S],
+            Opcode::Printi => &[T, L, S, T],
+            Opcode::Readc => &[T, L, T, S],
+            Opcode::Readi => &[T, L, T, T],
+            Opcode::DebugPrintStack => &[L, L, S, S, S],
+            Opcode::DebugPrintHeap => &[L, L, S, S, T],
+            Opcode::Trace => &[L, L, T],
+            Opcode::Shuffle => &[S, T, T, S],
+            Opcode::Invert => &[S, T, T],
+        }
+    }
 }
 
 /// Whitespace integer literal.
