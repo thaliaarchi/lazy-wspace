@@ -1,6 +1,6 @@
 //! Whitespace assembly syntax.
 //!
-//! The top-level type is [`Ast`].
+//! The top-level type of the AST is [`Module`].
 
 pub mod burghard;
 pub mod compat;

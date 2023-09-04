@@ -10,14 +10,30 @@ use crate::source::{FileId, Span};
 
 /// Interoperable abstract syntax tree for Whitespace assembly dialects.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Ast {
-    pub mnemonic: Word,
-    pub inst: Inst,
+pub struct Module {
+    /// Module prefix for identifiers.
+    pub name: Option<String>,
+    pub block: Block,
 }
 
-/// Instruction in an AST.
+/// Sequence of instructions.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Block {
+    pub insts: Vec<Inst>,
+}
+
+/// Instruction.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
+    /// Instruction with a mnemonic.
+    Mnemonic { mnemonic: Word, kind: InstKind },
+    /// Bare label.
+    Label(IdentArg),
+}
+
+/// Mnemonic-style instruction.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InstKind {
     Push(IntegerArg),
     PushString(StringArg),
     Dup,
@@ -74,7 +90,7 @@ pub enum Inst {
     IfOption {
         if_block: IfOption,
         elseif_blocks: Vec<IfOption>,
-        else_block: Option<Box<Ast>>,
+        else_block: Option<Box<Block>>,
     },
     /// Syntax error.
     Error,
@@ -84,7 +100,7 @@ pub enum Inst {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IfOption {
     pub option: Option<IdentArg>,
-    pub then_block: Box<Ast>,
+    pub block: Box<Block>,
 }
 
 type IntegerArg = Arg<IntegerLit>;
@@ -157,8 +173,25 @@ pub struct PathLit {
 pub struct Ident {
     pub word: Word,
     pub ident: String,
+    pub sigil: IdentSigil,
     pub scope: IdentScope,
     pub partition: IdentPartition,
+}
+
+/// Sigil preceding an identifier.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum IdentSigil {
+    /// None (Whitelips, rdebath, and Respace).
+    #[default]
+    None,
+    /// `.` (Lime and littleBugHunter).
+    Dot,
+    /// `_` (Burghard).
+    Underscore,
+    /// `@` (Palaiologos label definitions).
+    At,
+    /// `%` (Palaiologos label references).
+    Percent,
 }
 
 /// Scope for identifier resolution.
