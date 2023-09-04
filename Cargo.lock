@@ -475,6 +475,7 @@ dependencies = [
  "lazy-wspace-macros",
  "phf",
  "rug",
+ "strum",
  "thiserror",
  "uncased",
  "unicode-ident",
