@@ -1,4 +1,4 @@
-//! Support for the Burghard Whitespace assembly dialect.
+//! Burghard Whitespace assembly dialect.
 
 mod ast;
 mod lexer;
