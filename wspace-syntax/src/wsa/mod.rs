@@ -6,5 +6,7 @@ pub mod burghard;
 pub mod compat;
 
 mod ast;
+mod dialect;
 
 pub use ast::*;
+pub use dialect::*;

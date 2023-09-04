@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::iter::FusedIterator;
-use std::ops::Index;
 
 use thiserror::Error;
 
 use crate::source::{FileId, Span};
 use crate::wsa::burghard::{Lexer, TokenKind};
+use crate::wsa::{Word, WordFormat};
 
 /// Parser for lines of words in Burghard assembly.
 #[derive(Clone, Debug)]
@@ -13,18 +12,6 @@ pub struct LineParser<'a> {
     lex: Lexer<'a>,
     has_error: bool,
     file: FileId,
-}
-
-/// Word or string in Burghard assembly.
-///
-/// When a block comment separates two words, without any surrounding spaces, it
-/// concatenates the words to form one word. Strings are unwrapped and treated
-/// identically to non-string words after lexing.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Word<'a> {
-    pub text: Cow<'a, str>,
-    pub is_string: bool,
-    pub span: Span,
 }
 
 /// Error from [`LineParser`].
@@ -55,7 +42,7 @@ impl<'a> LineParser<'a> {
 
     /// Parses the next line into words, reusing allocations with the given
     /// buffer.
-    pub fn next_line(&mut self, line: &mut Vec<Word<'a>>) {
+    pub fn next_line(&mut self, line: &mut Vec<Word>) {
         line.clear();
         let mut adjacent = None;
 
@@ -64,15 +51,15 @@ impl<'a> LineParser<'a> {
 
             let word = match tok.kind {
                 TokenKind::Word => {
-                    let text = self.text(tok.start..tok.end);
                     if let Some(adjacent_span) = adjacent {
                         if let Some(last) = line.last_mut() {
-                            if !last.is_string {
+                            if matches!(last.format, WordFormat::Bare | WordFormat::Spliced) {
                                 // Concatenate words, that are separated by a
                                 // block comment and no surrounding spaces.
                                 self.warn(ParseError::ConcatenatedWords(adjacent_span, span));
                                 adjacent = Some(span);
-                                last.text += text;
+                                last.text += tok.text;
+                                last.format = WordFormat::Spliced;
                                 last.span = Span::new(
                                     self.file,
                                     last.span.start(),
@@ -83,21 +70,21 @@ impl<'a> LineParser<'a> {
                         }
                     }
                     Word {
-                        text: text.into(),
-                        is_string: false,
+                        text: tok.text.into(),
+                        format: WordFormat::Bare,
                         span,
                     }
                 }
                 TokenKind::String => Word {
-                    text: self.text(tok.start + 1..tok.end - 1).into(),
-                    is_string: true,
+                    text: tok.text[1..tok.text.len() - 1].into(),
+                    format: WordFormat::DoubleQuoted,
                     span,
                 },
                 TokenKind::UnterminatedString => {
                     self.error(ParseError::UnterminatedString(span));
                     Word {
-                        text: self.text(tok.start + 1..tok.end).into(),
-                        is_string: true,
+                        text: tok.text[1..].into(),
+                        format: WordFormat::DoubleQuoted,
                         span,
                     }
                 }
@@ -135,14 +122,6 @@ impl<'a> LineParser<'a> {
         }
     }
 
-    #[inline]
-    fn text<T>(&self, range: T) -> &'a str
-    where
-        str: Index<T, Output = str>,
-    {
-        &self.lex.source_text()[range]
-    }
-
     fn error(&mut self, err: ParseError) {
         // TODO: Make diagnostics system
         eprintln!("Error: {err}");
@@ -154,10 +133,10 @@ impl<'a> LineParser<'a> {
     }
 }
 
-impl<'a> Iterator for LineParser<'a> {
-    type Item = Vec<Word<'a>>;
+impl Iterator for LineParser<'_> {
+    type Item = Vec<Word>;
 
-    fn next(&mut self) -> Option<Vec<Word<'a>>> {
+    fn next(&mut self) -> Option<Vec<Word>> {
         let mut line = Vec::new();
         self.next_line(&mut line);
         if line.len() != 0 {

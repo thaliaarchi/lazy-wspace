@@ -19,3 +19,4 @@ uncased = "0.9"
 unicode-ident = "1.0"
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
 strum = { version = "0.25", features = ["derive"] }
+memchr = "2.6"

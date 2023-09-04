@@ -1,9 +1,12 @@
 use std::iter::FusedIterator;
 use std::str::from_utf8_unchecked;
 
+use memchr::memchr;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Token {
+pub struct Token<'a> {
     pub kind: TokenKind,
+    pub text: &'a str,
     pub start: usize,
     pub end: usize,
 }
@@ -46,11 +49,11 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl Iterator for Lexer<'_> {
-    type Item = Token;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token<'a>;
 
     #[inline]
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Token<'a>> {
         let start = self.offset;
         let kind = match self.bump()? {
             b' ' | b'\t' => {
@@ -74,8 +77,10 @@ impl Iterator for Lexer<'_> {
             }
             _ => self.word(),
         };
+        let text = unsafe { from_utf8_unchecked(&self.src[start..self.offset]) };
         Some(Token {
             kind,
+            text,
             start,
             end: self.offset,
         })
@@ -100,12 +105,15 @@ impl Lexer<'_> {
 
     #[inline]
     fn string(&mut self) -> TokenKind {
-        self.eat_while(|b| b != b'"');
-        if self.peek() == b'"' {
-            self.bump();
-            TokenKind::String
-        } else {
-            TokenKind::UnterminatedString
+        match memchr(b'"', &self.src[self.offset..]) {
+            Some(i) => {
+                self.offset += i + 1;
+                TokenKind::String
+            }
+            None => {
+                self.offset += memchr(b'\n', &self.src[self.offset..]).unwrap_or(self.src.len());
+                TokenKind::UnterminatedString
+            }
         }
     }
 

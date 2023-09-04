@@ -14,6 +14,7 @@ pub struct Module {
     /// Module prefix for identifiers.
     pub name: Option<String>,
     pub block: Block,
+    pub partitions: IdentPartition,
 }
 
 /// Sequence of instructions.
@@ -42,7 +43,7 @@ pub enum InstKind {
     Drop,
     Slide(IntegerArg),
     Arith {
-        op: ArithOp,
+        op: Arith,
         lhs: Option<IntegerArg>,
         rhs: Option<IntegerArg>,
     },
@@ -56,10 +57,7 @@ pub enum InstKind {
     Label(IdentArg),
     Call(IdentArg),
     Jmp(IdentArg),
-    Branch {
-        cond: Cond,
-        label: IdentArg,
-    },
+    Branch(Cond, IdentArg),
     Ret,
     End,
     Printc {
@@ -74,7 +72,9 @@ pub enum InstKind {
     Readi {
         address: Option<IntegerArg>,
     },
-    Dump(DumpKind),
+    Dump(Dump),
+    /// (Burghard `test`).
+    Test(IntegerArg),
     /// (Burghard `include`).
     Include {
         path: PathArg,
@@ -92,8 +92,7 @@ pub enum InstKind {
         elseif_blocks: Vec<IfOption>,
         else_block: Option<Box<Block>>,
     },
-    /// Syntax error.
-    Error,
+    Error(InstError),
 }
 
 /// If-then block for conditional compilation.
@@ -103,10 +102,52 @@ pub struct IfOption {
     pub block: Box<Block>,
 }
 
-type IntegerArg = Arg<IntegerLit>;
-type StringArg = Arg<StringLit>;
+/// Erroneous instruction.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InstError {
+    Arity { op: Opcode, args: Vec<Arg<Word>> },
+}
+
+type IntegerArg = Arg<IntegerValue>;
+type StringArg = Arg<StringValue>;
 type PathArg = Arg<PathLit>;
 type IdentArg = Arg<Ident>;
+
+/// Instruction opcode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Opcode {
+    Push,
+    PushString,
+    Dup,
+    Copy,
+    Swap,
+    Drop,
+    Slide,
+    Arith(Arith),
+    Store,
+    Retrieve,
+    Label,
+    Call,
+    Jmp,
+    Branch(Cond),
+    Ret,
+    End,
+    Printc,
+    Printi,
+    Readc,
+    Readi,
+    Dump(Dump),
+    Test,
+    Include,
+    DefineInteger,
+    DefineString,
+    DefineOption,
+    IfOption,
+    ElseOption,
+    ElseIfOption,
+    EndOption,
+    Error,
+}
 
 /// Atom in Whitespace assembly syntax.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -122,7 +163,8 @@ pub enum WordFormat {
     /// Typical bare word.
     #[default]
     Bare,
-    /// `"`-quoted word, which may contain spaces (Burghard).
+    /// `"`-quoted word, which may contain spaces. It is unwrapped and treated
+    /// identically to unquoted words after lexing (Burghard).
     DoubleQuoted,
     /// Consecutive unquoted words, that are spliced together by block comments
     /// without adjacent spaces (Burghard).
@@ -134,6 +176,22 @@ pub enum WordFormat {
 pub struct Arg<T> {
     pub value: T,
     pub space_before: Option<Span>,
+}
+
+/// Integer literal or variable reference.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntegerValue {
+    Lit(IntegerLit),
+    Var(Ident),
+    Error(Word),
+}
+
+/// String literal or variable reference.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StringValue {
+    Lit(StringLit),
+    Var(Ident),
+    Error(Word),
 }
 
 /// Integer literal.
@@ -175,7 +233,6 @@ pub struct Ident {
     pub ident: String,
     pub sigil: IdentSigil,
     pub scope: IdentScope,
-    pub partition: IdentPartition,
 }
 
 /// Sigil preceding an identifier.
@@ -194,16 +251,7 @@ pub enum IdentSigil {
     Percent,
 }
 
-/// Scope for identifier resolution.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum IdentScope {
-    /// Identifiers are resolved in the global scope.
-    Global,
-    /// Identifiers are resolved in a per-file scope.
-    File(FileId),
-}
-
-/// Partition for identifier resolution.
+/// Partition strategy for identifier resolution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum IdentPartition {
     /// Variables are in one partition.
@@ -212,6 +260,15 @@ pub enum IdentPartition {
     /// do not conflict between partitions (Burghard `valueinteger` and
     /// `valuestring`).
     Typed,
+}
+
+/// Scope for identifier resolution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IdentScope {
+    /// Identifiers are resolved in the global scope.
+    Global,
+    /// Identifiers are resolved in a per-file scope.
+    File(FileId),
 }
 
 /// Scope for identifiers introduced by `include`.
@@ -227,7 +284,7 @@ pub enum IncludeScope {
 
 /// Arithmetic binary operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ArithOp {
+pub enum Arith {
     Add,
     Sub,
     Mul,
@@ -252,9 +309,9 @@ pub enum Cond {
     NonPos,
 }
 
-/// Debugging instruction.
+/// Kind of debugging instruction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DumpKind {
+pub enum Dump {
     /// Dump the stack (Burghard `debug_printstack`).
     DebugPrintStack,
     /// Dump the heap (Burghard `debug_printheap`).
@@ -264,4 +321,40 @@ pub enum DumpKind {
     Trace,
     /// Dump the program counter, stack, and heap (JBanana `x-dump`).
     XDump,
+}
+
+impl InstKind {
+    #[inline]
+    pub fn opcode(&self) -> Opcode {
+        match self {
+            InstKind::Push(_) => Opcode::Push,
+            InstKind::PushString(_) => Opcode::PushString,
+            InstKind::Dup => Opcode::Dup,
+            InstKind::Copy(_) => Opcode::Copy,
+            InstKind::Swap => Opcode::Swap,
+            InstKind::Drop => Opcode::Drop,
+            InstKind::Slide(_) => Opcode::Slide,
+            InstKind::Arith { op, .. } => Opcode::Arith(*op),
+            InstKind::Store { .. } => Opcode::Store,
+            InstKind::Retrieve { .. } => Opcode::Retrieve,
+            InstKind::Label(_) => Opcode::Label,
+            InstKind::Call(_) => Opcode::Call,
+            InstKind::Jmp(_) => Opcode::Jmp,
+            InstKind::Branch(cond, _) => Opcode::Branch(*cond),
+            InstKind::Ret => Opcode::Ret,
+            InstKind::End => Opcode::End,
+            InstKind::Printc { .. } => Opcode::Printc,
+            InstKind::Printi { .. } => Opcode::Printi,
+            InstKind::Readc { .. } => Opcode::Readc,
+            InstKind::Readi { .. } => Opcode::Readi,
+            InstKind::Dump(kind) => Opcode::Dump(*kind),
+            InstKind::Test(_) => Opcode::Test,
+            InstKind::Include { .. } => Opcode::Include,
+            InstKind::DefineInteger(_, _) => Opcode::DefineInteger,
+            InstKind::DefineString(_, _) => Opcode::DefineString,
+            InstKind::DefineOption(_) => Opcode::DefineOption,
+            InstKind::IfOption { .. } => Opcode::IfOption,
+            InstKind::Error(_) => Opcode::Error,
+        }
+    }
 }
