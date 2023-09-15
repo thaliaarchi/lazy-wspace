@@ -1,4 +1,8 @@
 use rug::Integer as Mpz;
+use strum::Display;
+
+use crate::error::NumberError;
+use crate::hs;
 
 /// IR instruction.
 ///
@@ -11,21 +15,46 @@ pub enum Inst {
     UnaryImmI { opcode: Opcode, imm: i32 },
     /// Unary operation with a `u32` immediate.
     UnaryImmU { opcode: Opcode, imm: u32 },
-    /// Unary operation with a trap immediate.
-    UnaryImmTrap { opcode: Opcode, imm: Trap },
+    /// Unary operation with a stack index immediate.
+    UnaryImmIndex { opcode: Opcode, imm: hs::Int },
+    /// Unary operation with an error immediate.
+    UnaryImmError { opcode: Opcode, imm: NumberError },
     /// Unary operation.
     Unary { opcode: Opcode, arg: Value },
     /// Binary operation.
     Binary { opcode: Opcode, args: [Value; 2] },
+    /// Unary statement.
+    UnaryStmt { opcode: Opcode, arg: Value },
+    /// Unary statement with a stack index immediate.
+    UnaryStmtImmIndex { opcode: Opcode, imm: hs::Int },
+    /// Stack reference.
+    GuardedIndex {
+        opcode: Opcode,
+        index: hs::Int,
+        // TODO: Should control dependencies be separate from Value?
+        guard: Value,
+    },
+    /// Read from stdin.
+    Read { opcode: Opcode, format: IoFormat },
+    /// Print to stdout.
+    Print {
+        opcode: Opcode,
+        format: IoFormat,
+        arg: Value,
+    },
 }
 
 /// TODO
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Value;
 
-/// TODO
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Trap {}
+/// Format for I/O.
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
+pub enum IoFormat {
+    Char,
+    Int,
+}
 
 /// IR instruction opcode.
 ///
@@ -43,9 +72,9 @@ pub enum Opcode {
     /// 32-bit unsigned integer constant (UnaryImmU : u32).
     /// `%r = constu $n`.
     ConstU,
-    /// Trap thunk constant (UnaryImmTrap : Trap).
-    /// `%r = consttrap $trap`.
-    ConstTrap,
+    /// Error thunk constant (UnaryImmError : NumberError).
+    /// `%r = consterror $error`.
+    ConstError,
 
     // Arithmetic operations
     //
@@ -143,7 +172,7 @@ pub enum Opcode {
     //  when an Mpz output is desired.
     ModZU,
     /// Negation (Unary : Mpz → Mpz).
-    /// `%r = neg %arg`.
+    /// `%r = neg %val`.
     ///
     /// Lowers to GMP [`mpz_neg`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fneg).
     ///
@@ -152,7 +181,7 @@ pub enum Opcode {
     /// HotSpot [`NegINode`, `NegLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/subnode.hpp).
     Neg,
     /// Absolute value (Unary : Mpz → Mpz).
-    /// `%r = abs %arg`.
+    /// `%r = abs %val`.
     ///
     /// Lowers to GMP [`mpz_abs`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fabs).
     ///
@@ -220,23 +249,23 @@ pub enum Opcode {
     /// HotSpot [`URShiftINode`, `URShiftINode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     LShr,
     /// Bitwise complement (Unary : Mpz → Mpz).
-    /// `%r = not %arg`.
+    /// `%r = not %val`.
     ///
     /// Lowers to GMP [`mpz_com`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fcom).
     Not,
     /// Test bit at index (Binary : Mpz, u32 → u32).
-    /// `%r = testbit %arg, %bit`.
+    /// `%r = testbit %val, %bit`.
     ///
     /// Lowers to GMP [`mpz_tstbit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005ftstbit).
     TestBit,
     /// Length of the absolute value in bits (Unary : Mpz → u32).
-    /// `%r = count_bits %arg`.
+    /// `%r = count_bits %val`.
     ///
     /// Lowers to GMP [`mpz_sizeinbase(arg, 2) - 1`](https://gmplib.org/manual/Miscellaneous-Integer-Functions#index-mpz_005fsizeinbase).
     /// This matches Go [`big.Int.BitLen`](https://pkg.go.dev/math/big#Int.BitLen).
     CountBits,
     /// Count leading zeros (Unary : Mpz → u32).
-    /// `%r = countlz %arg`.
+    /// `%r = countlz %val`.
     ///
     /// **See also**:
     /// HotSpot [`CountLeadingZerosINode`, `CountLeadingZerosLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/countbitsnode.hpp).
@@ -245,7 +274,7 @@ pub enum Opcode {
     //  this operation.
     CountLz,
     /// Count trailing zeros (Unary : Mpz → u32).
-    /// `%r = counttz %arg`.
+    /// `%r = counttz %val`.
     ///
     /// Lowers to GMP [`mpz_scan1(arg, 0)`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fscan1).
     ///
@@ -253,12 +282,12 @@ pub enum Opcode {
     /// HotSpot [`CountTrailingZerosINode`, `CountTrailingZerosLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/countbitsnode.hpp).
     CountTz,
     /// Population count (Unary : Mpz → u32).
-    /// `%r = popcount %arg`.
+    /// `%r = popcount %val`.
     ///
     /// Lowers to GMP [`mpz_popcount`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fpopcount),
     /// but negative values are first complemented, so the input is always
     /// non-negative. This matches Java [`BigInteger.bitCount`](https://docs.oracle.com/en/java/javase/20/docs/api/java.base/java/math/BigInteger.html#bitCount())
-    /// and Common Lisp [`logcount`](https://novaspec.org/cl/f_logcount).
+    /// and Common Lisp [`logcount`](http://www.lispworks.com/documentation/HyperSpec/Body/f_logcou.htm).
     /// Haskell [`popCount`](https://hackage.haskell.org/package/base/docs/Data-Bits.html#v:popCount)
     /// is `-popCount(-n)` for negative `Integer` values.
     ///
@@ -269,11 +298,63 @@ pub enum Opcode {
     // Logical operations
     //
     /// Logical not (Unary : Mpz → Mpz).
-    /// `%r = lnot %arg`.
+    /// `%r = lnot %val`.
     //
     //  TODO: Should operate on `u1` instead of `Mpz`.
     //  TODO: See also.
     LNot,
+
+    // Error propagation
+    //
+    /// Evaluate a value thunk and possibly trap (UnaryStmt : Value →).
+    /// `eval %val`.
+    Eval,
+    /// Select the LHS, if it's an error, otherwise the RHS
+    /// (Binary : Value, Value → Value).
+    /// `%r = error_or %maybe_error %or_value`.
+    ErrorOr,
+
+    // Stack operations
+    //
+    /// Unchecked stack reference, that must be first guarded with `guard_stack`
+    /// (GuardedIndex).
+    /// `%r = stack_ref $index %guard`.
+    StackRef,
+    /// Checked stack reference (UnaryImmIndex).
+    /// `%r = checked_stack_ref $index`.
+    CheckedStackRef,
+    /// Assert that the stack has at least `length` elements (UnaryImmIndex).
+    /// `%guard = guard_stack $length`.
+    GuardStack,
+    /// Push a value to the stack (UnaryStmt).
+    /// `push %val`.
+    Push,
+    /// Drop `count` elements from the stack (UnaryStmtImmIndex).
+    /// `drop $count`.
+    Drop,
+    /// Lazily drop `count` elements from the stack (UnaryStmtImmIndex).
+    /// `drop_lazy $count`.
+    DropLazy,
+
+    // Heap operations
+    //
+    /// Heap reference (Unary).
+    /// `%r = heap_ref %address`.
+    //
+    //  TODO: Guard heap size.
+    HeapRef,
+    /// Store a value at a heap address (Binary).
+    /// `store %address, %val`.
+    Store,
+
+    // I/O instructions
+    //
+    /// Read a value from stdin (Read).
+    /// `%r = read $format`.
+    Read,
+    /// Print a value to stdout (Print).
+    /// `print $format, %val`.
+    Print,
 
     // Deprecated operations
     //
@@ -299,7 +380,7 @@ pub enum Opcode {
     /// `%r = nnotand %lhs, %rhs`.
     DeprecatedNNotAnd,
     /// Negated bit test (Binary : Mpz, u32 → u32).
-    /// `%r = ntestbit %arg, %bit`.
+    /// `%r = ntestbit %val, %bit`.
     DeprecatedNTestBit,
 }
 
