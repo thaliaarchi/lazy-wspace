@@ -1,50 +1,55 @@
+use rug::Integer as Mpz;
+
 /// IR instruction.
 ///
 /// Compare to Cranelift [`cranelift_codegen::ir::instructions::InstructionData`](https://docs.rs/cranelift-codegen/latest/cranelift_codegen/ir/instructions/enum.InstructionData.html).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
-    /// Binary operation with arbitrary-precision operands.
-    Binary { opcode: Opcode, args: [Value; 2] },
-    /// Binary operation with an arbitrary-precision LHS and `i32` RHS.
-    BinaryZI {
-        opcode: Opcode,
-        lhs: Value,
-        rhs: i32,
-    },
-    /// Binary operation with an `i32` LHS and arbitrary-precision RHS.
-    BinaryIZ {
-        opcode: Opcode,
-        lhs: i32,
-        rhs: Value,
-    },
-    /// Binary operation with an arbitrary-precision LHS and `u32` RHS.
-    BinaryZU {
-        opcode: Opcode,
-        lhs: Value,
-        rhs: u32,
-    },
-    /// Binary operation with an `u32` LHS and arbitrary-precision RHS.
-    BinaryUZ {
-        opcode: Opcode,
-        lhs: u32,
-        rhs: Value,
-    },
-    /// Unary operation with arbitrary-precision operand.
+    /// Unary operation with an `Mpz` immediate.
+    UnaryImmZ { opcode: Opcode, imm: Mpz },
+    /// Unary operation with an `i32` immediate.
+    UnaryImmI { opcode: Opcode, imm: i32 },
+    /// Unary operation with a `u32` immediate.
+    UnaryImmU { opcode: Opcode, imm: u32 },
+    /// Unary operation with a trap immediate.
+    UnaryImmTrap { opcode: Opcode, imm: Trap },
+    /// Unary operation.
     Unary { opcode: Opcode, arg: Value },
+    /// Binary operation.
+    Binary { opcode: Opcode, args: [Value; 2] },
 }
 
 /// TODO
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Value;
 
+/// TODO
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Trap {}
+
 /// IR instruction opcode.
 ///
 /// Compare to Cranelift [`cranelift_codegen::ir::instructions::Opcode`](https://docs.rs/cranelift-codegen/latest/cranelift_codegen/ir/instructions/enum.Opcode.html).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Opcode {
+    // Constants
+    //
+    /// Arbitrary-precision integer constant (UnaryImmZ : Mpz).
+    /// `%r = const $n`.
+    Const,
+    /// 32-bit signed integer constant (UnaryImmI : i32).
+    /// `%r = consti $n`.
+    ConstI,
+    /// 32-bit unsigned integer constant (UnaryImmU : u32).
+    /// `%r = constu $n`.
+    ConstU,
+    /// Trap thunk constant (UnaryImmTrap : Trap).
+    /// `%r = consttrap $trap`.
+    ConstTrap,
+
     // Arithmetic operations
     //
-    /// Addition (*Binary*).
+    /// Addition (Binary : Mpz, Mpz → Mpz).
     /// `%r = add %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_add`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fadd).
@@ -53,12 +58,12 @@ pub enum Opcode {
     /// Graal [`AddNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/AddNode.java);
     /// HotSpot [`AddNode`, `AddINode`, `AddLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp).
     Add,
-    /// Addition (*BinaryZU*).
-    /// `%r = addzu %lhs, $rhs`.
+    /// Addition (Binary : Mpz, u32 → Mpz).
+    /// `%r = addzu %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_add_ui`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fadd_005fui).
     AddZU,
-    /// Subtraction (*Binary*).
+    /// Subtraction (Binary : Mpz, Mpz → Mpz).
     /// `%r = sub %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_sub`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fsub).
@@ -67,17 +72,17 @@ pub enum Opcode {
     /// Graal [`SubNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/SubNode.java);
     /// HotSpot [`SubINode`, `SubLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/subnode.hpp).
     Sub,
-    /// Subtraction (*BinaryZI*).
-    /// `%r = subzi %lhs, $rhs`.
+    /// Subtraction (Binary : Mpz, i32 → Mpz).
+    /// `%r = subzi %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_sub_ui`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fsub_005fui).
     SubZI,
-    /// Subtraction (*BinaryIZ*).
-    /// `%r = subiz $lhs, %rhs`.
+    /// Subtraction (Binary : i32, Mpz → Mpz).
+    /// `%r = subiz %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_ui_sub`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fui_005fsub).
     SubIZ,
-    /// Multiplication (*Binary*).
+    /// Multiplication (Binary : Mpz, Mpz → Mpz).
     /// `%r = mul %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_mul`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fmul).
@@ -86,17 +91,17 @@ pub enum Opcode {
     /// Graal [`MulNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/MulNode.java);
     /// HotSpot [`MulINode`, `MulLNode`, `MulHiLNode`, `UMulHiLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     Mul,
-    /// Multiplication (*BinaryZI*).
-    /// `%r = mulzi %lhs, $rhs`.
+    /// Multiplication (Binary : Mpz, Mpz → Mpz).
+    /// `%r = mulzi %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_mul_si`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fmul_005fsi).
     MulZI,
-    /// Multiplication (*BinaryZU*).
-    /// `%r = mulzu %lhs, $rhs`.
+    /// Multiplication (Binary : Mpz, u32 → Mpz).
+    /// `%r = mulzu %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_mul_ui`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fmul_005fui).
     MulZU,
-    /// Division (*Binary*).
+    /// Division (Binary : Mpz, Mpz → Mpz).
     /// `%r = div %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_fdiv_q`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fq).
@@ -110,12 +115,12 @@ pub enum Opcode {
     /// HotSpot [`DivINode`, `DivLNode`, `UDivINode`, `UDivLNode`,
     ///   `DivModINode`, `DivModLNode`, `UDivModINode`, `UDivModLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/divnode.hpp).
     Div,
-    /// Division (*BinaryZU*).
-    /// `%r = divzu %lhs, $rhs`.
+    /// Division (Binary : Mpz, u32 → Mpz).
+    /// `%r = divzu %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_fdiv_q_ui`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fq_005fui).
     DivZU,
-    /// Modulo (*Binary*).
+    /// Modulo (Binary : Mpz, Mpz → Mpz).
     /// `%r = mod %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_fdiv_r`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fr).
@@ -130,14 +135,14 @@ pub enum Opcode {
     /// HotSpot [`ModINode`, `ModLNode`, `UModINode`, `UModLNode`,
     ///   `DivModINode`, `DivModLNode`, `UDivModINode`, `UDivModLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/divnode.hpp).
     Mod,
-    /// Modulo (*BinaryZU*).
-    /// `%r = modzu %lhs, $rhs`.
+    /// Modulo (Binary : Mpz, u32 → u32).
+    /// `%r = modzu %lhs, %rhs`.
     ///
-    /// Lowers to GMP [`mpz_fdiv_r_ui`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fr_005fui).
-    //  TODO: Lower to [`mpz_fdiv_ui`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fui),
-    //  once `u32` values are first-class.
+    /// Lowers to GMP [`mpz_fdiv_ui`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fui).
+    //  TODO: Alternatively lower to [`mpz_fdiv_r_ui`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fr_005fui),
+    //  when an Mpz output is desired.
     ModZU,
-    /// Negation (*Unary*).
+    /// Negation (Unary : Mpz → Mpz).
     /// `%r = neg %arg`.
     ///
     /// Lowers to GMP [`mpz_neg`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fneg).
@@ -146,7 +151,7 @@ pub enum Opcode {
     /// Graal [`NegateNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/NegateNode.java);
     /// HotSpot [`NegINode`, `NegLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/subnode.hpp).
     Neg,
-    /// Absolute value (*Unary*).
+    /// Absolute value (Unary : Mpz → Mpz).
     /// `%r = abs %arg`.
     ///
     /// Lowers to GMP [`mpz_abs`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fabs).
@@ -158,7 +163,7 @@ pub enum Opcode {
 
     // Bitwise operations
     //
-    /// Bitwise AND (*Binary*).
+    /// Bitwise AND (Binary : Mpz, Mpz → Mpz).
     /// `%r = and %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_and`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fand).
@@ -167,7 +172,7 @@ pub enum Opcode {
     /// Graal [`AndNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/AndNode.java);
     /// HotSpot [`AndINode`, `AndLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     And,
-    /// Bitwise OR (*Binary*).
+    /// Bitwise OR (Binary : Mpz, Mpz → Mpz).
     /// `%r = or %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_ior`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fior).
@@ -176,7 +181,7 @@ pub enum Opcode {
     /// Graal [`OrNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/OrNode.java);
     /// HotSpot [`OrINode`, `OrLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp).
     Or,
-    /// Bitwise XOR (*Binary*).
+    /// Bitwise XOR (Binary : Mpz, Mpz → Mpz).
     /// `%r = xor %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_xor`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fxor).
@@ -185,8 +190,8 @@ pub enum Opcode {
     /// Graal [`XorNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/XorNode.java);
     /// HotSpot [`XorINode`, `XOrLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/addnode.hpp).
     Xor,
-    /// Left shift (*BinaryZU*).
-    /// `%r = shl %lhs, $rhs`.
+    /// Left shift (Binary : Mpz, u32 → Mpz).
+    /// `%r = shl %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_mul_2exp`](https://gmplib.org/manual/Integer-Arithmetic#index-mpz_005fmul_005f2exp).
     ///
@@ -194,8 +199,8 @@ pub enum Opcode {
     /// Graal [`LeftShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/LeftShiftNode.java);
     /// HotSpot [`LShiftINode`, LShiftLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     Shl,
-    /// Arithmetic right shift (*BinaryZU*).
-    /// `%r = ashr %lhs, $rhs`.
+    /// Arithmetic right shift (Binary : Mpz, u32 → Mpz).
+    /// `%r = ashr %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_fdiv_q_2exp`](https://gmplib.org/manual/Integer-Division#index-mpz_005ffdiv_005fq_005f2exp).
     //  TODO: Verify that this is the correct function.
@@ -204,8 +209,8 @@ pub enum Opcode {
     /// Graal [`RightShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/RightShiftNode.java);
     /// HotSpot [`RShiftINode`, `RShiftLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     AShr,
-    /// Logical right shift (*BinaryZU*).
-    /// `%r = lshr %lhs, $rhs`.
+    /// Logical right shift (Binary : Mpz, u32 → Mpz).
+    /// `%r = lshr %lhs, %rhs`.
     ///
     /// Lowers to GMP [`mpz_tdiv_q_2exp`](https://gmplib.org/manual/Integer-Division#index-mpz_005ftdiv_005fq_005f2exp).
     //  TODO: Verify that this is the correct function.
@@ -214,23 +219,23 @@ pub enum Opcode {
     /// Graal [`UnsignedRightShiftNode`](https://github.com/oracle/graal/blob/master/compiler/src/jdk.internal.vm.compiler/src/org/graalvm/compiler/nodes/calc/UnsignedRightShiftNode.java);
     /// HotSpot [`URShiftINode`, `URShiftINode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/mulnode.hpp).
     LShr,
-    /// Bitwise complement (*Unary*).
+    /// Bitwise complement (Unary : Mpz → Mpz).
     /// `%r = not %arg`.
     ///
     /// Lowers to GMP [`mpz_com`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fcom).
     Not,
-    /// Test bit at index (*BinaryZU*).
-    /// `%r = testbit %arg, $bit`.
+    /// Test bit at index (Binary : Mpz, u32 → u32).
+    /// `%r = testbit %arg, %bit`.
     ///
     /// Lowers to GMP [`mpz_tstbit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005ftstbit).
     TestBit,
-    /// Length of the absolute value in bits (*Unary*).
+    /// Length of the absolute value in bits (Unary : Mpz → u32).
     /// `%r = count_bits %arg`.
     ///
     /// Lowers to GMP [`mpz_sizeinbase(arg, 2) - 1`](https://gmplib.org/manual/Miscellaneous-Integer-Functions#index-mpz_005fsizeinbase).
     /// This matches Go [`big.Int.BitLen`](https://pkg.go.dev/math/big#Int.BitLen).
     CountBits,
-    /// Count leading zeros (*Unary*).
+    /// Count leading zeros (Unary : Mpz → u32).
     /// `%r = countlz %arg`.
     ///
     /// **See also**:
@@ -239,7 +244,7 @@ pub enum Opcode {
     //  TODO: How to define it for negative values? Go math/big does not provide
     //  this operation.
     CountLz,
-    /// Count trailing zeros (*Unary*).
+    /// Count trailing zeros (Unary : Mpz → u32).
     /// `%r = counttz %arg`.
     ///
     /// Lowers to GMP [`mpz_scan1(arg, 0)`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fscan1).
@@ -247,7 +252,7 @@ pub enum Opcode {
     /// **See also**:
     /// HotSpot [`CountTrailingZerosINode`, `CountTrailingZerosLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/countbitsnode.hpp).
     CountTz,
-    /// Population count (*Unary*).
+    /// Population count (Unary : Mpz → u32).
     /// `%r = popcount %arg`.
     ///
     /// Lowers to GMP [`mpz_popcount`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fpopcount),
@@ -263,38 +268,38 @@ pub enum Opcode {
 
     // Logical operations
     //
-    /// Logical not (*Unary*).
+    /// Logical not (Unary : Mpz → Mpz).
     /// `%r = lnot %arg`.
     //
-    //  TODO: Should operate on `u1` instead of MPZ.
+    //  TODO: Should operate on `u1` instead of `Mpz`.
     //  TODO: See also.
     LNot,
 
     // Deprecated operations
     //
-    /// Bitwise AND NOT, i.e., `lhs & ~rhs` (*Binary*).
+    /// Bitwise AND NOT, i.e., `lhs & ~rhs` (Binary : Mpz, Mpz → Mpz).
     /// `%r = andnot %lhs, %rhs`.
     DeprecatedAndNot,
-    /// Bitwise NOT AND, i.e., `~lhs & rhs` (*Binary*).
+    /// Bitwise NOT AND, i.e., `~lhs & rhs` (Binary : Mpz, Mpz → Mpz).
     /// `%r = notand %lhs, %rhs`.
     DeprecatedNotAnd,
-    /// Bitwise NAND (*Binary*).
+    /// Bitwise NAND (Binary : Mpz, Mpz → Mpz).
     /// `%r = nand %lhs, %rhs`.
     DeprecatedNand,
-    /// Bitwise NOR (*Binary*).
+    /// Bitwise NOR (Binary : Mpz, Mpz → Mpz).
     /// `%r = nor %lhs, %rhs`.
     DeprecatedNor,
-    /// Bitwise XNOR (*Binary*).
+    /// Bitwise XNOR (Binary : Mpz, Mpz → Mpz).
     /// `%r = xnor %lhs, %rhs`.
     DeprecatedXnor,
-    /// Bitwise negated AND NOT (*Binary*).
+    /// Bitwise negated AND NOT (Binary : Mpz, Mpz → Mpz).
     /// `%r = nandnot %lhs, %rhs`.
     DeprecatedNandNot,
-    /// Bitwise negated NOT AND (*Binary*).
+    /// Bitwise negated NOT AND (Binary : Mpz, Mpz → Mpz).
     /// `%r = nnotand %lhs, %rhs`.
     DeprecatedNNotAnd,
-    /// Negated bit test (*BinaryZU*).
-    /// `%r = ntestbit %arg, $bit`.
+    /// Negated bit test (Binary : Mpz, u32 → u32).
+    /// `%r = ntestbit %arg, %bit`.
     DeprecatedNTestBit,
 }
 
