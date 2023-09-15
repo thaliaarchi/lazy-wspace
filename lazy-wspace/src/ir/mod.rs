@@ -1,3 +1,4 @@
+pub mod instructions;
 pub mod nodes;
 
 mod cfg;
