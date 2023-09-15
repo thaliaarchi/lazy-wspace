@@ -1,14 +1,17 @@
 use rug::Integer as Mpz;
 use strum::Display;
 
-use crate::error::NumberError;
+use crate::error::{Error, NumberError};
 use crate::hs;
+use crate::ir::BBlockId;
 
 /// IR instruction.
 ///
 /// Compare to Cranelift [`cranelift_codegen::ir::instructions::InstructionData`](https://docs.rs/cranelift-codegen/latest/cranelift_codegen/ir/instructions/enum.InstructionData.html).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
+    // Values
+    //
     /// Unary operation with an `Mpz` immediate.
     UnaryImmZ { opcode: Opcode, imm: Mpz },
     /// Unary operation with an `i32` immediate.
@@ -23,10 +26,6 @@ pub enum Inst {
     Unary { opcode: Opcode, arg: Value },
     /// Binary operation.
     Binary { opcode: Opcode, args: [Value; 2] },
-    /// Unary statement.
-    UnaryStmt { opcode: Opcode, arg: Value },
-    /// Unary statement with a stack index immediate.
-    UnaryStmtImmIndex { opcode: Opcode, imm: hs::Int },
     /// Stack reference.
     GuardedIndex {
         opcode: Opcode,
@@ -36,11 +35,45 @@ pub enum Inst {
     },
     /// Read from stdin.
     Read { opcode: Opcode, format: IoFormat },
+
+    // Statements
+    //
+    /// Unary statement.
+    UnaryStmt { opcode: Opcode, arg: Value },
+    /// Unary statement with a stack index immediate.
+    UnaryImmIndexStmt { opcode: Opcode, imm: hs::Int },
+    /// Nullary statement.
+    NullaryStmt { opcode: Opcode },
     /// Print to stdout.
-    Print {
+    PrintStmt {
         opcode: Opcode,
         format: IoFormat,
         arg: Value,
+    },
+
+    // Control flow instructions
+    //
+    /// Unconditional jump.
+    Jmp { opcode: Opcode, target: BBlockId },
+    /// Call.
+    Call {
+        opcode: Opcode,
+        target: BBlockId,
+        next: BBlockId,
+    },
+    /// Conditional branch.
+    Br {
+        opcode: Opcode,
+        cond: Cond,
+        arg: Value,
+        if_true: BBlockId,
+        if_false: BBlockId,
+    },
+    /// Trap.
+    Trap {
+        opcode: Opcode,
+        // Boxed to keep the size smaller.
+        error: Box<Error>,
     },
 }
 
@@ -54,6 +87,14 @@ pub struct Value;
 pub enum IoFormat {
     Char,
     Int,
+}
+
+/// Condition for a branch.
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
+pub enum Cond {
+    Zero,
+    Neg,
 }
 
 /// IR instruction opcode.
@@ -329,10 +370,10 @@ pub enum Opcode {
     /// Push a value to the stack (UnaryStmt).
     /// `push %val`.
     Push,
-    /// Drop `count` elements from the stack (UnaryStmtImmIndex).
+    /// Drop `count` elements from the stack (UnaryImmIndexStmt).
     /// `drop $count`.
     Drop,
-    /// Lazily drop `count` elements from the stack (UnaryStmtImmIndex).
+    /// Lazily drop `count` elements from the stack (UnaryImmIndexStmt).
     /// `drop_lazy $count`.
     DropLazy,
 
@@ -352,9 +393,30 @@ pub enum Opcode {
     /// Read a value from stdin (Read).
     /// `%r = read $format`.
     Read,
-    /// Print a value to stdout (Print).
+    /// Print a value to stdout (PrintStmt).
     /// `print $format, %val`.
     Print,
+
+    // Control flow instructions
+    //
+    /// Call (Call).
+    /// `call @target, @next`.
+    Call,
+    /// Unconditional jump (Jmp).
+    /// `jmp @target`.
+    Jmp,
+    /// Conditional branch (Br).
+    /// `br $cond, %val, @if_true, @if_false`.
+    Br,
+    /// Return from a call (NullaryStmt).
+    /// `ret`.
+    Ret,
+    /// Exit the program (NullaryStmt).
+    /// `exit`.
+    Exit,
+    /// Exit the program with an error (Trap).
+    /// `trap $error`.
+    Trap,
 
     // Deprecated operations
     //
