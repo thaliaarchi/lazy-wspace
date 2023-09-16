@@ -105,8 +105,8 @@ pub enum Opcode {
     // Constants
     //
     /// Arbitrary-precision integer constant (UnaryImmZ : Mpz).
-    /// `%r = const $n`.
-    Const,
+    /// `%r = constz $n`.
+    ConstZ,
     /// 32-bit signed integer constant (UnaryImmI : i32).
     /// `%r = consti $n`.
     ConstI,
@@ -114,7 +114,7 @@ pub enum Opcode {
     /// `%r = constu $n`.
     ConstU,
     /// Error thunk constant (UnaryImmError : NumberError).
-    /// `%r = consterror $error`.
+    /// `%r = const_error $error`.
     ConstError,
 
     // Arithmetic operations
@@ -295,7 +295,7 @@ pub enum Opcode {
     /// Lowers to GMP [`mpz_com`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fcom).
     Not,
     /// Test bit at index (Binary : Mpz, u32 → u32).
-    /// `%r = testbit %val, %bit`.
+    /// `%r = test_bit %val, %bit`.
     ///
     /// Lowers to GMP [`mpz_tstbit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005ftstbit).
     TestBit,
@@ -306,7 +306,7 @@ pub enum Opcode {
     /// This matches Go [`big.Int.BitLen`](https://pkg.go.dev/math/big#Int.BitLen).
     CountBits,
     /// Count leading zeros (Unary : Mpz → u32).
-    /// `%r = countlz %val`.
+    /// `%r = count_lz %val`.
     ///
     /// **See also**:
     /// HotSpot [`CountLeadingZerosINode`, `CountLeadingZerosLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/countbitsnode.hpp).
@@ -315,7 +315,7 @@ pub enum Opcode {
     //  this operation.
     CountLz,
     /// Count trailing zeros (Unary : Mpz → u32).
-    /// `%r = counttz %val`.
+    /// `%r = count_tz %val`.
     ///
     /// Lowers to GMP [`mpz_scan1(arg, 0)`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fscan1).
     ///
@@ -455,3 +455,292 @@ pub enum Opcode {
 // - [`mpz_setbit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fsetbit)
 // - [`mpz_clrbit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fclrbit)
 // - [`mpz_combit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fcombit)
+
+impl Opcode {
+    pub fn is_value(&self) -> bool {
+        match self {
+            Opcode::ConstZ
+            | Opcode::ConstI
+            | Opcode::ConstU
+            | Opcode::ConstError
+            | Opcode::Add
+            | Opcode::AddZU
+            | Opcode::Sub
+            | Opcode::SubZI
+            | Opcode::SubIZ
+            | Opcode::Mul
+            | Opcode::MulZI
+            | Opcode::MulZU
+            | Opcode::Div
+            | Opcode::DivZU
+            | Opcode::Mod
+            | Opcode::ModZU
+            | Opcode::Neg
+            | Opcode::Abs
+            | Opcode::And
+            | Opcode::Or
+            | Opcode::Xor
+            | Opcode::Shl
+            | Opcode::AShr
+            | Opcode::LShr
+            | Opcode::Not
+            | Opcode::TestBit
+            | Opcode::CountBits
+            | Opcode::CountLz
+            | Opcode::CountTz
+            | Opcode::PopCount
+            | Opcode::LNot
+            | Opcode::ErrorOr
+            | Opcode::StackRef
+            | Opcode::CheckedStackRef
+            | Opcode::HeapRef
+            | Opcode::Read
+            | Opcode::DeprecatedAndNot
+            | Opcode::DeprecatedNotAnd
+            | Opcode::DeprecatedNand
+            | Opcode::DeprecatedNor
+            | Opcode::DeprecatedXnor
+            | Opcode::DeprecatedNandNot
+            | Opcode::DeprecatedNNotAnd
+            | Opcode::DeprecatedNTestBit => true,
+            Opcode::Eval // TODO: make eval a value
+            | Opcode::GuardStack
+            | Opcode::Push
+            | Opcode::Drop
+            | Opcode::DropLazy
+            | Opcode::Store
+            | Opcode::Print
+            | Opcode::Call
+            | Opcode::Jmp
+            | Opcode::Br
+            | Opcode::Ret
+            | Opcode::Exit
+            | Opcode::Trap => false,
+        }
+    }
+}
+
+macro_rules! unary(($func:ident ($opcode:expr, $val:ident)) => {
+    #[inline]
+    pub fn $func($val: Value) -> Self {
+        Inst::Unary {
+            opcode: $opcode,
+            arg: $val,
+        }
+    }
+});
+macro_rules! binary(($func:ident ($opcode:expr, $lhs:ident, $rhs:ident)) => {
+    #[inline]
+    pub fn $func($lhs: Value, $rhs: Value) -> Self {
+        Inst::Binary {
+            opcode: $opcode,
+            args: [$lhs, $rhs],
+        }
+    }
+});
+
+impl Inst {
+    #[inline]
+    pub fn opcode(&self) -> Opcode {
+        match self {
+            Inst::UnaryImmZ { opcode, .. }
+            | Inst::UnaryImmI { opcode, .. }
+            | Inst::UnaryImmU { opcode, .. }
+            | Inst::UnaryImmIndex { opcode, .. }
+            | Inst::UnaryImmError { opcode, .. }
+            | Inst::Unary { opcode, .. }
+            | Inst::Binary { opcode, .. }
+            | Inst::GuardedIndex { opcode, .. }
+            | Inst::Read { opcode, .. }
+            | Inst::UnaryStmt { opcode, .. }
+            | Inst::UnaryImmIndexStmt { opcode, .. }
+            | Inst::NullaryStmt { opcode, .. }
+            | Inst::PrintStmt { opcode, .. }
+            | Inst::Jmp { opcode, .. }
+            | Inst::Call { opcode, .. }
+            | Inst::Br { opcode, .. }
+            | Inst::Trap { opcode, .. } => *opcode,
+        }
+    }
+
+    #[inline]
+    pub fn is_value(&self) -> bool {
+        self.opcode().is_value()
+    }
+
+    #[inline]
+    pub fn constz(n: Mpz) -> Self {
+        Inst::UnaryImmZ {
+            opcode: Opcode::ConstZ,
+            imm: n,
+        }
+    }
+    #[inline]
+    pub fn consti(n: i32) -> Self {
+        Inst::UnaryImmI {
+            opcode: Opcode::ConstI,
+            imm: n,
+        }
+    }
+    #[inline]
+    pub fn constu(n: u32) -> Self {
+        Inst::UnaryImmU {
+            opcode: Opcode::ConstU,
+            imm: n,
+        }
+    }
+    #[inline]
+    pub fn const_error(error: NumberError) -> Self {
+        Inst::UnaryImmError {
+            opcode: Opcode::ConstError,
+            imm: error,
+        }
+    }
+    binary!(add(Opcode::Add, lhs, rhs));
+    binary!(addzu(Opcode::AddZU, lhs, rhs));
+    binary!(sub(Opcode::Sub, lhs, rhs));
+    binary!(subzi(Opcode::SubZI, lhs, rhs));
+    binary!(subiz(Opcode::SubIZ, lhs, rhs));
+    binary!(mul(Opcode::Mul, lhs, rhs));
+    binary!(mulzi(Opcode::MulZI, lhs, rhs));
+    binary!(mulzu(Opcode::MulZU, lhs, rhs));
+    binary!(div(Opcode::Div, lhs, rhs));
+    binary!(divzu(Opcode::DivZU, lhs, rhs));
+    binary!(mod_(Opcode::Mod, lhs, rhs));
+    binary!(modzu(Opcode::ModZU, lhs, rhs));
+    unary!(neg(Opcode::Neg, val));
+    unary!(abs(Opcode::Abs, val));
+    binary!(and(Opcode::And, lhs, rhs));
+    binary!(or(Opcode::Or, lhs, rhs));
+    binary!(xor(Opcode::Xor, lhs, rhs));
+    binary!(shl(Opcode::Shl, lhs, rhs));
+    binary!(ashr(Opcode::AShr, lhs, rhs));
+    binary!(lshr(Opcode::LShr, lhs, rhs));
+    unary!(not(Opcode::Not, val));
+    binary!(test_bit(Opcode::TestBit, lhs, rhs));
+    unary!(count_bits(Opcode::CountBits, val));
+    unary!(count_lz(Opcode::CountLz, val));
+    unary!(count_tz(Opcode::CountTz, val));
+    unary!(popcount(Opcode::PopCount, val));
+    unary!(lnot(Opcode::LNot, val));
+    #[inline]
+    pub fn eval(val: Value) -> Self {
+        Inst::UnaryStmt {
+            opcode: Opcode::Eval,
+            arg: val,
+        }
+    }
+    binary!(error_or(Opcode::ErrorOr, maybe_error, or_value));
+    #[inline]
+    pub fn stack_ref(index: hs::Int, guard: Value) -> Self {
+        Inst::GuardedIndex {
+            opcode: Opcode::StackRef,
+            index,
+            guard,
+        }
+    }
+    #[inline]
+    pub fn checked_stack_ref(index: hs::Int) -> Self {
+        Inst::UnaryImmIndex {
+            opcode: Opcode::CheckedStackRef,
+            imm: index,
+        }
+    }
+    #[inline]
+    pub fn guard_stack(length: hs::Int) -> Self {
+        Inst::UnaryImmIndex {
+            opcode: Opcode::GuardStack,
+            imm: length,
+        }
+    }
+    #[inline]
+    pub fn push(val: Value) -> Self {
+        Inst::UnaryStmt {
+            opcode: Opcode::Push,
+            arg: val,
+        }
+    }
+    #[inline]
+    pub fn drop(count: hs::Int) -> Self {
+        Inst::UnaryImmIndexStmt {
+            opcode: Opcode::Drop,
+            imm: count,
+        }
+    }
+    #[inline]
+    pub fn drop_lazy(count: hs::Int) -> Self {
+        Inst::UnaryImmIndexStmt {
+            opcode: Opcode::DropLazy,
+            imm: count,
+        }
+    }
+    unary!(heap_ref(Opcode::HeapRef, address));
+    binary!(store(Opcode::Store, address, val));
+    #[inline]
+    pub fn read(format: IoFormat) -> Self {
+        Inst::Read {
+            opcode: Opcode::Read,
+            format,
+        }
+    }
+    #[inline]
+    pub fn print(format: IoFormat, val: Value) -> Self {
+        Inst::PrintStmt {
+            opcode: Opcode::Print,
+            format,
+            arg: val,
+        }
+    }
+    #[inline]
+    pub fn call(target: BBlockId, next: BBlockId) -> Self {
+        Inst::Call {
+            opcode: Opcode::Call,
+            target,
+            next,
+        }
+    }
+    #[inline]
+    pub fn jmp(target: BBlockId) -> Self {
+        Inst::Jmp {
+            opcode: Opcode::Jmp,
+            target,
+        }
+    }
+    #[inline]
+    pub fn br(cond: Cond, val: Value, if_true: BBlockId, if_false: BBlockId) -> Self {
+        Inst::Br {
+            opcode: Opcode::Br,
+            cond,
+            arg: val,
+            if_true,
+            if_false,
+        }
+    }
+    #[inline]
+    pub fn ret() -> Self {
+        Inst::NullaryStmt {
+            opcode: Opcode::Ret,
+        }
+    }
+    #[inline]
+    pub fn exit() -> Self {
+        Inst::NullaryStmt {
+            opcode: Opcode::Exit,
+        }
+    }
+    #[inline]
+    pub fn trap(error: Error) -> Self {
+        Inst::Trap {
+            opcode: Opcode::Trap,
+            error: Box::new(error),
+        }
+    }
+    binary!(deprecated_andnot(Opcode::DeprecatedAndNot, lhs, rhs));
+    binary!(deprecated_notand(Opcode::DeprecatedNotAnd, lhs, rhs));
+    binary!(deprecated_nand(Opcode::DeprecatedNand, lhs, rhs));
+    binary!(deprecated_nor(Opcode::DeprecatedNor, lhs, rhs));
+    binary!(deprecated_xnor(Opcode::DeprecatedXnor, lhs, rhs));
+    binary!(deprecated_nandnot(Opcode::DeprecatedNandNot, lhs, rhs));
+    binary!(deprecated_nnotand(Opcode::DeprecatedNNotAnd, lhs, rhs));
+    binary!(deprecated_ntestbit(Opcode::DeprecatedNTestBit, lhs, rhs));
+}
