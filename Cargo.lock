@@ -96,7 +96,6 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "hashbrown",
- "lazy-wspace-generate",
  "lazy-wspace-macros",
  "rug",
  "simdutf8",
@@ -105,16 +104,6 @@ dependencies = [
  "strum",
  "thiserror",
  "utf8-chars",
-]
-
-[[package]]
-name = "lazy-wspace-generate"
-version = "0.1.0"
-dependencies = [
- "prettyplease",
- "proc-macro2",
- "quote",
- "syn 2.0.29",
 ]
 
 [[package]]
@@ -194,16 +183,6 @@ source = "git+https://github.com/thaliaarchi/rust-phf#f61a9e0850151009ac7a655298
 dependencies = [
  "siphasher",
  "uncased",
-]
-
-[[package]]
-name = "prettyplease"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
-dependencies = [
- "proc-macro2",
- "syn 2.0.29",
 ]
 
 [[package]]

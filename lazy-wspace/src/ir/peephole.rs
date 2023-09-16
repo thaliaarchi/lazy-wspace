@@ -1,12 +1,11 @@
 use std::cmp::Ordering;
 
 use rug::ops::{DivRounding, RemRounding};
-use rug::{Complete, Integer};
+use rug::{Complete, Integer as Mpz};
 
 use crate::error::NumberError;
-use crate::ir::{Inst, NodeRef, NodeTable};
-
-include!(concat!(env!("OUT_DIR"), "/rewrites.rs"));
+use crate::ir::instructions::{Inst, Opcode, Value};
+use crate::ir::{NodeRef, NodeTable};
 
 enum Action {
     New,
@@ -14,159 +13,221 @@ enum Action {
     Use(NodeRef),
 }
 
+macro_rules! constz(($n:pat) => {
+    Inst::UnaryImmZ {
+        opcode: Opcode::ConstZ,
+        imm: $n,
+    }
+});
+macro_rules! constu(($n:pat) => {
+    Inst::UnaryImmU {
+        opcode: Opcode::ConstU,
+        imm: $n,
+    }
+});
+macro_rules! const_error(($error:pat) => {
+    Inst::UnaryImmError {
+        opcode: Opcode::ConstError,
+        imm: $error,
+    }
+});
+macro_rules! unary(
+    ($opcode:ident, $val:pat) => {
+        Inst::Unary {
+            opcode: Opcode::$opcode,
+            arg: $val,
+        }
+    };
+    ($opcode:ident, ..) => {
+        Inst::Unary {
+            opcode: Opcode::$opcode,
+            ..
+        }
+    };
+);
+macro_rules! binary(
+    ($opcode:ident, $lhs:pat, $rhs:pat) => {
+        Inst::Binary {
+            opcode: Opcode::$opcode,
+            args: [$lhs, $rhs],
+        }
+    };
+    ($opcode:ident, ..) => {
+        Inst::Binary {
+            opcode: Opcode::$opcode,
+            ..
+        }
+    };
+);
+macro_rules! add(($($args:tt)*) => { binary!(Add, $($args)*) });
+macro_rules! sub(($($args:tt)*) => { binary!(Sub, $($args)*) });
+macro_rules! mul(($($args:tt)*) => { binary!(Mul, $($args)*) });
+macro_rules! div(($($args:tt)*) => { binary!(Div, $($args)*) });
+macro_rules! mod_(($($args:tt)*) => { binary!(Mod, $($args)*) });
+macro_rules! and(($($args:tt)*) => { binary!(And, $($args)*) });
+macro_rules! or(($($args:tt)*) => { binary!(Or, $($args)*) });
+macro_rules! xor(($($args:tt)*) => { binary!(Xor, $($args)*) });
+macro_rules! andnot(($($args:tt)*) => { binary!(AndNot, $($args)*) });
+macro_rules! notand(($($args:tt)*) => { binary!(NotAnd, $($args)*) });
+macro_rules! nand(($($args:tt)*) => { binary!(Nand, $($args)*) });
+macro_rules! nor(($($args:tt)*) => { binary!(Nor, $($args)*) });
+macro_rules! xnor(($($args:tt)*) => { binary!(Xnor, $($args)*) });
+macro_rules! nandnot(($($args:tt)*) => { binary!(NandNot, $($args)*) });
+macro_rules! nnotand(($($args:tt)*) => { binary!(NNotAnd, $($args)*) });
+macro_rules! shl(($($args:tt)*) => { binary!(Shl, $($args)*) });
+macro_rules! ashr(($($args:tt)*) => { binary!(AShr, $($args)*) });
+macro_rules! test_bit(($($args:tt)*) => { binary!(TestBit, $($args)*) });
+macro_rules! ntest_bit(($($args:tt)*) => { binary!(NTestBit, $($args)*) });
+macro_rules! neg(($($args:tt)*) => { unary!(Neg, $($args)*) });
+macro_rules! popcount(($($args:tt)*) => { unary!(PopCount, $($args)*) });
+
 impl NodeTable<'_> {
     pub fn insert_peephole(&mut self, inst: Inst) -> NodeRef {
-        match inst {
-            Inst::Add(lhs, rhs)
-            | Inst::Sub(lhs, rhs)
-            | Inst::Mul(lhs, rhs)
-            | Inst::Div(lhs, rhs)
-            | Inst::Mod(lhs, rhs)
-            | Inst::And(lhs, rhs)
-            | Inst::Or(lhs, rhs)
-            | Inst::Xor(lhs, rhs)
-            | Inst::AndNot(lhs, rhs)
-            | Inst::NotAnd(lhs, rhs)
-            | Inst::Nand(lhs, rhs)
-            | Inst::Nor(lhs, rhs)
-            | Inst::Xnor(lhs, rhs)
-            | Inst::NandNot(lhs, rhs)
-            | Inst::NNotAnd(lhs, rhs) => self.insert_op2(inst, lhs, rhs),
-            Inst::Shl(lhs, rhs)
-            | Inst::Shr(lhs, rhs)
-            | Inst::GetBit(lhs, rhs)
-            | Inst::NGetBit(lhs, rhs) => self.insert_op2_u32(inst, lhs, rhs),
-            Inst::Neg(v) | Inst::Popcnt(v) => self.insert_op1(inst, v),
-            Inst::Number(_)
-            | Inst::Error(_)
-            | Inst::Eval(_)
-            | Inst::StackRef(_, _)
-            | Inst::CheckedStackRef(_)
-            | Inst::GuardStack(_)
-            | Inst::Push(_)
-            | Inst::Drop(_)
-            | Inst::DropLazy(_)
-            | Inst::HeapRef(_)
-            | Inst::Store(_, _)
-            | Inst::Print(_, _)
-            | Inst::Read(_)
-            | Inst::Call(_, _)
-            | Inst::Jmp(_)
-            | Inst::Br(_, _, _, _)
-            | Inst::Ret
-            | Inst::Exit
-            | Inst::Panic(_) => self.insert(inst),
+        if inst.is_value() {
+            match inst {
+                Inst::Unary {
+                    opcode: _,
+                    arg: val,
+                } => return self.insert_unary(inst, val),
+                Inst::Binary {
+                    opcode: _,
+                    args: [lhs, rhs],
+                } => return self.insert_binary(inst, lhs, rhs),
+                _ => {}
+            }
         }
+        self.insert(inst)
     }
 
-    fn insert_op2(&mut self, inst: Inst, lhs: NodeRef, rhs: NodeRef) -> NodeRef {
+    fn insert_binary(&mut self, inst: Inst, lhs: Value, rhs: Value) -> NodeRef {
         use Action::*;
-        use Inst::*;
 
         macro_rules! getbit_op(
-            ($Inst:ident ($x:expr, $y:expr)) => {
+            ($inst:ident ($x:expr, $y:expr)) => {
                 match (&*self[*$x], &*self[*$y]) {
-                    (GetBit(x, bx), GetBit(y, by)) if bx == by => {
+                    (test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                         let b = *bx;
-                        Insert(GetBit(self.insert_peephole($Inst(*x, *y)), b))
-                    }
+                        Insert(Inst::test_bit(Value::new(self.insert_peephole(Inst::$inst(*x, *y))), b))
+                    },
                     _ => New,
                 }
             };
-            ($Inst:ident ($x:expr, $y:expr), $b:expr) => {
+            ($inst:ident ($x:expr, $y:expr), $b:expr) => {
                 {
                     let b = *$b;
-                    Insert(GetBit(self.insert_peephole($Inst(*$x, *$y)), b))
+                    Insert(Inst::test_bit(Value::new(self.insert_peephole(Inst::$inst(*$x, *$y))), b))
                 }
             };
         );
 
         let action = match (&inst, &*self[lhs], &*self[rhs]) {
             // Constant expressions
-            (_, Number(lhs), Number(rhs)) => {
+            (_, constz!(lhs), constz!(rhs)) => {
                 let (lhs, rhs) = (lhs.as_ref(), rhs.as_ref());
                 let res = match &inst {
-                    Add(..) => Ok((lhs + rhs).complete()),
-                    Sub(..) => Ok((lhs - rhs).complete()),
-                    Mul(..) => Ok((lhs * rhs).complete()),
-                    Div(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Div(..) => Ok(lhs.div_floor(rhs).into()),
-                    Mod(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
-                    Mod(..) => Ok(lhs.rem_floor(rhs).into()),
-                    And(..) => Ok((lhs & rhs).complete()),
-                    Or(..) => Ok((lhs | rhs).complete()),
-                    Xor(..) => Ok((lhs ^ rhs).complete()),
-                    AndNot(..) => Ok(lhs & (!rhs).complete()),
-                    Nand(..) => Ok(!(lhs & rhs).complete()),
-                    Nor(..) => Ok(!(lhs | rhs).complete()),
-                    Xnor(..) => Ok(!(lhs ^ rhs).complete()),
-                    NandNot(..) => Ok(!(lhs & (!rhs).complete())),
-                    _ => panic!("not a binary operator: {inst}"),
+                    add!(..) => Ok((lhs + rhs).complete()),
+                    sub!(..) => Ok((lhs - rhs).complete()),
+                    mul!(..) => Ok((lhs * rhs).complete()),
+                    div!(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    div!(..) => Ok(lhs.div_floor(rhs).complete()),
+                    mod_!(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    mod_!(..) => Ok(lhs.rem_floor(rhs).complete()),
+                    and!(..) => Ok((lhs & rhs).complete()),
+                    or!(..) => Ok((lhs | rhs).complete()),
+                    xor!(..) => Ok((lhs ^ rhs).complete()),
+                    _ => panic!("not a binary operator (Mpz, Mpz): {inst:?}"),
                 };
                 let inst = match res {
-                    Ok(r) => Number(Box::new(r)),
-                    Err(err) => Error(err),
+                    Ok(r) => Inst::constz(r),
+                    Err(err) => Inst::const_error(err),
                 };
                 Insert(inst)
             }
+            (_, constz!(lhs), constu!(rhs)) => {
+                let (lhs, rhs) = (lhs.as_ref(), *rhs);
+                let n = match &inst {
+                    shl!(..) => (lhs << rhs).complete(),
+                    ashr!(..) => (lhs >> rhs).complete(),
+                    test_bit!(..) => lhs.get_bit(rhs).into(),
+                    ntest_bit!(..) => (!lhs.get_bit(rhs)).into(),
+                    _ => panic!("not a binary operator (Mpz, u32): {inst:?}"),
+                };
+                Insert(Inst::constz(n))
+            }
 
             // Errors
-            (Add(..) | Sub(..) | Mul(..) | Div(..) | Mod(..), _, Error(_)) => Use(rhs),
-            (Add(..) | Sub(..) | Mul(..) | Div(..) | Mod(..), Error(_), Number(_)) => Use(lhs),
+            (add!(..) | sub!(..) | mul!(..) | div!(..) | mod_!(..), _, const_error!(_)) => {
+                Use(*rhs)
+            }
+            (
+                add!(..) | sub!(..) | mul!(..) | div!(..) | mod_!(..),
+                const_error!(_),
+                constz!(_),
+            ) => Use(*lhs),
 
             // Move constants right
-            (Add(..), Number(_), _) => Insert(Add(rhs, lhs)),
-            (Mul(..), Number(_), _) => Insert(Mul(rhs, lhs)),
-            (And(..), Number(_), _) => Insert(And(rhs, lhs)),
-            (Or(..), Number(_), _) => Insert(Or(rhs, lhs)),
-            (Xor(..), Number(_), _) => Insert(Xor(rhs, lhs)),
+            (add!(..), constz!(_), _) => Insert(Inst::add(rhs, lhs)),
+            (mul!(..), constz!(_), _) => Insert(Inst::mul(rhs, lhs)),
+            (and!(..), constz!(_), _) => Insert(Inst::and(rhs, lhs)),
+            (or!(..), constz!(_), _) => Insert(Inst::or(rhs, lhs)),
+            (xor!(..), constz!(_), _) => Insert(Inst::xor(rhs, lhs)),
 
             // Identities
-            (Add(..) | Sub(..), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => Use(lhs),
-            (Mul(..) | Div(..), _, Number(rhs)) if **rhs == 1 => Use(lhs),
-            (And(..) | Or(..), _, _) if lhs == rhs => Use(lhs),
+            (add!(..) | sub!(..), _, constz!(rhs)) if rhs.cmp0() == Ordering::Equal => Use(*lhs),
+            (mul!(..) | div!(..), _, constz!(rhs)) if **rhs == 1 => Use(*lhs),
+            (and!(..) | or!(..), _, _) if lhs == rhs => Use(*lhs),
 
             // Division by 0
-            (Div(..) | Mod(..), _, Number(rhs)) if rhs.cmp0() == Ordering::Equal => {
-                Insert(Error(NumberError::DivModZero))
+            (div!(..) | mod_!(..), _, constz!(rhs)) if rhs.cmp0() == Ordering::Equal => {
+                Insert(Inst::const_error(NumberError::DivModZero))
             }
 
             // Negation
-            (Sub(..), Number(lhs), _) if lhs.cmp0() == Ordering::Equal => Insert(Neg(rhs)),
-            (Add(..), _, Neg(rhs)) => Insert(Sub(lhs, *rhs)),
-            (Sub(..), _, Neg(rhs)) => Insert(Add(lhs, *rhs)),
+            (sub!(..), constz!(lhs), _) if lhs.cmp0() == Ordering::Equal => Insert(Inst::neg(rhs)),
+            (add!(..), _, neg!(rhs)) => Insert(Inst::sub(lhs, *rhs)),
+            (sub!(..), _, neg!(rhs)) => Insert(Inst::add(lhs, *rhs)),
 
             // Negation
-            (Sub(..), Number(one), GetBit(x, b)) if **one == 1 => Insert(NGetBit(*x, *b)),
-            (Sub(..), Number(one), NGetBit(x, b)) if **one == 1 => Insert(GetBit(*x, *b)),
+            (sub!(..), constz!(one), test_bit!(x, b)) if **one == 1 => {
+                Insert(Inst::ntest_bit(*x, *b))
+            }
+            (sub!(..), constz!(one), ntest_bit!(x, b)) if **one == 1 => {
+                Insert(Inst::test_bit(*x, *b))
+            }
 
             // Shifts
-            (Mul(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
-                Insert(Shl(lhs, rhs.to_u32().unwrap().ilog2()))
+            (mul!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+                let rhs = self.insert_value(Inst::constz(rhs.to_u32().unwrap().ilog2()));
+                Insert(Inst::shl(lhs, rhs))
             }
-            (Div(..), _, Number(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
-                Insert(Shr(lhs, rhs.to_u32().unwrap().ilog2()))
+            (div!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+                let rhs = self.insert_value(Inst::constz(rhs.to_u32().unwrap().ilog2()));
+                Insert(Inst::ashr(lhs, rhs))
             }
 
             // Single-bit AND
             // x * y == x & y
-            (Mul(..), GetBit(_, bx), GetBit(_, by)) if bx == by => Insert(And(lhs, rhs)),
+            (mul!(..), test_bit!(_, bx), test_bit!(_, by)) if bx == by => {
+                Insert(Inst::and(lhs, rhs))
+            }
             // (x + y) / 2 == x & y
-            (Div(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
-                getbit_op!(And(x, y))
+            (div!(..), add!(x, y), constz!(rhs)) if **rhs == 2 => {
+                getbit_op!(and(x, y))
             }
 
             // Single-bit OR
             // (x + y) - (x & y) = x | y
-            (Sub(..), Add(x1, y1), And(x2, y2)) if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 => {
-                getbit_op!(Or(x2, y2))
+            (sub!(..), add!(x1, y1), and!(x2, y2))
+                if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 =>
+            {
+                getbit_op!(or(x2, y2))
             }
             // x + (y - (x & y)) = x | y
-            (Add(..), GetBit(..), Sub(y1, z)) => {
+            (add!(..), test_bit!(..), sub!(y1, z)) => {
                 let x1 = &lhs;
                 match &*self[*z] {
-                    And(x2, y2) if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 => {
-                        getbit_op!(Or(x2, y2))
+                    and!(x2, y2) if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 => {
+                        getbit_op!(or(x2, y2))
                     }
                     _ => New,
                 }
@@ -174,200 +235,337 @@ impl NodeTable<'_> {
 
             // Single-bit XOR
             // (x + y) % 2 == x ^ y
-            (Mod(..), Add(x, y), Number(rhs)) if **rhs == 2 => {
-                getbit_op!(Xor(x, y))
+            (mod_!(..), add!(x, y), constz!(rhs)) if **rhs == 2 => {
+                getbit_op!(xor(x, y))
             }
             // (x + y) * !(x & y) == x ^ y
-            (Mul(..), Add(x1, y1), Nand(x2, y2))
+            (mul!(..), add!(x1, y1), nand!(x2, y2))
                 if x1 == x2 && y1 == y2 || x1 == y2 && y1 == x2 =>
             {
-                getbit_op!(Xor(x2, y2))
+                getbit_op!(xor(x2, y2))
             }
 
             // Single-bit ANDNOT
             // x * !y == x & !y
-            (Mul(..), GetBit(x, bx), NGetBit(y, by)) if bx == by => {
-                getbit_op!(AndNot(x, y), bx)
+            (mul!(..), test_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
+                getbit_op!(andnot(x, y), bx)
             }
 
             // Single-bit NOTAND
             // !x * y == !x & y
-            (Mul(..), NGetBit(x, bx), GetBit(y, by)) if bx == by => {
-                getbit_op!(NotAnd(x, y), bx)
+            (mul!(..), ntest_bit!(x, bx), test_bit!(y, by)) if bx == by => {
+                getbit_op!(notand(x, y), bx)
             }
 
             // Single-bit NOR
             // !x * !y == !x & !y == !(x | y)
-            (Mul(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
-                getbit_op!(Nor(x, y), bx)
+            (mul!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
+                getbit_op!(nor(x, y), bx)
             }
+
+            // Bit identities
+            (test_bit!(..), test_bit!(..) | ntest_bit!(..), constu!(0)) => Use(*lhs),
+            (ntest_bit!(..), test_bit!(x, b), constu!(0)) => Insert(Inst::ntest_bit(*x, *b)),
+            (ntest_bit!(..), ntest_bit!(x, b), constu!(0)) => Insert(Inst::test_bit(*x, *b)),
+
+            // Bit extraction
+            (test_bit!(..), ashr!(v, bit), constu!(0)) => Insert(Inst::test_bit(*v, *bit)),
+            (ntest_bit!(..), ashr!(v, bit), constu!(0)) => Insert(Inst::ntest_bit(*v, *bit)),
+            (shl!(..), test_bit!(v, bit), constu!(b)) if rhs == *bit => Insert(Inst::and(
+                *v,
+                self.insert_value(Inst::constz(Mpz::ONE << b)),
+            )),
 
             // Get LSB
             // (Must be after single-bit XOR)
-            (Mod(..), _, Number(rhs)) if **rhs == 2 => Insert(GetBit(lhs, 0)),
-            (And(..), _, Number(rhs)) if **rhs == 1 => Insert(GetBit(lhs, 0)),
+            (mod_!(..), _, constz!(rhs)) if **rhs == 2 => {
+                Insert(Inst::test_bit(lhs, self.insert_number(&Mpz::ZERO)))
+            }
+            (and!(..), _, constz!(rhs)) if **rhs == 1 => {
+                Insert(Inst::test_bit(lhs, self.insert_number(&Mpz::ZERO)))
+            }
+
+            // Bit negation
+            (ntest_bit!(..), and!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::nand(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), or!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::nor(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), xor!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::xnor(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), andnot!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::nandnot(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), notand!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::nnotand(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), nand!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::and(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), nor!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::or(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), xnor!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::xor(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), nandnot!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::andnot(*x, *y))),
+                rhs,
+            )),
+            (ntest_bit!(..), nnotand!(x, y), _) => Insert(Inst::test_bit(
+                Value::new(self.insert_peephole(Inst::notand(*x, *y))),
+                rhs,
+            )),
 
             // Single-bit distribution
-            (And(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (and!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(And(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::and(*x, *y))),
+                    bits,
+                ))
             }
-            (Or(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (or!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(Or(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::or(*x, *y))),
+                    bits,
+                ))
             }
-            (Xor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (xor!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(Xor(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::xor(*x, *y))),
+                    bits,
+                ))
             }
-            (AndNot(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (andnot!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(AndNot(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::andnot(*x, *y))),
+                    bits,
+                ))
             }
-            (Nand(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (nand!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(Nand(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::nand(*x, *y))),
+                    bits,
+                ))
             }
-            (Nor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (nor!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(Nor(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::nor(*x, *y))),
+                    bits,
+                ))
             }
-            (Xnor(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (xnor!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(Xnor(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::xnor(*x, *y))),
+                    bits,
+                ))
             }
-            (NandNot(..), GetBit(x, bx), GetBit(y, by)) if bx == by => {
+            (nandnot!(..), test_bit!(x, bx), test_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(GetBit(self.insert_peephole(NandNot(*x, *y)), bits))
+                Insert(Inst::test_bit(
+                    Value::new(self.insert_peephole(Inst::nandnot(*x, *y))),
+                    bits,
+                ))
             }
-            (And(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (and!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(And(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::and(*x, *y))),
+                    bits,
+                ))
             }
-            (Or(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (or!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(Or(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::or(*x, *y))),
+                    bits,
+                ))
             }
-            (Xor(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (xor!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(Xor(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::xor(*x, *y))),
+                    bits,
+                ))
             }
-            (AndNot(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (andnot!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(AndNot(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::andnot(*x, *y))),
+                    bits,
+                ))
             }
-            (Nand(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (nand!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(Nand(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::nand(*x, *y))),
+                    bits,
+                ))
             }
-            (Nor(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (nor!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(Nor(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::nor(*x, *y))),
+                    bits,
+                ))
             }
-            (Xnor(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (xnor!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(Xnor(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::xnor(*x, *y))),
+                    bits,
+                ))
             }
-            (NandNot(..), NGetBit(x, bx), NGetBit(y, by)) if bx == by => {
+            (nandnot!(..), ntest_bit!(x, bx), ntest_bit!(y, by)) if bx == by => {
                 let bits = *bx;
-                Insert(NGetBit(self.insert_peephole(NandNot(*x, *y)), bits))
+                Insert(Inst::ntest_bit(
+                    Value::new(self.insert_peephole(Inst::nandnot(*x, *y))),
+                    bits,
+                ))
             }
 
             // Multi-bit AND
-            (Mod(..), _, Number(rhs)) if rhs.is_power_of_two() => {
-                Insert(And(lhs, self.insert(Inst::number(&**rhs - 1))))
+            (mod_!(..), _, constz!(rhs)) if rhs.is_power_of_two() => {
+                Insert(Inst::and(lhs, self.insert_value(Inst::constz(&**rhs - 1))))
             }
-            (Add(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&*self[*m1], &*self[*m2]) {
-                (Number(m), Number(n)) if (&**m & &**n).complete().cmp0() == Ordering::Equal => {
-                    Insert(And(*x1, self.insert(Inst::number(&**m | &**n))))
-                }
-                _ => New,
-            },
-            (Add(..), GetBit(x1, 0), And(x2, m)) | (Add(..), And(x2, m), GetBit(x1, 0))
-                if x1 == x2 =>
-            {
-                match &*self[*m] {
-                    Number(m) if !m.get_bit(0) => {
-                        Insert(And(*x1, self.insert(Inst::number(&**m | 1))))
+            (add!(..), and!(x1, m1), and!(x2, m2)) if x1 == x2 => {
+                match (&*self[*m1], &*self[*m2]) {
+                    (constz!(m), constz!(n))
+                        if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
+                    {
+                        Insert(Inst::and(*x1, self.insert_value(Inst::constz(&**m | &**n))))
                     }
                     _ => New,
                 }
             }
-            (Or(..), And(x1, m1), And(x2, m2)) if x1 == x2 => match (&*self[*m1], &*self[*m2]) {
-                (Number(m), Number(n)) => Insert(And(*x1, self.insert(Inst::number(&**m | &**n)))),
-                _ => New,
-            },
-            (Or(..), GetBit(x1, 0), And(x2, m)) | (Add(..), And(x2, m), GetBit(x1, 0))
+            (add!(..), test_bit!(x1, bit), and!(x2, m))
+            | (add!(..), and!(x2, m), test_bit!(x1, bit))
                 if x1 == x2 =>
             {
-                match &*self[*m] {
-                    Number(m) => Insert(And(*x1, self.insert(Inst::number(&**m | 1)))),
+                match (&*self[*bit], &*self[*m]) {
+                    (constu!(0), constz!(m)) if !m.get_bit(0) => {
+                        Insert(Inst::and(*x1, self.insert_value(Inst::constz(&**m | 1))))
+                    }
+                    _ => New,
+                }
+            }
+            (or!(..), and!(x1, m1), and!(x2, m2)) if x1 == x2 => match (&*self[*m1], &*self[*m2]) {
+                (constz!(m), constz!(n)) => {
+                    Insert(Inst::and(*x1, self.insert_value(Inst::constz(&**m | &**n))))
+                }
+                _ => New,
+            },
+            (or!(..), test_bit!(x1, bit), and!(x2, m))
+            | (add!(..), and!(x2, m), test_bit!(x1, bit))
+                if x1 == x2 =>
+            {
+                match (&*self[*bit], &*self[*m]) {
+                    (constu!(0), constz!(m)) => {
+                        Insert(Inst::and(*x1, self.insert_value(Inst::constz(&**m | 1))))
+                    }
                     _ => New,
                 }
             }
 
-            // Popcnt
-            (Add(..), GetBit(x1, bit1), GetBit(x2, bit2)) if x1 == x2 && bit1 != bit2 => {
-                let x = *x1;
-                let m = self.insert(Inst::number(
-                    (Integer::ONE << bit1).complete() | (Integer::ONE << bit2).complete(),
-                ));
-                Insert(Popcnt(self.insert_peephole(And(x, m))))
-            }
-            (Add(..), Popcnt(a), GetBit(x2, bit)) | (Add(..), GetBit(x2, bit), Popcnt(a)) => {
-                match &*self[*a] {
-                    And(x1, m) if x1 == x2 => match &*self[*m] {
-                        Number(m) if !m.get_bit(*bit) => {
-                            let x = *x1;
-                            let m =
-                                self.insert(Inst::number(&**m | (Integer::ONE << bit).complete()));
-                            Insert(Popcnt(self.insert_peephole(And(x, m))))
-                        }
-                        _ => New,
-                    },
+            // Popcount
+            (add!(..), test_bit!(x1, bit1), test_bit!(x2, bit2)) if x1 == x2 && bit1 != bit2 => {
+                match (&*self[*bit1], &*self[*bit2]) {
+                    (constu!(bit1), constu!(bit2)) => {
+                        let x = *x1;
+                        let m = self.insert_value(Inst::constz(
+                            (Mpz::ONE << bit1).complete() | (Mpz::ONE << bit2).complete(),
+                        ));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, m)),
+                        )))
+                    }
                     _ => New,
                 }
             }
-            (Add(..), Popcnt(a), Popcnt(b)) => match (&*self[*a], &*self[*b]) {
-                (And(x1, m), And(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
-                    (Number(m), Number(n))
+            (add!(..), popcount!(a), test_bit!(x2, bit))
+            | (add!(..), test_bit!(x2, bit), popcount!(a)) => match (&*self[*a], &*self[*bit]) {
+                (and!(x1, m), constu!(bit)) if x1 == x2 => match &*self[*m] {
+                    constz!(m) if !m.get_bit(*bit) => {
+                        let x = *x1;
+                        let m =
+                            self.insert_value(Inst::constz(&**m | (Mpz::ONE << bit).complete()));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, m)),
+                        )))
+                    }
+                    _ => New,
+                },
+                _ => New,
+            },
+            (add!(..), popcount!(a), popcount!(b)) => match (&*self[*a], &*self[*b]) {
+                (and!(x1, m), and!(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
+                    (constz!(m), constz!(n))
                         if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
                     {
                         let x = *x1;
-                        let mn = self.insert(Inst::number(&**m | &**n));
-                        Insert(Popcnt(self.insert_peephole(And(x, mn))))
+                        let mn = self.insert_value(Inst::constz(&**m | &**n));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, mn)),
+                        )))
                     }
                     _ => New,
                 },
                 _ => New,
             },
-            (Or(..), GetBit(x1, bit1), GetBit(x2, bit2)) if x1 == x2 => {
-                let x = *x1;
-                let m = self.insert(Inst::number(
-                    (Integer::ONE << bit1).complete() | (Integer::ONE << bit2).complete(),
-                ));
-                Insert(Popcnt(self.insert_peephole(And(x, m))))
-            }
-            (Or(..), Popcnt(a), GetBit(x2, bit)) | (Or(..), GetBit(x2, bit), Popcnt(a)) => {
-                match &*self[*a] {
-                    And(x1, m) if x1 == x2 => match &*self[*m] {
-                        Number(m) => {
-                            let x = *x1;
-                            let m =
-                                self.insert(Inst::number(&**m | (Integer::ONE << bit).complete()));
-                            Insert(Popcnt(self.insert_peephole(And(x, m))))
-                        }
-                        _ => New,
-                    },
+            (or!(..), test_bit!(x1, bit1), test_bit!(x2, bit2)) if x1 == x2 => {
+                match (&*self[*bit1], &*self[*bit2]) {
+                    (constu!(bit1), constu!(bit2)) => {
+                        let x = *x1;
+                        let m = self.insert_value(Inst::constz(
+                            (Mpz::ONE << bit1).complete() | (Mpz::ONE << bit2).complete(),
+                        ));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, m)),
+                        )))
+                    }
                     _ => New,
                 }
             }
-            (Or(..), Popcnt(a), Popcnt(b)) => match (&*self[*a], &*self[*b]) {
-                (And(x1, m), And(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
-                    (Number(m), Number(n)) => {
+            (or!(..), popcount!(a), test_bit!(x2, bit))
+            | (or!(..), test_bit!(x2, bit), popcount!(a)) => match (&*self[*a], &*self[*bit]) {
+                (and!(x1, m), constu!(bit)) if x1 == x2 => match &*self[*m] {
+                    constz!(m) => {
                         let x = *x1;
-                        let mn = self.insert(Inst::number(&**m | &**n));
-                        Insert(Popcnt(self.insert_peephole(And(x, mn))))
+                        let m =
+                            self.insert_value(Inst::constz(&**m | (Mpz::ONE << bit).complete()));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, m)),
+                        )))
+                    }
+                    _ => New,
+                },
+                _ => New,
+            },
+            (or!(..), popcount!(a), popcount!(b)) => match (&*self[*a], &*self[*b]) {
+                (and!(x1, m), and!(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
+                    (constz!(m), constz!(n)) => {
+                        let x = *x1;
+                        let mn = self.insert_value(Inst::constz(&**m | &**n));
+                        Insert(Inst::popcount(Value::new(
+                            self.insert_peephole(Inst::and(x, mn)),
+                        )))
                     }
                     _ => New,
                 },
@@ -384,85 +582,23 @@ impl NodeTable<'_> {
         }
     }
 
-    fn insert_op2_u32(&mut self, inst: Inst, lhs: NodeRef, rhs: u32) -> NodeRef {
+    fn insert_unary(&mut self, inst: Inst, v: Value) -> NodeRef {
         use Action::*;
-        use Inst::*;
-
-        let action = match (&inst, &*self[lhs], rhs) {
-            // Constant expressions
-            (Shl(..), Number(lhs), _) => Insert(Inst::number(&**lhs << rhs)),
-            (Shr(..), Number(lhs), _) => Insert(Inst::number(&**lhs >> rhs)),
-            (GetBit(_, bit), Number(lhs), _) => Insert(Inst::number(lhs.get_bit(*bit))),
-            (NGetBit(_, bit), Number(lhs), _) => Insert(Inst::number(!lhs.get_bit(*bit))),
-
-            // Identities
-            (GetBit(..), GetBit(..) | NGetBit(..), 0) => Use(lhs),
-            (NGetBit(..), GetBit(x, b), 0) => Insert(NGetBit(*x, *b)),
-            (NGetBit(..), NGetBit(x, b), 0) => Insert(GetBit(*x, *b)),
-
-            // Bit extraction
-            (GetBit(..), Shr(v, bit), 0) => Insert(GetBit(*v, *bit)),
-            (NGetBit(..), Shr(v, bit), 0) => Insert(NGetBit(*v, *bit)),
-            (Shl(..), GetBit(v, bit1), bit) if bit == *bit1 => {
-                Insert(And(*v, self.insert(Inst::number(Integer::ONE << bit1))))
-            }
-
-            // Negation
-            (NGetBit(..), And(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(Nand(*x, *y)), bit))
-            }
-            (NGetBit(..), Or(x, y), bit) => Insert(GetBit(self.insert_peephole(Nor(*x, *y)), bit)),
-            (NGetBit(..), Xor(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(Xnor(*x, *y)), bit))
-            }
-            (NGetBit(..), AndNot(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(NandNot(*x, *y)), bit))
-            }
-            (NGetBit(..), NotAnd(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(NNotAnd(*x, *y)), bit))
-            }
-            (NGetBit(..), Nand(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(And(*x, *y)), bit))
-            }
-            (NGetBit(..), Nor(x, y), bit) => Insert(GetBit(self.insert_peephole(Or(*x, *y)), bit)),
-            (NGetBit(..), Xnor(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(Xor(*x, *y)), bit))
-            }
-            (NGetBit(..), NandNot(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(AndNot(*x, *y)), bit))
-            }
-            (NGetBit(..), NNotAnd(x, y), bit) => {
-                Insert(GetBit(self.insert_peephole(NotAnd(*x, *y)), bit))
-            }
-
-            _ => New,
-        };
-
-        match action {
-            Action::New => self.insert(inst),
-            Action::Insert(inst) => self.insert_peephole(inst),
-            Action::Use(i) => return i,
-        }
-    }
-
-    fn insert_op1(&mut self, inst: Inst, v: NodeRef) -> NodeRef {
-        use Action::*;
-        use Inst::*;
 
         let action = match (&inst, &*self[v]) {
             // Constant expressions
-            (_, Number(n)) => {
+            (_, constz!(n)) => {
                 let n = &**n;
                 let r = match inst {
-                    Neg(_) => (-n).complete(),
-                    Popcnt(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
-                    _ => panic!("not a unary operator: {inst}"),
+                    neg!(_) => (-n).complete(),
+                    popcount!(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
+                    _ => panic!("not a unary operator: {inst:?}"),
                 };
-                Insert(Number(r.into()))
+                Insert(Inst::constz(r))
             }
 
-            (_, Error(_)) => Use(v),
-            (Neg(_), Neg(v)) => Use(*v),
+            (_, const_error!(_)) => Use(*v),
+            (neg!(_), neg!(v)) => Use(**v),
 
             _ => New,
         };

@@ -7,7 +7,6 @@ license = "MPL-2.0"
 [workspace]
 members = [
   "lazy-wspace",
-  "lazy-wspace-generate",
   "lazy-wspace-macros",
   "wspace-syntax",
   "wspace-syntax-test",

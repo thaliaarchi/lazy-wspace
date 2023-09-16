@@ -1,58 +1,56 @@
+use std::fmt::{self, Debug, Display, Formatter};
+use std::ops::Deref;
+use std::{mem, slice};
+
 use rug::Integer as Mpz;
 use strum::Display;
 
 use crate::error::{Error, NumberError};
-use crate::hs;
-use crate::ir::BBlockId;
+use crate::ir::{BBlockId, Cfg, NodeRef};
 
 /// IR instruction.
 ///
 /// Compare to Cranelift [`cranelift_codegen::ir::instructions::InstructionData`](https://docs.rs/cranelift-codegen/latest/cranelift_codegen/ir/instructions/enum.InstructionData.html).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
-    // Values
-    //
+    /// Nullary operation.
+    Nullary { opcode: Opcode },
     /// Unary operation with an `Mpz` immediate.
-    UnaryImmZ { opcode: Opcode, imm: Mpz },
+    UnaryImmZ {
+        opcode: Opcode,
+        // Boxed to keep the size smaller.
+        imm: Box<Mpz>,
+    },
     /// Unary operation with an `i32` immediate.
     UnaryImmI { opcode: Opcode, imm: i32 },
     /// Unary operation with a `u32` immediate.
     UnaryImmU { opcode: Opcode, imm: u32 },
     /// Unary operation with a stack index immediate.
-    UnaryImmIndex { opcode: Opcode, imm: hs::Int },
+    //  TODO: Replace usize with hs::Int.
+    UnaryImmIndex { opcode: Opcode, imm: usize },
     /// Unary operation with an error immediate.
     UnaryImmError { opcode: Opcode, imm: NumberError },
     /// Unary operation.
     Unary { opcode: Opcode, arg: Value },
     /// Binary operation.
+    ///
+    /// The RHS is evaluated first, then the LHS.
     Binary { opcode: Opcode, args: [Value; 2] },
     /// Stack reference.
     GuardedIndex {
         opcode: Opcode,
-        index: hs::Int,
-        // TODO: Should control dependencies be separate from Value?
-        guard: Value,
+        // TODO: Replace with hs::Int
+        index: usize,
+        guard: NodeRef,
     },
     /// Read from stdin.
     Read { opcode: Opcode, format: IoFormat },
-
-    // Statements
-    //
-    /// Unary statement.
-    UnaryStmt { opcode: Opcode, arg: Value },
-    /// Unary statement with a stack index immediate.
-    UnaryImmIndexStmt { opcode: Opcode, imm: hs::Int },
-    /// Nullary statement.
-    NullaryStmt { opcode: Opcode },
     /// Print to stdout.
-    PrintStmt {
+    Print {
         opcode: Opcode,
         format: IoFormat,
         arg: Value,
     },
-
-    // Control flow instructions
-    //
     /// Unconditional jump.
     Jmp { opcode: Opcode, target: BBlockId },
     /// Call.
@@ -77,9 +75,12 @@ pub enum Inst {
     },
 }
 
-/// TODO
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Value;
+/// Reference to a value-producing node.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Value {
+    node: NodeRef,
+}
 
 /// Format for I/O.
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
@@ -347,7 +348,7 @@ pub enum Opcode {
 
     // Error propagation
     //
-    /// Evaluate a value thunk and possibly trap (UnaryStmt : Value →).
+    /// Evaluate a value thunk and possibly trap (Unary : Value →).
     /// `eval %val`.
     Eval,
     /// Select the LHS, if it's an error, otherwise the RHS
@@ -367,13 +368,13 @@ pub enum Opcode {
     /// Assert that the stack has at least `length` elements (UnaryImmIndex).
     /// `%guard = guard_stack $length`.
     GuardStack,
-    /// Push a value to the stack (UnaryStmt).
+    /// Push a value to the stack (Unary).
     /// `push %val`.
     Push,
-    /// Drop `count` elements from the stack (UnaryImmIndexStmt).
+    /// Drop `count` elements from the stack (UnaryImmIndex).
     /// `drop $count`.
     Drop,
-    /// Lazily drop `count` elements from the stack (UnaryImmIndexStmt).
+    /// Lazily drop `count` elements from the stack (UnaryImmIndex).
     /// `drop_lazy $count`.
     DropLazy,
 
@@ -393,7 +394,7 @@ pub enum Opcode {
     /// Read a value from stdin (Read).
     /// `%r = read $format`.
     Read,
-    /// Print a value to stdout (PrintStmt).
+    /// Print a value to stdout (Print).
     /// `print $format, %val`.
     Print,
 
@@ -408,10 +409,10 @@ pub enum Opcode {
     /// Conditional branch (Br).
     /// `br $cond, %val, @if_true, @if_false`.
     Br,
-    /// Return from a call (NullaryStmt).
+    /// Return from a call (Nullary).
     /// `ret`.
     Ret,
-    /// Exit the program (NullaryStmt).
+    /// Exit the program (Nullary).
     /// `exit`.
     Exit,
     /// Exit the program with an error (Trap).
@@ -422,28 +423,28 @@ pub enum Opcode {
     //
     /// Bitwise AND NOT, i.e., `lhs & ~rhs` (Binary : Mpz, Mpz → Mpz).
     /// `%r = andnot %lhs, %rhs`.
-    DeprecatedAndNot,
+    AndNot,
     /// Bitwise NOT AND, i.e., `~lhs & rhs` (Binary : Mpz, Mpz → Mpz).
     /// `%r = notand %lhs, %rhs`.
-    DeprecatedNotAnd,
+    NotAnd,
     /// Bitwise NAND (Binary : Mpz, Mpz → Mpz).
     /// `%r = nand %lhs, %rhs`.
-    DeprecatedNand,
+    Nand,
     /// Bitwise NOR (Binary : Mpz, Mpz → Mpz).
     /// `%r = nor %lhs, %rhs`.
-    DeprecatedNor,
+    Nor,
     /// Bitwise XNOR (Binary : Mpz, Mpz → Mpz).
     /// `%r = xnor %lhs, %rhs`.
-    DeprecatedXnor,
+    Xnor,
     /// Bitwise negated AND NOT (Binary : Mpz, Mpz → Mpz).
     /// `%r = nandnot %lhs, %rhs`.
-    DeprecatedNandNot,
+    NandNot,
     /// Bitwise negated NOT AND (Binary : Mpz, Mpz → Mpz).
     /// `%r = nnotand %lhs, %rhs`.
-    DeprecatedNNotAnd,
+    NNotAnd,
     /// Negated bit test (Binary : Mpz, u32 → u32).
     /// `%r = ntestbit %val, %bit`.
-    DeprecatedNTestBit,
+    NTestBit,
 }
 
 // TODO GMP functions:
@@ -457,6 +458,68 @@ pub enum Opcode {
 // - [`mpz_combit`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fcombit)
 
 impl Opcode {
+    pub fn mnemonic(&self) -> &'static str {
+        match self {
+            Opcode::ConstZ => "constz",
+            Opcode::ConstI => "consti",
+            Opcode::ConstU => "constu",
+            Opcode::ConstError => "const_error",
+            Opcode::Add => "add",
+            Opcode::AddZU => "addzu",
+            Opcode::Sub => "sub",
+            Opcode::SubZI => "subzi",
+            Opcode::SubIZ => "subiz",
+            Opcode::Mul => "mul",
+            Opcode::MulZI => "mulzi",
+            Opcode::MulZU => "mulzu",
+            Opcode::Div => "div",
+            Opcode::DivZU => "divzu",
+            Opcode::Mod => "mod",
+            Opcode::ModZU => "modzu",
+            Opcode::Neg => "neg",
+            Opcode::Abs => "abs",
+            Opcode::And => "and",
+            Opcode::Or => "or",
+            Opcode::Xor => "xor",
+            Opcode::Shl => "shl",
+            Opcode::AShr => "ashr",
+            Opcode::LShr => "lshr",
+            Opcode::Not => "not",
+            Opcode::TestBit => "test_bit",
+            Opcode::CountBits => "count_bits",
+            Opcode::CountLz => "count_lz",
+            Opcode::CountTz => "count_tz",
+            Opcode::PopCount => "popcount",
+            Opcode::LNot => "lnot",
+            Opcode::Eval => "eval",
+            Opcode::ErrorOr => "error_or",
+            Opcode::StackRef => "stack_ref",
+            Opcode::CheckedStackRef => "checked_stack_ref",
+            Opcode::GuardStack => "guard_stack",
+            Opcode::Push => "push",
+            Opcode::Drop => "drop",
+            Opcode::DropLazy => "drop_lazy",
+            Opcode::HeapRef => "heap_ref",
+            Opcode::Store => "store",
+            Opcode::Read => "read",
+            Opcode::Print => "print",
+            Opcode::Call => "call",
+            Opcode::Jmp => "jmp",
+            Opcode::Br => "br",
+            Opcode::Ret => "ret",
+            Opcode::Exit => "exit",
+            Opcode::Trap => "trap",
+            Opcode::AndNot => "andnot",
+            Opcode::NotAnd => "notand",
+            Opcode::Nand => "nand",
+            Opcode::Nor => "nor",
+            Opcode::Xnor => "xnor",
+            Opcode::NandNot => "nandnot",
+            Opcode::NNotAnd => "nnotand",
+            Opcode::NTestBit => "ntestbit",
+        }
+    }
+
     pub fn is_value(&self) -> bool {
         match self {
             Opcode::ConstZ
@@ -495,14 +558,14 @@ impl Opcode {
             | Opcode::CheckedStackRef
             | Opcode::HeapRef
             | Opcode::Read
-            | Opcode::DeprecatedAndNot
-            | Opcode::DeprecatedNotAnd
-            | Opcode::DeprecatedNand
-            | Opcode::DeprecatedNor
-            | Opcode::DeprecatedXnor
-            | Opcode::DeprecatedNandNot
-            | Opcode::DeprecatedNNotAnd
-            | Opcode::DeprecatedNTestBit => true,
+            | Opcode::AndNot
+            | Opcode::NotAnd
+            | Opcode::Nand
+            | Opcode::Nor
+            | Opcode::Xnor
+            | Opcode::NandNot
+            | Opcode::NNotAnd
+            | Opcode::NTestBit => true,
             Opcode::Eval // TODO: make eval a value
             | Opcode::GuardStack
             | Opcode::Push
@@ -529,6 +592,15 @@ macro_rules! unary(($func:ident ($opcode:expr, $val:ident)) => {
         }
     }
 });
+macro_rules! unary_imm(($func:ident ($opcode:expr, Inst::$unary:ident, $imm:ident: $imm_ty:ty)) => {
+    #[inline]
+    pub fn $func($imm: $imm_ty) -> Self {
+        Inst::$unary {
+            opcode: $opcode,
+            imm: $imm,
+        }
+    }
+});
 macro_rules! binary(($func:ident ($opcode:expr, $lhs:ident, $rhs:ident)) => {
     #[inline]
     pub fn $func($lhs: Value, $rhs: Value) -> Self {
@@ -552,14 +624,43 @@ impl Inst {
             | Inst::Binary { opcode, .. }
             | Inst::GuardedIndex { opcode, .. }
             | Inst::Read { opcode, .. }
-            | Inst::UnaryStmt { opcode, .. }
-            | Inst::UnaryImmIndexStmt { opcode, .. }
-            | Inst::NullaryStmt { opcode, .. }
-            | Inst::PrintStmt { opcode, .. }
+            | Inst::Nullary { opcode, .. }
+            | Inst::Print { opcode, .. }
             | Inst::Jmp { opcode, .. }
             | Inst::Call { opcode, .. }
             | Inst::Br { opcode, .. }
             | Inst::Trap { opcode, .. } => *opcode,
+        }
+    }
+
+    pub fn args(&self) -> Option<&[Value]> {
+        match self {
+            Inst::Unary { arg, .. } | Inst::Print { arg, .. } | Inst::Br { arg, .. } => {
+                Some(slice::from_ref(arg))
+            }
+            Inst::Binary { args, .. } => Some(args),
+            Inst::Nullary { .. }
+            | Inst::UnaryImmZ { .. }
+            | Inst::UnaryImmI { .. }
+            | Inst::UnaryImmU { .. }
+            | Inst::UnaryImmIndex { .. }
+            | Inst::UnaryImmError { .. }
+            | Inst::GuardedIndex { .. }
+            | Inst::Read { .. }
+            | Inst::Jmp { .. }
+            | Inst::Call { .. }
+            | Inst::Trap { .. } => None,
+        }
+    }
+
+    pub fn uses(&self) -> &[NodeRef] {
+        match self {
+            Inst::GuardedIndex { guard, .. } => slice::from_ref(guard),
+            _ => {
+                let uses = self.args().unwrap_or_default();
+                // SAFETY: Value is repr(transparent) over NodeRef.
+                unsafe { mem::transmute(uses) }
+            }
         }
     }
 
@@ -569,33 +670,23 @@ impl Inst {
     }
 
     #[inline]
-    pub fn constz(n: Mpz) -> Self {
+    pub fn as_display<'s, 'a>(&'s self, cfg: &'a Cfg<'_>) -> impl Display + 'a
+    where
+        's: 'a,
+    {
+        InstDisplay { inst: self, cfg }
+    }
+
+    #[inline]
+    pub fn constz<T: Into<Mpz>>(n: T) -> Self {
         Inst::UnaryImmZ {
             opcode: Opcode::ConstZ,
-            imm: n,
+            imm: Box::new(n.into()),
         }
     }
-    #[inline]
-    pub fn consti(n: i32) -> Self {
-        Inst::UnaryImmI {
-            opcode: Opcode::ConstI,
-            imm: n,
-        }
-    }
-    #[inline]
-    pub fn constu(n: u32) -> Self {
-        Inst::UnaryImmU {
-            opcode: Opcode::ConstU,
-            imm: n,
-        }
-    }
-    #[inline]
-    pub fn const_error(error: NumberError) -> Self {
-        Inst::UnaryImmError {
-            opcode: Opcode::ConstError,
-            imm: error,
-        }
-    }
+    unary_imm!(consti(Opcode::ConstI, Inst::UnaryImmI, n: i32));
+    unary_imm!(constu(Opcode::ConstU, Inst::UnaryImmU, n: u32));
+    unary_imm!(const_error(Opcode::ConstError, Inst::UnaryImmError, error: NumberError));
     binary!(add(Opcode::Add, lhs, rhs));
     binary!(addzu(Opcode::AddZU, lhs, rhs));
     binary!(sub(Opcode::Sub, lhs, rhs));
@@ -623,57 +714,21 @@ impl Inst {
     unary!(count_tz(Opcode::CountTz, val));
     unary!(popcount(Opcode::PopCount, val));
     unary!(lnot(Opcode::LNot, val));
-    #[inline]
-    pub fn eval(val: Value) -> Self {
-        Inst::UnaryStmt {
-            opcode: Opcode::Eval,
-            arg: val,
-        }
-    }
+    unary!(eval(Opcode::Eval, val));
     binary!(error_or(Opcode::ErrorOr, maybe_error, or_value));
     #[inline]
-    pub fn stack_ref(index: hs::Int, guard: Value) -> Self {
+    pub fn stack_ref(index: usize, guard: NodeRef) -> Self {
         Inst::GuardedIndex {
             opcode: Opcode::StackRef,
             index,
             guard,
         }
     }
-    #[inline]
-    pub fn checked_stack_ref(index: hs::Int) -> Self {
-        Inst::UnaryImmIndex {
-            opcode: Opcode::CheckedStackRef,
-            imm: index,
-        }
-    }
-    #[inline]
-    pub fn guard_stack(length: hs::Int) -> Self {
-        Inst::UnaryImmIndex {
-            opcode: Opcode::GuardStack,
-            imm: length,
-        }
-    }
-    #[inline]
-    pub fn push(val: Value) -> Self {
-        Inst::UnaryStmt {
-            opcode: Opcode::Push,
-            arg: val,
-        }
-    }
-    #[inline]
-    pub fn drop(count: hs::Int) -> Self {
-        Inst::UnaryImmIndexStmt {
-            opcode: Opcode::Drop,
-            imm: count,
-        }
-    }
-    #[inline]
-    pub fn drop_lazy(count: hs::Int) -> Self {
-        Inst::UnaryImmIndexStmt {
-            opcode: Opcode::DropLazy,
-            imm: count,
-        }
-    }
+    unary_imm!(checked_stack_ref(Opcode::CheckedStackRef, Inst::UnaryImmIndex, index: usize));
+    unary_imm!(guard_stack(Opcode::GuardStack, Inst::UnaryImmIndex, length: usize));
+    unary!(push(Opcode::Push, val));
+    unary_imm!(drop(Opcode::Drop, Inst::UnaryImmIndex, count: usize));
+    unary_imm!(drop_lazy(Opcode::DropLazy, Inst::UnaryImmIndex, count: usize));
     unary!(heap_ref(Opcode::HeapRef, address));
     binary!(store(Opcode::Store, address, val));
     #[inline]
@@ -685,7 +740,7 @@ impl Inst {
     }
     #[inline]
     pub fn print(format: IoFormat, val: Value) -> Self {
-        Inst::PrintStmt {
+        Inst::Print {
             opcode: Opcode::Print,
             format,
             arg: val,
@@ -718,29 +773,142 @@ impl Inst {
     }
     #[inline]
     pub fn ret() -> Self {
-        Inst::NullaryStmt {
+        Inst::Nullary {
             opcode: Opcode::Ret,
         }
     }
     #[inline]
     pub fn exit() -> Self {
-        Inst::NullaryStmt {
+        Inst::Nullary {
             opcode: Opcode::Exit,
         }
     }
     #[inline]
-    pub fn trap(error: Error) -> Self {
+    pub fn trap<T: Into<Error>>(error: T) -> Self {
         Inst::Trap {
             opcode: Opcode::Trap,
-            error: Box::new(error),
+            error: Box::new(error.into()),
         }
     }
-    binary!(deprecated_andnot(Opcode::DeprecatedAndNot, lhs, rhs));
-    binary!(deprecated_notand(Opcode::DeprecatedNotAnd, lhs, rhs));
-    binary!(deprecated_nand(Opcode::DeprecatedNand, lhs, rhs));
-    binary!(deprecated_nor(Opcode::DeprecatedNor, lhs, rhs));
-    binary!(deprecated_xnor(Opcode::DeprecatedXnor, lhs, rhs));
-    binary!(deprecated_nandnot(Opcode::DeprecatedNandNot, lhs, rhs));
-    binary!(deprecated_nnotand(Opcode::DeprecatedNNotAnd, lhs, rhs));
-    binary!(deprecated_ntestbit(Opcode::DeprecatedNTestBit, lhs, rhs));
+    binary!(andnot(Opcode::AndNot, lhs, rhs));
+    binary!(notand(Opcode::NotAnd, lhs, rhs));
+    binary!(nand(Opcode::Nand, lhs, rhs));
+    binary!(nor(Opcode::Nor, lhs, rhs));
+    binary!(xnor(Opcode::Xnor, lhs, rhs));
+    binary!(nandnot(Opcode::NandNot, lhs, rhs));
+    binary!(nnotand(Opcode::NNotAnd, lhs, rhs));
+    binary!(ntest_bit(Opcode::NTestBit, lhs, rhs));
+}
+
+impl Value {
+    // TODO: Reduce usage of this.
+    pub(crate) fn new(node: NodeRef) -> Self {
+        Value { node }
+    }
+
+    #[inline]
+    pub fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+
+impl Deref for Value {
+    type Target = NodeRef;
+
+    fn deref(&self) -> &NodeRef {
+        &self.node
+    }
+}
+
+impl PartialEq<Mpz> for Inst {
+    #[inline]
+    fn eq(&self, other: &Mpz) -> bool {
+        if let Inst::UnaryImmZ {
+            opcode: Opcode::ConstZ,
+            imm: n,
+        } = self
+        {
+            &**n == other
+        } else {
+            false
+        }
+    }
+}
+
+impl Display for Opcode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.mnemonic())
+    }
+}
+
+struct InstDisplay<'a> {
+    inst: &'a Inst,
+    cfg: &'a Cfg<'a>,
+}
+
+impl Display for InstDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inst.opcode())?;
+        if !matches!(self.inst, Inst::Nullary { .. }) {
+            f.write_str(" ")?;
+        }
+        match *self.inst {
+            Inst::Nullary { opcode: _ } => {}
+            Inst::UnaryImmZ { opcode: _, ref imm } => write!(f, "{imm}")?,
+            Inst::UnaryImmI { opcode: _, imm } => write!(f, "{imm}")?,
+            Inst::UnaryImmU { opcode: _, imm } => write!(f, "{imm}")?,
+            Inst::UnaryImmIndex { opcode: _, imm } => write!(f, "{imm}")?,
+            Inst::UnaryImmError { opcode: _, imm } => write!(f, "{imm:?}")?,
+            Inst::Unary { opcode: _, arg } => write!(f, "{arg}")?,
+            Inst::Binary {
+                opcode: _,
+                args: [lhs, rhs],
+            } => write!(f, "{lhs}, {rhs}")?,
+            Inst::GuardedIndex {
+                opcode: _,
+                index,
+                guard,
+            } => write!(f, "{index}, {guard}")?,
+            Inst::Read { opcode: _, format } => write!(f, "{format}")?,
+            Inst::Print {
+                opcode: _,
+                format,
+                arg,
+            } => write!(f, "{format}, {arg}")?,
+            Inst::Jmp { opcode: _, target } => write!(f, "{}", self.cfg[target])?,
+            Inst::Call {
+                opcode: _,
+                target,
+                next,
+            } => write!(f, "{}, {}", self.cfg[target], self.cfg[next])?,
+            Inst::Br {
+                opcode: _,
+                cond,
+                arg,
+                if_true,
+                if_false,
+            } => write!(
+                f,
+                "{cond}, {arg}, {}, {}",
+                self.cfg[if_true], self.cfg[if_false],
+            )?,
+            Inst::Trap {
+                opcode: _,
+                ref error,
+            } => write!(f, "{error:?}")?,
+        }
+        Ok(())
+    }
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.node, f)
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.node, f)
+    }
 }

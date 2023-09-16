@@ -10,7 +10,8 @@ use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
 use rug::Integer;
 
-use crate::ir::{Graph, Inst, Node, NodeRef};
+use crate::ir::instructions::{Inst, Opcode, Value};
+use crate::ir::{Graph, Node, NodeRef};
 
 pub struct NodeTable<'g> {
     // Essentially a `HashMap<Node, NodeRef>`, that doesn't store a redundant
@@ -60,34 +61,46 @@ impl<'g> NodeTable<'g> {
         }
     }
 
-    /// A specialization of `insert`, that avoids cloning `n` and constructing
-    /// an `Inst::Number`, when an equivalent number has already been inserted.
     #[inline]
-    pub fn insert_number(&mut self, n: &Integer) -> NodeRef {
+    pub fn insert_value(&mut self, inst: Inst) -> Value {
+        debug_assert!(inst.is_value());
+        Value::new(self.insert(inst))
+    }
+
+    /// A specialization of `insert`, that avoids cloning `n` and constructing
+    /// a `constz`, when an equivalent number has already been inserted.
+    #[inline]
+    pub fn insert_number(&mut self, n: &Integer) -> Value {
         struct NodeNumberRef<'a>(&'a Integer);
         impl Hash for NodeNumberRef<'_> {
             #[inline]
             fn hash<H: Hasher>(&self, state: &mut H) {
-                let inst = unsafe { Inst::Number(Box::from_raw(NonNull::dangling().as_mut())) };
+                let inst = Inst::UnaryImmZ {
+                    opcode: Opcode::ConstZ,
+                    // SAFETY: THe value is not read.
+                    imm: unsafe { Box::from_raw(NonNull::dangling().as_mut()) },
+                };
                 mem::discriminant(&inst).hash(state);
                 mem::forget(inst);
+                Opcode::ConstZ.hash(state);
                 self.0.hash(state);
             }
         }
 
         let hash = make_hash(&NodeNumberRef(n));
-        match self.table.find_or_find_insert_slot(
+        let node = match self.table.find_or_find_insert_slot(
             hash,
             |&key| &*self.graph[key] == n,
             |&key| make_hash(&*self.graph[key]),
         ) {
             Ok(bucket) => *unsafe { bucket.as_ref() },
             Err(slot) => {
-                let node = self.graph.insert(Inst::Number(Box::new(n.clone())));
+                let node = self.graph.insert(Inst::constz(n.clone()));
                 unsafe { self.table.insert_in_slot(hash, slot, node) };
                 node
             }
-        }
+        };
+        Value::new(node)
     }
 
     #[inline]
@@ -142,6 +155,15 @@ impl Index<NodeRef> for NodeTable<'_> {
 
     #[inline]
     fn index(&self, index: NodeRef) -> &Node {
+        &self.graph[index]
+    }
+}
+
+impl Index<Value> for NodeTable<'_> {
+    type Output = Node;
+
+    #[inline]
+    fn index(&self, index: Value) -> &Node {
         &self.graph[index]
     }
 }
@@ -206,12 +228,12 @@ mod tests {
     fn unique() {
         let graph = unsafe { Graph::new() };
         let mut table = NodeTable::new(&graph);
-        let x = table.insert(Inst::number(1));
-        let y = table.insert(Inst::number(2));
-        let z = table.insert(Inst::Add(x, y));
-        let y2 = table.insert(Inst::number(2));
-        let x2 = table.insert(Inst::number(1));
-        let z2 = table.insert(Inst::Add(x2, y2));
+        let x = table.insert_value(Inst::constz(1));
+        let y = table.insert_value(Inst::constz(2));
+        let z = table.insert_value(Inst::add(x, y));
+        let y2 = table.insert_value(Inst::constz(2));
+        let x2 = table.insert_value(Inst::constz(1));
+        let z2 = table.insert_value(Inst::add(x2, y2));
         assert_eq!(3, table.len());
         assert_eq!(x, x2);
         assert_eq!(y, y2);

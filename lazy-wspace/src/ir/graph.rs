@@ -8,7 +8,8 @@ use std::vec;
 use smallvec::SmallVec;
 use static_assertions::{assert_eq_size, assert_not_impl_any};
 
-use crate::ir::{Inst, InstUses0, InstUses1, InstUses2};
+use crate::ir::instructions::{Inst, Value};
+use crate::ir::Cfg;
 
 /// Graph of IR nodes, indexed by [`NodeRef`].
 #[repr(transparent)]
@@ -57,20 +58,17 @@ impl Graph {
         let i = nodes.len();
         let node = NodeRef::new(i);
         assert!(i as u32 != u32::MAX, "number of nodes exceeds u32");
-
-        match &inst {
-            InstUses0!() => {}
-            InstUses1!(v) => {
-                nodes[v.index()].def_uses.push(node);
-            }
-            InstUses2!(lhs, rhs) => {
-                nodes[lhs.index()].def_uses.push(node);
-                nodes[rhs.index()].def_uses.push(node);
-            }
+        for v in inst.uses() {
+            nodes[v.index()].def_uses.push(node);
         }
-
         nodes.push(Node::new(inst));
         node
+    }
+
+    #[inline]
+    pub fn insert_value(&self, inst: Inst) -> Value {
+        debug_assert!(inst.is_value());
+        Value::new(self.insert(inst))
     }
 
     #[inline]
@@ -107,6 +105,14 @@ impl Graph {
             .enumerate()
             .map(|(i, node)| (NodeRef::new(i), node))
     }
+
+    #[inline]
+    pub fn as_display<'s, 'a>(&'s self, cfg: &'a Cfg<'_>) -> impl Display + 'a
+    where
+        's: 'a,
+    {
+        GraphDisplay { graph: self, cfg }
+    }
 }
 
 impl Index<NodeRef> for Graph {
@@ -126,6 +132,15 @@ impl Index<NodeRef> for Graph {
         // only one `Graph` is constructed per program, this cost is not worth
         // it.
         unsafe { self.nodes().get_unchecked(index.index()) }
+    }
+}
+
+impl Index<Value> for Graph {
+    type Output = Node;
+
+    #[inline]
+    fn index(&self, index: Value) -> &Node {
+        &self[*index]
     }
 }
 
@@ -170,22 +185,27 @@ impl IntoIterator for Graph {
 impl Debug for Graph {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("Graph ")?;
-        if f.alternate() {
-            struct DisplayDebug<T: Display>(T);
-            impl<T: Display> Debug for DisplayDebug<T> {
-                fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                    Display::fmt(&self.0, f)
-                }
-            }
+        f.debug_map()
+            .entries(self.iter_insts().enumerate())
+            .finish()
+    }
+}
 
-            let entries = self
-                .iter_entries()
-                .map(|(i, node)| (DisplayDebug(i), DisplayDebug(node.inst())));
-            f.debug_map().entries(entries).finish()
-        } else {
-            let entries = self.iter_insts().enumerate();
-            f.debug_map().entries(entries).finish()
+struct GraphDisplay<'a> {
+    graph: &'a Graph,
+    cfg: &'a Cfg<'a>,
+}
+
+impl Display for GraphDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("Graph {")?;
+        if self.graph.len() != 0 {
+            f.write_str("\n")?;
+            for (i, node) in self.graph.iter_entries() {
+                writeln!(f, "    {i}: {}", node.inst().as_display(self.cfg))?;
+            }
         }
+        f.write_str("}")
     }
 }
 

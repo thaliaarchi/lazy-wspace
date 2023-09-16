@@ -1,6 +1,7 @@
 use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
-use crate::ir::{Inst, NodeRef, NodeTable};
+use crate::ir::instructions::{Inst, Opcode, Value};
+use crate::ir::{NodeRef, NodeTable};
 use crate::number::Op;
 
 /// Abstract stack for stack operations in a scope.
@@ -21,7 +22,7 @@ use crate::number::Op;
 /// At the end of the basic block, values are dropped and pushed in a batch.
 #[derive(Debug, PartialEq, Eq)]
 pub struct AbstractStack {
-    values: Vec<NodeRef>,
+    values: Vec<Value>,
     // guards[guards.len()-1].0 <= accessed, and is == until an underflow
     // occurs.
     guards: Vec<(usize, NodeRef)>,
@@ -61,7 +62,7 @@ impl AbstractStack {
 
     /// The values pushed to this stack frame.
     #[inline]
-    pub fn values(&self) -> &[NodeRef] {
+    pub fn values(&self) -> &[Value] {
         &self.values
     }
 
@@ -95,20 +96,20 @@ impl AbstractStack {
 
     /// Pushes a value to the stack.
     #[inline]
-    pub fn push(&mut self, n: NodeRef) {
+    pub fn push(&mut self, n: Value) {
         self.values.push(n);
     }
 
     /// Pushes a number to the stack, only cloning it, if it does not already
     /// exist in the table. This corresponds to Whitespace `push`.
     #[inline]
-    pub fn push_number(&mut self, n: &NumberLit, table: &mut NodeTable<'_>) -> NodeRef {
-        let node = match n {
+    pub fn push_number(&mut self, n: &NumberLit, table: &mut NodeTable<'_>) -> Value {
+        let val = match n {
             NumberLit::Number(n) => table.insert_number(n),
-            NumberLit::Empty => table.insert(NumberError::EmptyLit.into()),
+            NumberLit::Empty => table.insert_value(Inst::const_error(NumberError::EmptyLit)),
         };
-        self.push(node);
-        node
+        self.push(val);
+        val
     }
 
     /// Eagerly pushes a reference to the top element on the stack. This
@@ -133,11 +134,11 @@ impl AbstractStack {
             LazySize::Overflow => Err(NumberError::CopyLarge),
             LazySize::EmptyLit => Err(NumberError::EmptyLit),
         };
-        let node = match res {
-            Ok(node) => node,
-            Err(err) => table.insert(err.into()),
+        let val = match res {
+            Ok(val) => val,
+            Err(err) => table.insert_value(Inst::const_error(err)),
         };
-        self.push(node);
+        self.push(val);
     }
 
     /// Eagerly swaps the top two elements on the stack. This corresponds to
@@ -152,7 +153,7 @@ impl AbstractStack {
 
     /// Eagerly accesses the top element of the stack and returns it.
     #[inline]
-    pub fn top(&mut self, table: &mut NodeTable<'_>) -> Result<NodeRef, UnderflowError> {
+    pub fn top(&mut self, table: &mut NodeTable<'_>) -> Result<Value, UnderflowError> {
         self.at_eager(0, table)
     }
 
@@ -162,7 +163,7 @@ impl AbstractStack {
         &mut self,
         n: usize,
         table: &mut NodeTable<'_>,
-    ) -> Result<NodeRef, UnderflowError> {
+    ) -> Result<Value, UnderflowError> {
         self.at(n, true, table).map_err(|err| {
             self.accessed = usize::MAX;
             self.dropped = usize::MAX;
@@ -177,7 +178,7 @@ impl AbstractStack {
         &mut self,
         n: usize,
         table: &mut NodeTable<'_>,
-    ) -> Result<NodeRef, UnderflowError> {
+    ) -> Result<Value, UnderflowError> {
         self.at(n, false, table)
     }
 
@@ -187,7 +188,7 @@ impl AbstractStack {
         n: usize,
         eager: bool,
         table: &mut NodeTable<'_>,
-    ) -> Result<NodeRef, UnderflowError> {
+    ) -> Result<Value, UnderflowError> {
         if n < self.values.len() {
             Ok(self.values[self.values.len() - n - 1])
         } else {
@@ -202,21 +203,21 @@ impl AbstractStack {
                 self.dropped = dropped;
                 self.lazy_dropped = LazySize::Finite(0);
                 let guard = self.get_or_insert_guard(len, table);
-                Inst::StackRef(i, guard)
+                Inst::stack_ref(i, guard)
             } else {
                 match self.get_guard(len) {
-                    Some(guard) => Inst::StackRef(i, guard),
-                    None => Inst::CheckedStackRef(i),
+                    Some(guard) => Inst::stack_ref(i, guard),
+                    None => Inst::checked_stack_ref(i),
                 }
             };
-            Ok(table.insert(inst))
+            Ok(table.insert_value(inst))
         }
     }
 
     /// Eagerly removes the top element from the stack and returns it. This
     /// corresponds to Whitespace `drop`, but with the dropped node returned.
     #[inline]
-    pub fn pop(&mut self, table: &mut NodeTable<'_>) -> Result<NodeRef, UnderflowError> {
+    pub fn pop(&mut self, table: &mut NodeTable<'_>) -> Result<Value, UnderflowError> {
         let top = self.top(table)?;
         self.drop_eager(1, table)?;
         Ok(top)
@@ -224,10 +225,7 @@ impl AbstractStack {
 
     /// Eagerly removes the top two elements from the stack and returns them.
     #[inline]
-    pub fn pop2(
-        &mut self,
-        table: &mut NodeTable<'_>,
-    ) -> Result<(NodeRef, NodeRef), UnderflowError> {
+    pub fn pop2(&mut self, table: &mut NodeTable<'_>) -> Result<(Value, Value), UnderflowError> {
         let v1 = self.at_eager(1, table)?;
         let v0 = self.at_eager(0, table)?;
         self.drop_eager(2, table)?;
@@ -241,15 +239,15 @@ impl AbstractStack {
     pub fn apply_op(&mut self, op: Op, table: &mut NodeTable<'_>) -> Result<(), UnderflowError> {
         let (x, y) = self.pop2(table)?;
         let inst = match op {
-            Op::Add => Inst::Add(x, y),
-            Op::Sub => Inst::Sub(x, y),
+            Op::Add => Inst::add(x, y),
+            Op::Sub => Inst::sub(x, y),
             // Mul has left-first evaluation order in Whitespace, unlike the
             // others, so the operands are swapped to make the IR consistent.
-            Op::Mul => Inst::Mul(y, x),
-            Op::Div => Inst::Div(x, y),
-            Op::Mod => Inst::Mod(x, y),
+            Op::Mul => Inst::mul(y, x),
+            Op::Div => Inst::div(x, y),
+            Op::Mod => Inst::mod_(x, y),
         };
-        self.push(table.insert_peephole(inst));
+        self.push(Value::new(table.insert_peephole(inst)));
         Ok(())
     }
 
@@ -275,7 +273,7 @@ impl AbstractStack {
             self.lazy_dropped = LazySize::Finite(0);
             if self.accessed < dropped {
                 self.accessed = dropped;
-                let guard = table.insert_unique(Inst::GuardStack(dropped));
+                let guard = table.insert_unique(Inst::guard_stack(dropped));
                 self.guards.push((dropped, guard));
             }
         }
@@ -335,7 +333,15 @@ impl AbstractStack {
                 for &v in &self.values[0..drops.min(self.values.len())] {
                     let i = drops - (shift + 1);
                     match &*table[v] {
-                        Inst::StackRef(j, _) | Inst::CheckedStackRef(j) if *j == i => {
+                        Inst::GuardedIndex {
+                            opcode: Opcode::StackRef,
+                            index: j,
+                            guard: _,
+                        }
+                        | Inst::UnaryImmIndex {
+                            opcode: Opcode::CheckedStackRef,
+                            imm: j,
+                        } if *j == i => {
                             shift += 1;
                         }
                         _ => break,
@@ -349,7 +355,7 @@ impl AbstractStack {
         }
     }
 
-    /// Gets the least [`Inst::GuardStack`] node, that guards at least a stack
+    /// Gets the least [`Opcode::GuardStack`] node, that guards at least a stack
     /// length of `len`, if that length has already been guarded.
     #[inline]
     pub fn get_guard(&self, len: usize) -> Option<NodeRef> {
@@ -361,7 +367,7 @@ impl AbstractStack {
         self.guards.get(i).map(|&(_, guard)| guard)
     }
 
-    /// Gets the least [`Inst::GuardStack`] node, that guards at least a stack
+    /// Gets the least [`Opcode::GuardStack`] node, that guards at least a stack
     /// length of `len`, or insert a new guard for that length.
     #[inline]
     pub fn get_or_insert_guard(&mut self, len: usize, table: &mut NodeTable<'_>) -> NodeRef {
@@ -369,7 +375,7 @@ impl AbstractStack {
             Some(guard) => guard,
             None => {
                 self.accessed = self.accessed.max(len);
-                let guard = table.insert_unique(Inst::GuardStack(len));
+                let guard = table.insert_unique(Inst::guard_stack(len));
                 self.guards.push((len, guard));
                 guard
             }
@@ -474,7 +480,7 @@ mod tests {
 
     #[test]
     fn push() {
-        let v0 = NodeRef::new(0);
+        let v0 = Value::new(NodeRef::new(0));
 
         let mut s = stack!([], [], 0, 0, Finite(0));
         s.push(v0);
@@ -493,8 +499,8 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            let g1 = graph1.insert(Inst::GuardStack(1));
-            let r1 = graph1.insert(Inst::StackRef(0, g1));
+            let g1 = graph1.insert(Inst::guard_stack(1));
+            let r1 = graph1.insert_value(Inst::stack_ref(0, g1));
             let s1 = stack!([], [(1, g1)], 1, 1, Finite(0));
             (s1, r1)
         };
@@ -505,16 +511,16 @@ mod tests {
         let graph = unsafe { Graph::new() };
         let (s, top) = {
             let mut table = NodeTable::new(&graph);
-            let v1 = table.insert(Inst::number(1));
-            let v2 = table.insert(Inst::number(2));
+            let v1 = table.insert_value(Inst::constz(1));
+            let v2 = table.insert_value(Inst::constz(2));
             let mut s = stack!([v1, v2], [], 0, 0, Finite(0));
             let top = s.pop(&mut table).unwrap();
             (s, top)
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            let v1 = graph1.insert(Inst::number(1));
-            let v2 = graph1.insert(Inst::number(2));
+            let v1 = graph1.insert_value(Inst::constz(1));
+            let v2 = graph1.insert_value(Inst::constz(2));
             let s1 = stack!([v1], [], 0, 0, Finite(0));
             (s1, v2)
         };
@@ -525,16 +531,16 @@ mod tests {
         let graph = unsafe { Graph::new() };
         let (s, top) = {
             let mut table = NodeTable::new(&graph);
-            let g3 = table.insert(Inst::GuardStack(3));
+            let g3 = table.insert(Inst::guard_stack(3));
             let mut s = stack!([], [(3, g3)], 3, 3, Finite(0));
             let top = s.pop(&mut table).unwrap();
             (s, top)
         };
         let graph1 = unsafe { Graph::new() };
         let (s1, top1) = {
-            let g3 = graph1.insert(Inst::GuardStack(3));
-            let g4 = graph1.insert(Inst::GuardStack(4));
-            let r1 = graph1.insert(Inst::StackRef(3, g4));
+            let g3 = graph1.insert(Inst::guard_stack(3));
+            let g4 = graph1.insert(Inst::guard_stack(4));
+            let r1 = graph1.insert_value(Inst::stack_ref(3, g4));
             let s1 = stack!([], [(3, g3), (4, g4)], 4, 4, Finite(0));
             (s1, r1)
         };
@@ -547,10 +553,10 @@ mod tests {
     fn drop_eager() {
         let graph_init = unsafe { Graph::new() };
         let mut table_init = NodeTable::new(&graph_init);
-        let v1 = table_init.insert(Inst::number(1));
-        let v2 = table_init.insert(Inst::number(2));
-        let v3 = table_init.insert(Inst::number(3));
-        let g2 = table_init.insert(Inst::GuardStack(2));
+        let v1 = table_init.insert_value(Inst::constz(1));
+        let v2 = table_init.insert_value(Inst::constz(2));
+        let v3 = table_init.insert_value(Inst::constz(3));
+        let g2 = table_init.insert(Inst::guard_stack(2));
 
         {
             let graph = graph_init.clone();
@@ -570,7 +576,7 @@ mod tests {
             s.drop_eager(5, &mut table).unwrap();
 
             let graph1 = graph_init.clone();
-            let g6 = graph1.insert(Inst::GuardStack(6));
+            let g6 = graph1.insert(Inst::guard_stack(6));
             let s1 = stack!([], [(2, g2), (6, g6)], 6, 6, Finite(0));
 
             assert_eq!(s1, s);
@@ -583,7 +589,7 @@ mod tests {
             s.drop_eager(1, &mut table).unwrap();
 
             let graph1 = graph_init.clone();
-            let g5 = graph1.insert(Inst::GuardStack(5));
+            let g5 = graph1.insert(Inst::guard_stack(5));
             let s1 = stack!([], [(2, g2), (5, g5)], 5, 5, Finite(0));
 
             assert_eq!(s1, s);
@@ -596,7 +602,7 @@ mod tests {
             s.drop_eager(2, &mut table).unwrap();
 
             let graph1 = graph_init.clone();
-            let g6 = graph1.insert(Inst::GuardStack(6));
+            let g6 = graph1.insert(Inst::guard_stack(6));
             let s1 = stack!([], [(2, g2), (6, g6)], 6, 6, Finite(0));
 
             assert_eq!(s1, s);
@@ -629,7 +635,7 @@ mod tests {
             s.drop_eager(5, &mut table).unwrap();
 
             let graph1 = graph_init.clone();
-            let gmax = graph1.insert(Inst::GuardStack(usize::MAX));
+            let gmax = graph1.insert(Inst::guard_stack(usize::MAX));
             let s1 = stack!(
                 [],
                 [(2, g2), (usize::MAX, gmax)],
@@ -656,10 +662,10 @@ mod tests {
     #[test]
     fn drop_lazy() {
         let graph = unsafe { Graph::new() };
-        let v1 = graph.insert(Inst::number(1));
-        let v2 = graph.insert(Inst::number(2));
-        let v3 = graph.insert(Inst::number(3));
-        let g2 = graph.insert(Inst::GuardStack(2));
+        let v1 = graph.insert_value(Inst::constz(1));
+        let v2 = graph.insert_value(Inst::constz(2));
+        let v3 = graph.insert_value(Inst::constz(3));
+        let g2 = graph.insert(Inst::guard_stack(2));
 
         {
             let mut s = stack!([v1, v2, v3], [(2, g2)], 2, 1, Finite(3));
@@ -712,9 +718,9 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let s1 = {
-            let g2 = graph1.insert(Inst::GuardStack(2));
-            graph1.insert(Inst::StackRef(1, g2));
-            graph1.insert(Inst::StackRef(0, g2));
+            let g2 = graph1.insert(Inst::guard_stack(2));
+            graph1.insert_value(Inst::stack_ref(1, g2));
+            graph1.insert_value(Inst::stack_ref(0, g2));
             stack!([], [(2, g2)], 2, 0, Finite(0))
         };
         assert_eq!(s1, s);
@@ -739,11 +745,11 @@ mod tests {
         };
         let graph1 = unsafe { Graph::new() };
         let s1 = {
-            graph1.insert(Inst::CheckedStackRef(1));
-            graph1.insert(Inst::CheckedStackRef(2));
-            let g1 = graph1.insert(Inst::GuardStack(1));
-            graph1.insert(Inst::StackRef(0, g1));
-            let g3 = graph1.insert(Inst::GuardStack(3));
+            graph1.insert_value(Inst::checked_stack_ref(1));
+            graph1.insert_value(Inst::checked_stack_ref(2));
+            let g1 = graph1.insert(Inst::guard_stack(1));
+            graph1.insert_value(Inst::stack_ref(0, g1));
+            let g3 = graph1.insert(Inst::guard_stack(3));
             stack!([], [(1, g1), (3, g3)], 3, 0, Finite(0))
         };
         assert_eq!(s1, s);
