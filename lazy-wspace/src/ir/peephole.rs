@@ -79,7 +79,7 @@ macro_rules! ashr(($($args:tt)*) => { binary!(AShr, $($args)*) });
 macro_rules! test_bit(($($args:tt)*) => { binary!(TestBit, $($args)*) });
 macro_rules! ntest_bit(($($args:tt)*) => { binary!(NTestBit, $($args)*) });
 macro_rules! neg(($($args:tt)*) => { unary!(Neg, $($args)*) });
-macro_rules! popcount(($($args:tt)*) => { unary!(PopCount, $($args)*) });
+macro_rules! pop_count(($($args:tt)*) => { unary!(PopCount, $($args)*) });
 
 impl NodeTable<'_> {
     pub fn insert_peephole(&mut self, inst: Inst) -> NodeRef {
@@ -492,21 +492,21 @@ impl NodeTable<'_> {
                         let m = self.insert_value(Inst::constz(
                             (Mpz::ONE << bit1).complete() | (Mpz::ONE << bit2).complete(),
                         ));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, m)),
                         )))
                     }
                     _ => New,
                 }
             }
-            (add!(..), popcount!(a), test_bit!(x2, bit))
-            | (add!(..), test_bit!(x2, bit), popcount!(a)) => match (&*self[*a], &*self[*bit]) {
+            (add!(..), pop_count!(a), test_bit!(x2, bit))
+            | (add!(..), test_bit!(x2, bit), pop_count!(a)) => match (&*self[*a], &*self[*bit]) {
                 (and!(x1, m), constu!(bit)) if x1 == x2 => match &*self[*m] {
                     constz!(m) if !m.get_bit(*bit) => {
                         let x = *x1;
                         let m =
                             self.insert_value(Inst::constz(&**m | (Mpz::ONE << bit).complete()));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, m)),
                         )))
                     }
@@ -514,14 +514,14 @@ impl NodeTable<'_> {
                 },
                 _ => New,
             },
-            (add!(..), popcount!(a), popcount!(b)) => match (&*self[*a], &*self[*b]) {
+            (add!(..), pop_count!(a), pop_count!(b)) => match (&*self[*a], &*self[*b]) {
                 (and!(x1, m), and!(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
                     (constz!(m), constz!(n))
                         if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
                     {
                         let x = *x1;
                         let mn = self.insert_value(Inst::constz(&**m | &**n));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, mn)),
                         )))
                     }
@@ -536,21 +536,21 @@ impl NodeTable<'_> {
                         let m = self.insert_value(Inst::constz(
                             (Mpz::ONE << bit1).complete() | (Mpz::ONE << bit2).complete(),
                         ));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, m)),
                         )))
                     }
                     _ => New,
                 }
             }
-            (or!(..), popcount!(a), test_bit!(x2, bit))
-            | (or!(..), test_bit!(x2, bit), popcount!(a)) => match (&*self[*a], &*self[*bit]) {
+            (or!(..), pop_count!(a), test_bit!(x2, bit))
+            | (or!(..), test_bit!(x2, bit), pop_count!(a)) => match (&*self[*a], &*self[*bit]) {
                 (and!(x1, m), constu!(bit)) if x1 == x2 => match &*self[*m] {
                     constz!(m) => {
                         let x = *x1;
                         let m =
                             self.insert_value(Inst::constz(&**m | (Mpz::ONE << bit).complete()));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, m)),
                         )))
                     }
@@ -558,12 +558,12 @@ impl NodeTable<'_> {
                 },
                 _ => New,
             },
-            (or!(..), popcount!(a), popcount!(b)) => match (&*self[*a], &*self[*b]) {
+            (or!(..), pop_count!(a), pop_count!(b)) => match (&*self[*a], &*self[*b]) {
                 (and!(x1, m), and!(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
                     (constz!(m), constz!(n)) => {
                         let x = *x1;
                         let mn = self.insert_value(Inst::constz(&**m | &**n));
-                        Insert(Inst::popcount(Value::new(
+                        Insert(Inst::pop_count(Value::new(
                             self.insert_peephole(Inst::and(x, mn)),
                         )))
                     }
@@ -591,7 +591,7 @@ impl NodeTable<'_> {
                 let n = &**n;
                 let r = match inst {
                     neg!(_) => (-n).complete(),
-                    popcount!(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
+                    pop_count!(_) => n.count_ones().unwrap().into(), // TODO: only valid for n >= 0
                     _ => panic!("not a unary operator: {inst:?}"),
                 };
                 Insert(Inst::constz(r))

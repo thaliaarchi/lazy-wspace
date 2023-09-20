@@ -324,7 +324,7 @@ pub enum Opcode {
     /// HotSpot [`CountTrailingZerosINode`, `CountTrailingZerosLNode`](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/opto/countbitsnode.hpp).
     CountTz,
     /// Population count (Unary : Mpz → u32).
-    /// `%r = popcount %val`.
+    /// `%r = pop_count %val`.
     ///
     /// Lowers to GMP [`mpz_popcount`](https://gmplib.org/manual/Integer-Logic-and-Bit-Fiddling#index-mpz_005fpopcount),
     /// but negative values are first complemented, so the input is always
@@ -489,7 +489,7 @@ impl Opcode {
             Opcode::CountBits => "count_bits",
             Opcode::CountLz => "count_lz",
             Opcode::CountTz => "count_tz",
-            Opcode::PopCount => "popcount",
+            Opcode::PopCount => "pop_count",
             Opcode::LNot => "lnot",
             Opcode::Eval => "eval",
             Opcode::ErrorOr => "error_or",
@@ -712,7 +712,7 @@ impl Inst {
     unary!(count_bits(Opcode::CountBits, val));
     unary!(count_lz(Opcode::CountLz, val));
     unary!(count_tz(Opcode::CountTz, val));
-    unary!(popcount(Opcode::PopCount, val));
+    unary!(pop_count(Opcode::PopCount, val));
     unary!(lnot(Opcode::LNot, val));
     unary!(eval(Opcode::Eval, val));
     binary!(error_or(Opcode::ErrorOr, maybe_error, or_value));
