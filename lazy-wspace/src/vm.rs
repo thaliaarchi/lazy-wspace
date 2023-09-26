@@ -194,7 +194,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                 let addr = pop!()?;
                 let mut line = String::new();
                 self.stdin.read_line(&mut line)?;
-                let n = Number::parse(line)?;
+                let n: Number = line.parse()?;
                 self.heap.store(addr, n.into())?;
             }
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),

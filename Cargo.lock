@@ -104,6 +104,7 @@ dependencies = [
  "strum",
  "thiserror",
  "utf8-chars",
+ "wspace-syntax",
 ]
 
 [[package]]

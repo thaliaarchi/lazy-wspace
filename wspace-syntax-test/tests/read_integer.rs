@@ -4,18 +4,29 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use rug::Integer;
-use wspace_syntax::parse::{read_integer_haskell, ReadIntegerError};
+use wspace_syntax::hs::{ReadIntegerBase, ReadIntegerError, ReadIntegerLit};
 
 struct Test {
     input: String,
-    output: Result<Integer, ReadIntegerError>,
+    output: Result<ReadIntegerLit, ReadIntegerError>,
 }
 
 impl Test {
-    fn ok<S: Into<String>>(input: S, output: &'static str) -> Self {
+    fn ok<S: Into<String>>(
+        input: S,
+        output: &'static str,
+        is_negative: bool,
+        base: ReadIntegerBase,
+        leading_zeros: usize,
+    ) -> Self {
         Test {
             input: input.into(),
-            output: Ok(Integer::parse(output).unwrap().into()),
+            output: Ok(ReadIntegerLit {
+                value: Integer::parse(output).unwrap().into(),
+                is_negative,
+                base,
+                leading_zeros,
+            }),
         }
     }
 
@@ -28,21 +39,27 @@ impl Test {
 }
 
 fn get_tests() -> Vec<Test> {
+    use ReadIntegerBase::{Decimal as Dec, Hexadecimal as Hex, Octal as Oct};
     use ReadIntegerError::*;
+    const POS: bool = false;
+    const NEG: bool = true;
 
     let mut tests = vec![
-        Test::ok("42", "42"),
+        Test::ok("42", "42", POS, Dec, 0),
         // C-style bases
-        Test::ok("0o42", "34"),
-        Test::ok("0O42", "34"),
-        Test::ok("0xff", "255"),
-        Test::ok("0Xff", "255"),
-        Test::ok("0Xff", "255"),
+        Test::ok("0o42", "34", POS, Oct, 0),
+        Test::ok("0O42", "34", POS, Oct, 0),
+        Test::ok("0xff", "255", POS, Hex, 0),
+        Test::ok("0Xff", "255", POS, Hex, 0),
+        Test::ok("0Xff", "255", POS, Hex, 0),
         Test::err("0b101", InvalidDigit),
         Test::err("0B101", InvalidDigit),
         // Leading zeros
-        Test::ok("042", "42"),
-        Test::ok("00042", "42"),
+        Test::ok("000", "0", POS, Dec, 3),
+        Test::ok("042", "42", POS, Dec, 1),
+        Test::ok("00042", "42", POS, Dec, 3),
+        Test::ok("0o00042", "34", POS, Oct, 3),
+        Test::ok("0x000ff", "255", POS, Hex, 3),
         // Other styles
         Test::err("0d42", InvalidDigit),
         Test::err("2#101", InvalidDigit),
@@ -51,14 +68,14 @@ fn get_tests() -> Vec<Test> {
         Test::err("&o42", InvalidDigit),
         Test::err("&hff", InvalidDigit),
         // Signs
-        Test::ok("-42", "-42"),
+        Test::ok("-42", "-42", NEG, Dec, 0),
         Test::err("+42", InvalidDigit),
         // Parentheses
-        Test::ok("(42)", "42"),
-        Test::ok("((42))", "42"),
-        Test::ok("(((42)))", "42"),
-        Test::ok(" ( ( ( 42 ) ) ) ", "42"),
-        Test::ok("(-42)", "-42"),
+        Test::ok("(42)", "42", POS, Dec, 0),
+        Test::ok("((42))", "42", POS, Dec, 0),
+        Test::ok("(((42)))", "42", POS, Dec, 0),
+        Test::ok(" ( ( ( 42 ) ) ) ", "42", POS, Dec, 0),
+        Test::ok("(-42)", "-42", NEG, Dec, 0),
         Test::err("-(42)", IllegalNeg),
         Test::err("-(-42)", IllegalNeg),
         Test::err("(--42)", InvalidDigit),
@@ -84,6 +101,9 @@ fn get_tests() -> Vec<Test> {
         Test::ok(
             "31415926535897932384626433832795028841971693993751",
             "31415926535897932384626433832795028841971693993751",
+            POS,
+            Dec,
+            0,
         ),
         // Empty
         Test::err("", NoDigits),
@@ -144,10 +164,10 @@ fn get_tests() -> Vec<Test> {
     ];
     for space in ok_spaces {
         tests.push(Test::err(format!("{space}"), NoDigits));
-        tests.push(Test::ok(format!("{space}-42"), "-42"));
-        tests.push(Test::ok(format!("-{space}42"), "-42"));
+        tests.push(Test::ok(format!("{space}-42"), "-42", NEG, Dec, 0));
+        tests.push(Test::ok(format!("-{space}42"), "-42", NEG, Dec, 0));
         tests.push(Test::err(format!("-4{space}2"), InvalidDigit));
-        tests.push(Test::ok(format!("-42{space}"), "-42"));
+        tests.push(Test::ok(format!("-42{space}"), "-42", NEG, Dec, 0));
     }
     for space in err_spaces {
         tests.push(Test::err(format!("{space}"), InvalidDigit));
@@ -162,11 +182,12 @@ fn get_tests() -> Vec<Test> {
 
 #[test]
 fn test_rust() {
+    let mut digits = Vec::new();
     for test in get_tests() {
         assert_eq!(
             test.output,
-            read_integer_haskell(&test.input),
-            "read_integer_haskell({:?})",
+            ReadIntegerLit::parse_with_buffer(&test.input, &mut digits),
+            "{:?}.parse::<ReadIntegerLit>()",
             test.input,
         );
     }
@@ -176,7 +197,7 @@ fn test_rust() {
 fn compare_with_haskell() {
     for test in get_tests() {
         assert_eq!(
-            test.output.ok(),
+            test.output.map(|lit| lit.value).ok(),
             run_read_integer(&test.input),
             "read {:?} :: Integer",
             test.input,
