@@ -8,7 +8,7 @@ use crate::ast::{Inst as Ast, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
 use crate::ir::instructions::{Cond, Inst, IoFormat, Opcode, Value};
 use crate::ir::{AbstractHeap, AbstractStack, Graph, LazySize, NodeRef, NodeTable};
-use crate::number::Op;
+use crate::vm::Op;
 
 /// Control-flow graph of IR basic blocks.
 #[derive(Clone, Debug)]

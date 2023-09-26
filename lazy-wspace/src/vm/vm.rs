@@ -6,7 +6,7 @@ use utf8_chars::BufReadCharsExt;
 
 use crate::ast::{Inst, LabelLit, NumberLit};
 use crate::error::{EagerError, Error, NumberError, ParseError, UnderflowError};
-use crate::number::{Number, NumberRef, Op};
+use crate::vm::{Number, NumberRef, Op};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VM<'a, I, O: ?Sized> {

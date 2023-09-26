@@ -9,7 +9,7 @@ use thiserror::Error;
 use rug::Integer;
 
 use crate::ast::{ArgKind, Inst, LabelLit, PrintableInst};
-use crate::number::IntegerExt;
+use crate::vm::IntegerExt;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {

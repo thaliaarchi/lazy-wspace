@@ -2,7 +2,7 @@ use crate::ast::NumberLit;
 use crate::error::{NumberError, UnderflowError};
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::{NodeRef, NodeTable};
-use crate::number::Op;
+use crate::vm::Op;
 
 /// Abstract stack for stack operations in a scope.
 ///

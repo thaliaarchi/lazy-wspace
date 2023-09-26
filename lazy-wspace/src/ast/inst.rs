@@ -9,7 +9,7 @@ use rug::Integer;
 use strum::Display;
 
 use crate::error::{Error, NumberError, ParseError};
-use crate::number::IntegerExt;
+use crate::vm::IntegerExt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
