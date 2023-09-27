@@ -14,7 +14,7 @@ categories = ["compilers"]
 bitvec = "1.0"
 hashbrown = { version = "0.14", features = ["raw"] }
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
-rug = "1.20"
+rug = { version = "1.22", features = ["integer"], default-features = false }
 simdutf8 = "0.1"
 smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"
