@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::error::{EagerError, Error, NumberError};
+use crate::error::{EagerError, Error, ValueError};
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::NodeTable;
 
@@ -35,7 +35,7 @@ impl AbstractHeap {
                         .entry(n)
                         .or_insert_with(|| Value::new(table.insert_unique(Inst::heap_ref(addr))))
                 } else {
-                    table.insert_value(Inst::const_error(NumberError::RetrieveLarge))
+                    table.insert_value(Inst::const_error(ValueError::RetrieveLarge))
                 }
             }
             Inst::UnaryImmError {

@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
 
-use crate::ast::{ArgKind, Inst, LabelLit, Lexer, NumberLit, Token};
+use crate::ast::{Inst, IntegerLit, LabelLit, Lexer, Token};
 use crate::error::ParseError;
 
 pub struct Parser<'a> {
@@ -15,7 +15,7 @@ impl<'a> Parser<'a> {
         Parser { lex }
     }
 
-    fn parse_arg(&mut self, kind: ArgKind) -> Result<BitVec, ParseError> {
+    fn parse_arg(&mut self, unterminated_err: ParseError) -> Result<BitVec, ParseError> {
         let mut arg = BitVec::new();
         loop {
             match self.lex.next() {
@@ -23,22 +23,22 @@ impl<'a> Parser<'a> {
                 Some(Token::T) => arg.push(true),
                 Some(Token::L) => return Ok(arg),
                 Some(Token::InvalidUtf8) => return Err(ParseError::InvalidUtf8),
-                None => return Err(ParseError::UnterminatedArg(kind)),
+                None => return Err(unterminated_err),
             };
         }
     }
 
     #[inline]
-    fn parse_number<F: FnOnce(NumberLit) -> Inst>(&mut self, inst: F) -> Inst {
-        match self.parse_arg(ArgKind::Number) {
-            Ok(bits) => inst(NumberLit::from(bits)),
+    fn parse_integer<F: FnOnce(IntegerLit) -> Inst>(&mut self, inst: F) -> Inst {
+        match self.parse_arg(ParseError::UnterminatedInteger) {
+            Ok(bits) => inst(IntegerLit::from(bits)),
             Err(err) => err.into(),
         }
     }
 
     #[inline]
     fn parse_label<F: FnOnce(LabelLit) -> Inst>(&mut self, inst: F) -> Inst {
-        match self.parse_arg(ArgKind::Label) {
+        match self.parse_arg(ParseError::UnterminatedLabel) {
             Ok(bits) => inst(LabelLit::from(bits)),
             Err(err) => err.into(),
         }
@@ -67,10 +67,10 @@ impl Iterator for Parser<'_> {
 
         match_token!(
             S => match_token!(
-                S => Some(self.parse_number(Inst::Push)),
+                S => Some(self.parse_integer(Inst::Push)),
                 T => match_token!(
-                    S => Some(self.parse_number(Inst::Copy)),
-                    L => Some(self.parse_number(Inst::Slide)),
+                    S => Some(self.parse_integer(Inst::Copy)),
+                    L => Some(self.parse_integer(Inst::Slide)),
                 ),
                 L => match_token!(
                     S => Some(Inst::Dup),

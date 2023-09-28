@@ -5,7 +5,7 @@ use std::{mem, slice};
 use rug::Integer as Mpz;
 use strum::Display;
 
-use crate::error::{Error, NumberError};
+use crate::error::{Error, ValueError};
 use crate::ir::{BBlockId, Cfg, NodeRef};
 
 /// IR instruction.
@@ -29,7 +29,7 @@ pub enum Inst {
     //  TODO: Replace usize with hs::Int.
     UnaryImmIndex { opcode: Opcode, imm: usize },
     /// Unary operation with an error immediate.
-    UnaryImmError { opcode: Opcode, imm: NumberError },
+    UnaryImmError { opcode: Opcode, imm: ValueError },
     /// Unary operation.
     Unary { opcode: Opcode, arg: Value },
     /// Binary operation.
@@ -114,7 +114,7 @@ pub enum Opcode {
     /// 32-bit unsigned integer constant (UnaryImmU : u32).
     /// `%r = constu $n`.
     ConstU,
-    /// Error thunk constant (UnaryImmError : NumberError).
+    /// Error thunk constant (UnaryImmError : ValueError).
     /// `%r = const_error $error`.
     ConstError,
 
@@ -686,7 +686,7 @@ impl Inst {
     }
     unary_imm!(consti(Opcode::ConstI, Inst::UnaryImmI, n: i32));
     unary_imm!(constu(Opcode::ConstU, Inst::UnaryImmU, n: u32));
-    unary_imm!(const_error(Opcode::ConstError, Inst::UnaryImmError, error: NumberError));
+    unary_imm!(const_error(Opcode::ConstError, Inst::UnaryImmError, error: ValueError));
     binary!(add(Opcode::Add, lhs, rhs));
     binary!(addzu(Opcode::AddZU, lhs, rhs));
     binary!(sub(Opcode::Sub, lhs, rhs));

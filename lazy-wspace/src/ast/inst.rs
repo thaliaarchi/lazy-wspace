@@ -6,19 +6,18 @@ use bitvec::prelude::*;
 use rug::integer::Order;
 use rug::ops::NegAssign;
 use rug::Integer;
-use strum::Display;
 use wspace_syntax::hs;
 
-use crate::error::{Error, NumberError, ParseError};
+use crate::error::{Error, ParseError, ValueError};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
-    Push(NumberLit),
+    Push(IntegerLit),
     Dup,
-    Copy(NumberLit),
+    Copy(IntegerLit),
     Swap,
     Drop,
-    Slide(NumberLit),
+    Slide(IntegerLit),
     Add,
     Sub,
     Mul,
@@ -40,16 +39,9 @@ pub enum Inst {
     ParseError(ParseError),
 }
 
-#[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[strum(serialize_all = "snake_case")]
-pub enum ArgKind {
-    Number,
-    Label,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum NumberLit {
-    Number(Rc<Integer>),
+pub enum IntegerLit {
+    Integer(Rc<Integer>),
     Empty,
 }
 
@@ -59,7 +51,7 @@ pub struct LabelLit(pub BitVec);
 
 impl Inst {
     #[inline]
-    pub fn get_number(&self) -> Option<&NumberLit> {
+    pub fn get_integer(&self) -> Option<&IntegerLit> {
         match self {
             Inst::Push(n) | Inst::Copy(n) | Inst::Slide(n) => Some(n),
             _ => None,
@@ -100,9 +92,9 @@ impl Inst {
     #[inline]
     pub fn err(&self) -> Option<Error> {
         match self {
-            Inst::Push(NumberLit::Empty)
-            | Inst::Copy(NumberLit::Empty)
-            | Inst::Slide(NumberLit::Empty) => Some(NumberError::EmptyLit.into()),
+            Inst::Push(IntegerLit::Empty)
+            | Inst::Copy(IntegerLit::Empty)
+            | Inst::Slide(IntegerLit::Empty) => Some(ValueError::EmptyLit.into()),
             Inst::ParseError(err) => Some(err.clone().into()),
             _ => None,
         }
@@ -144,12 +136,12 @@ impl Display for Inst {
 impl hs::Show for Inst {
     fn show(&self) -> String {
         match self {
-            Inst::Push(NumberLit::Number(n)) => format!("Push {}", n.show()),
+            Inst::Push(IntegerLit::Integer(n)) => format!("Push {}", n.show()),
             Inst::Dup => "Dup".into(),
-            Inst::Copy(NumberLit::Number(n)) => format!("Ref {}", n.show()),
+            Inst::Copy(IntegerLit::Integer(n)) => format!("Ref {}", n.show()),
             Inst::Swap => "Swap".into(),
             Inst::Drop => "Discard".into(),
-            Inst::Slide(NumberLit::Number(n)) => format!("Slide {}", n.show()),
+            Inst::Slide(IntegerLit::Integer(n)) => format!("Slide {}", n.show()),
             Inst::Add => "Infix Plus".into(),
             Inst::Sub => "Infix Minus".into(),
             Inst::Mul => "Infix Times".into(),
@@ -180,42 +172,42 @@ impl From<ParseError> for Inst {
     }
 }
 
-impl NumberLit {
+impl IntegerLit {
     #[inline]
     pub fn new<T: Into<Integer>>(n: T) -> Self {
-        NumberLit::Number(Rc::new(n.into()))
+        IntegerLit::Integer(Rc::new(n.into()))
     }
 
     #[inline]
-    pub fn ok(&self) -> Result<&Rc<Integer>, NumberError> {
+    pub fn ok(&self) -> Result<&Rc<Integer>, ValueError> {
         match self {
-            NumberLit::Number(n) => Ok(n),
-            NumberLit::Empty => Err(NumberError::EmptyLit),
+            IntegerLit::Integer(n) => Ok(n),
+            IntegerLit::Empty => Err(ValueError::EmptyLit),
         }
     }
 }
 
-impl Display for NumberLit {
+impl Display for IntegerLit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            NumberLit::Number(n) => write!(f, "{n}"),
-            NumberLit::Empty => write!(f, "<empty>"),
+            IntegerLit::Integer(n) => write!(f, "{n}"),
+            IntegerLit::Empty => write!(f, "<empty>"),
         }
     }
 }
 
-impl From<Integer> for NumberLit {
+impl From<Integer> for IntegerLit {
     #[inline]
     fn from(n: Integer) -> Self {
-        NumberLit::Number(Rc::new(n))
+        IntegerLit::Integer(Rc::new(n))
     }
 }
 
-impl From<BitVec> for NumberLit {
+impl From<BitVec> for IntegerLit {
     fn from(bits: BitVec) -> Self {
         match bits.split_first() {
-            Some((sign, bits)) => NumberLit::from(integer_from_bits(bits, *sign)),
-            None => NumberLit::Empty,
+            Some((sign, bits)) => IntegerLit::from(integer_from_bits(bits, *sign)),
+            None => IntegerLit::Empty,
         }
     }
 }
@@ -312,18 +304,18 @@ mod tests {
     #[test]
     fn show_inst() {
         let l = LabelLit(bitvec![0, 1, 0, 0, 1, 1, 0, 0]);
-        assert_eq!("Push 0", Inst::Push(NumberLit::new(0)).show());
-        assert_eq!("Push 1234", Inst::Push(NumberLit::new(1234)).show());
-        assert_eq!("Push (-1234)", Inst::Push(NumberLit::new(-1234)).show());
+        assert_eq!("Push 0", Inst::Push(IntegerLit::new(0)).show());
+        assert_eq!("Push 1234", Inst::Push(IntegerLit::new(1234)).show());
+        assert_eq!("Push (-1234)", Inst::Push(IntegerLit::new(-1234)).show());
         assert_eq!("Dup", Inst::Dup.show());
-        assert_eq!("Ref 0", Inst::Copy(NumberLit::new(0)).show());
-        assert_eq!("Ref 1234", Inst::Copy(NumberLit::new(1234)).show());
-        assert_eq!("Ref (-1234)", Inst::Copy(NumberLit::new(-1234)).show());
+        assert_eq!("Ref 0", Inst::Copy(IntegerLit::new(0)).show());
+        assert_eq!("Ref 1234", Inst::Copy(IntegerLit::new(1234)).show());
+        assert_eq!("Ref (-1234)", Inst::Copy(IntegerLit::new(-1234)).show());
         assert_eq!("Swap", Inst::Swap.show());
         assert_eq!("Discard", Inst::Drop.show());
-        assert_eq!("Slide 0", Inst::Slide(NumberLit::new(0)).show());
-        assert_eq!("Slide 1234", Inst::Slide(NumberLit::new(1234)).show());
-        assert_eq!("Slide (-1234)", Inst::Slide(NumberLit::new(-1234)).show());
+        assert_eq!("Slide 0", Inst::Slide(IntegerLit::new(0)).show());
+        assert_eq!("Slide 1234", Inst::Slide(IntegerLit::new(1234)).show());
+        assert_eq!("Slide (-1234)", Inst::Slide(IntegerLit::new(-1234)).show());
         assert_eq!("Infix Plus", Inst::Add.show());
         assert_eq!("Infix Minus", Inst::Sub.show());
         assert_eq!("Infix Times", Inst::Mul.show());

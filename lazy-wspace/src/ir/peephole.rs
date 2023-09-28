@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer as Mpz};
 
-use crate::error::NumberError;
+use crate::error::ValueError;
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::{NodeRef, NodeTable};
 
@@ -128,9 +128,9 @@ impl NodeTable<'_> {
                     add!(..) => Ok((lhs + rhs).complete()),
                     sub!(..) => Ok((lhs - rhs).complete()),
                     mul!(..) => Ok((lhs * rhs).complete()),
-                    div!(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    div!(..) if rhs.cmp0() == Ordering::Equal => Err(ValueError::DivModZero),
                     div!(..) => Ok(lhs.div_floor(rhs).complete()),
-                    mod_!(..) if rhs.cmp0() == Ordering::Equal => Err(NumberError::DivModZero),
+                    mod_!(..) if rhs.cmp0() == Ordering::Equal => Err(ValueError::DivModZero),
                     mod_!(..) => Ok(lhs.rem_floor(rhs).complete()),
                     and!(..) => Ok((lhs & rhs).complete()),
                     or!(..) => Ok((lhs | rhs).complete()),
@@ -179,7 +179,7 @@ impl NodeTable<'_> {
 
             // Division by 0
             (div!(..) | mod_!(..), _, constz!(rhs)) if rhs.cmp0() == Ordering::Equal => {
-                Insert(Inst::const_error(NumberError::DivModZero))
+                Insert(Inst::const_error(ValueError::DivModZero))
             }
 
             // Negation
@@ -279,10 +279,10 @@ impl NodeTable<'_> {
             // Get LSB
             // (Must be after single-bit XOR)
             (mod_!(..), _, constz!(rhs)) if **rhs == 2 => {
-                Insert(Inst::test_bit(lhs, self.insert_number(&Mpz::ZERO)))
+                Insert(Inst::test_bit(lhs, self.insert_mpz(&Mpz::ZERO)))
             }
             (and!(..), _, constz!(rhs)) if **rhs == 1 => {
-                Insert(Inst::test_bit(lhs, self.insert_number(&Mpz::ZERO)))
+                Insert(Inst::test_bit(lhs, self.insert_mpz(&Mpz::ZERO)))
             }
 
             // Bit negation

@@ -14,7 +14,7 @@ use rug::Integer;
 /// `0x` or `0X`. Binary literals with `0b` or `0B` are not supported. A leading
 /// zero is interpreted as decimal, not octal. It may have a negative sign. It
 /// may be surrounded by any number of parentheses. Unicode whitespace
-/// characters may occur around the number, sign, or parentheses. Positive
+/// characters may occur around the digits, sign, or parentheses. Positive
 /// signs, underscore digit separators, and exponents are not allowed.
 ///
 /// Haskell's `String` must be UTF-8 and excludes surrogate halves, so it is

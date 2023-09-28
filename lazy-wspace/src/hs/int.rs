@@ -8,7 +8,7 @@ use crate::error::UnderflowError;
 /// Representation of the Haskell `Int` type, which is used for stack indexing.
 ///
 /// The reference interpreter uses `Int` for the operands of `copy` and `slide`.
-/// Parsing of number literals is done directly with `Int`, so literals do not
+/// Parsing of integer literals is done directly with `Int`, so literals do not
 /// have arbitrary precision and are wrapped to be in bounds.
 ///
 /// Its bounds are defined as `minBound :: Int` and `maxBound :: Int`, which are

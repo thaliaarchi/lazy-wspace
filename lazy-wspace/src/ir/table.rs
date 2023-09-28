@@ -8,7 +8,7 @@ use std::ptr::NonNull;
 
 use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::raw::{RawIter, RawTable};
-use rug::Integer;
+use rug::Integer as Mpz;
 
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::{Graph, Node, NodeRef};
@@ -68,11 +68,11 @@ impl<'g> NodeTable<'g> {
     }
 
     /// A specialization of `insert`, that avoids cloning `n` and constructing
-    /// a `constz`, when an equivalent number has already been inserted.
+    /// a `constz`, when an equivalent integer has already been inserted.
     #[inline]
-    pub fn insert_number(&mut self, n: &Integer) -> Value {
-        struct NodeNumberRef<'a>(&'a Integer);
-        impl Hash for NodeNumberRef<'_> {
+    pub fn insert_mpz(&mut self, n: &Mpz) -> Value {
+        struct NodeMpzRef<'a>(&'a Mpz);
+        impl Hash for NodeMpzRef<'_> {
             #[inline]
             fn hash<H: Hasher>(&self, state: &mut H) {
                 let inst = Inst::UnaryImmZ {
@@ -87,7 +87,7 @@ impl<'g> NodeTable<'g> {
             }
         }
 
-        let hash = make_hash(&NodeNumberRef(n));
+        let hash = make_hash(&NodeMpzRef(n));
         let node = match self.table.find_or_find_insert_slot(
             hash,
             |&key| &*self.graph[key] == n,

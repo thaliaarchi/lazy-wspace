@@ -13,19 +13,19 @@ use rug::Integer;
 use strum::Display;
 use wspace_syntax::hs::ReadIntegerLit;
 
-use crate::ast::NumberLit;
-use crate::error::{EagerError, Error, NumberError};
+use crate::ast::IntegerLit;
+use crate::error::{EagerError, Error, ValueError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Number {
-    Value(Rc<Integer>),
-    Op(Op, NumberRef, NumberRef),
-    Error(NumberError),
+pub enum Value {
+    Integer(Rc<Integer>),
+    Op(Op, ValueRef, ValueRef),
+    Error(ValueError),
 }
 
 #[repr(transparent)]
 #[derive(Clone, PartialEq, Eq)]
-pub struct NumberRef(Rc<RefCell<Number>>);
+pub struct ValueRef(Rc<RefCell<Value>>);
 
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
@@ -37,8 +37,8 @@ pub enum Op {
     Mod,
 }
 
-/// Parses a line of input as a number for `readi`.
-impl FromStr for Number {
+/// Parses a line of input as an integer for `readi`.
+impl FromStr for Value {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -46,19 +46,19 @@ impl FromStr for Number {
             return Err(EagerError::ReadEof.into());
         }
         match s.parse::<ReadIntegerLit>() {
-            Ok(lit) => Ok(Number::Value(Rc::new(lit.value))),
-            Err(_) => Ok(NumberError::ReadiParse.into()),
+            Ok(lit) => Ok(Value::Integer(Rc::new(lit.value))),
+            Err(_) => Ok(ValueError::ReadiParse.into()),
         }
     }
 }
 
-impl Number {
+impl Value {
     #[inline]
     pub fn zero() -> Self {
         Integer::ZERO.into()
     }
 
-    fn eval_op(op: Op, lhs: NumberRef, rhs: NumberRef) -> Result<Rc<Integer>, NumberError> {
+    fn eval_op(op: Op, lhs: ValueRef, rhs: ValueRef) -> Result<Rc<Integer>, ValueError> {
         // Matches the evaluation order of the reference interpreter.
         let v = match op {
             Op::Add => {
@@ -79,7 +79,7 @@ impl Number {
             Op::Div => {
                 let rhs = rhs.eval()?;
                 if rhs.cmp0() == Ordering::Equal {
-                    return Err(NumberError::DivModZero);
+                    return Err(ValueError::DivModZero);
                 }
                 let lhs = lhs.eval()?;
                 div_floor_rc(lhs, rhs)
@@ -87,7 +87,7 @@ impl Number {
             Op::Mod => {
                 let rhs = rhs.eval()?;
                 if rhs.cmp0() == Ordering::Equal {
-                    return Err(NumberError::DivModZero);
+                    return Err(ValueError::DivModZero);
                 }
                 let lhs = lhs.eval()?;
                 rem_floor_rc(lhs, rhs)
@@ -97,35 +97,35 @@ impl Number {
     }
 }
 
-impl NumberRef {
-    pub fn eval(self) -> Result<Rc<Integer>, NumberError> {
+impl ValueRef {
+    pub fn eval(self) -> Result<Rc<Integer>, ValueError> {
         match &*self.0.borrow() {
-            Number::Value(n) => return Ok(n.clone()),
-            Number::Op(_, _, _) => {}
-            Number::Error(err) => return Err(err.clone()),
+            Value::Integer(n) => return Ok(n.clone()),
+            Value::Op(_, _, _) => {}
+            Value::Error(err) => return Err(err.clone()),
         }
 
         let cell = self.0;
-        let n = cell.replace(Number::Error(NumberError::Internal));
+        let n = cell.replace(Value::Error(ValueError::Internal));
         let res = match n {
-            Number::Op(op, lhs, rhs) => Number::eval_op(op, lhs, rhs),
+            Value::Op(op, lhs, rhs) => Value::eval_op(op, lhs, rhs),
             _ => unreachable!(),
         };
         let inner = cell.replace(match &res {
-            Ok(n) => Number::Value(n.clone()),
-            Err(err) => Number::Error(err.clone()),
+            Ok(n) => Value::Integer(n.clone()),
+            Err(err) => Value::Error(err.clone()),
         });
-        debug_assert_eq!(Number::Error(NumberError::Internal), inner);
+        debug_assert_eq!(Value::Error(ValueError::Internal), inner);
         res
     }
 
     #[inline]
-    pub fn borrow(&self) -> Ref<'_, Number> {
+    pub fn borrow(&self) -> Ref<'_, Value> {
         self.0.borrow()
     }
 
     #[inline]
-    pub fn borrow_mut(&self) -> RefMut<'_, Number> {
+    pub fn borrow_mut(&self) -> RefMut<'_, Value> {
         self.0.borrow_mut()
     }
 }
@@ -179,54 +179,54 @@ fn rem_floor_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
     arith_op!(lhs, rhs, rem_floor, rem_floor_assign, rem_floor_from)
 }
 
-impl From<&NumberLit> for Number {
+impl From<&IntegerLit> for Value {
     #[inline]
-    fn from(n: &NumberLit) -> Self {
+    fn from(n: &IntegerLit) -> Self {
         match n {
-            NumberLit::Number(n) => Number::Value(n.clone()),
-            NumberLit::Empty => Number::Error(NumberError::EmptyLit),
+            IntegerLit::Integer(n) => Value::Integer(n.clone()),
+            IntegerLit::Empty => Value::Error(ValueError::EmptyLit),
         }
     }
 }
 
-impl<T: Into<Integer>> From<T> for Number {
+impl<T: Into<Integer>> From<T> for Value {
     #[inline]
     fn from(v: T) -> Self {
-        Number::Value(Rc::new(v.into()))
+        Value::Integer(Rc::new(v.into()))
     }
 }
 
-impl From<NumberError> for Number {
+impl From<ValueError> for Value {
     #[inline]
-    fn from(err: NumberError) -> Self {
-        Number::Error(err)
+    fn from(err: ValueError) -> Self {
+        Value::Error(err)
     }
 }
 
-impl<T: Into<Number>> From<T> for NumberRef {
+impl<T: Into<Value>> From<T> for ValueRef {
     #[inline]
     fn from(v: T) -> Self {
-        NumberRef(Rc::new(RefCell::new(v.into())))
+        ValueRef(Rc::new(RefCell::new(v.into())))
     }
 }
 
-impl Debug for NumberRef {
+impl Debug for ValueRef {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(&*self.borrow(), f)
     }
 }
 
-impl PartialEq<NumberRef> for Number {
+impl PartialEq<ValueRef> for Value {
     #[inline]
-    fn eq(&self, other: &NumberRef) -> bool {
+    fn eq(&self, other: &ValueRef) -> bool {
         self == &*other.borrow()
     }
 }
 
-impl PartialEq<Number> for NumberRef {
+impl PartialEq<Value> for ValueRef {
     #[inline]
-    fn eq(&self, other: &Number) -> bool {
+    fn eq(&self, other: &Value) -> bool {
         &*self.borrow() == other
     }
 }
@@ -237,21 +237,21 @@ mod tests {
 
     #[test]
     fn eval_update_refs() {
-        let x = NumberRef::from(1);
-        let y = NumberRef::from(2);
-        let z = NumberRef::from(Number::Op(Op::Add, x, y));
+        let x = ValueRef::from(1);
+        let y = ValueRef::from(2);
+        let z = ValueRef::from(Value::Op(Op::Add, x, y));
         let z1 = z.clone().eval().unwrap();
         assert_eq!(Integer::from(3), *z1);
-        assert_eq!(NumberRef::from(3), z);
+        assert_eq!(ValueRef::from(3), z);
     }
 
     #[test]
     fn eval_error_order() {
-        let x = NumberError::CopyLarge.into();
-        let y = NumberError::EmptyLit.into();
-        let z = NumberRef::from(Number::Op(Op::Add, x, y));
+        let x = ValueError::CopyLarge.into();
+        let y = ValueError::EmptyLit.into();
+        let z = ValueRef::from(Value::Op(Op::Add, x, y));
         let err = z.clone().eval().unwrap_err();
-        assert_eq!(NumberError::EmptyLit, err);
-        assert_eq!(NumberRef::from(NumberError::EmptyLit), z);
+        assert_eq!(ValueError::EmptyLit, err);
+        assert_eq!(ValueRef::from(ValueError::EmptyLit), z);
     }
 }

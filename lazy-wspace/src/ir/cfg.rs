@@ -246,7 +246,7 @@ impl<'g> BBlockBuilder<'g> {
 
     fn push_inst(&mut self, inst: &Ast, globals: &mut NodeTable<'g>) -> Result<(), Error> {
         match inst {
-            Ast::Push(n) => self.do_stack(inst, |s, _| Ok(_ = s.push_number(n, globals)))?,
+            Ast::Push(n) => self.do_stack(inst, |s, _| Ok(_ = s.push_integer(n, globals)))?,
             Ast::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
             Ast::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
             Ast::Swap => self.do_stack(inst, |s, t| s.swap(t))?,

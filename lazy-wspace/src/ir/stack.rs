@@ -1,5 +1,5 @@
-use crate::ast::NumberLit;
-use crate::error::{NumberError, UnderflowError};
+use crate::ast::IntegerLit;
+use crate::error::{UnderflowError, ValueError};
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::{NodeRef, NodeTable};
 use crate::vm::Op;
@@ -43,7 +43,7 @@ pub enum LazySize {
     /// A stack index or length larger than `usize::MAX`, that always underflows
     /// when evaluated.
     Overflow,
-    /// An empty number literal, that errors when evaluated.
+    /// An empty integer literal, that errors when evaluated.
     EmptyLit,
 }
 
@@ -103,10 +103,10 @@ impl AbstractStack {
     /// Pushes a number to the stack, only cloning it, if it does not already
     /// exist in the table. This corresponds to Whitespace `push`.
     #[inline]
-    pub fn push_number(&mut self, n: &NumberLit, table: &mut NodeTable<'_>) -> Value {
+    pub fn push_integer(&mut self, n: &IntegerLit, table: &mut NodeTable<'_>) -> Value {
         let val = match n {
-            NumberLit::Number(n) => table.insert_number(n),
-            NumberLit::Empty => table.insert_value(Inst::const_error(NumberError::EmptyLit)),
+            IntegerLit::Integer(n) => table.insert_mpz(n),
+            IntegerLit::Empty => table.insert_value(Inst::const_error(ValueError::EmptyLit)),
         };
         self.push(val);
         val
@@ -128,11 +128,11 @@ impl AbstractStack {
         let res = match n {
             LazySize::Finite(n) => match self.at_lazy(n, table) {
                 Ok(node) => Ok(node),
-                Err(UnderflowError::Normal) => Err(NumberError::CopyLarge),
-                Err(UnderflowError::SlideEmpty) => Err(NumberError::EmptyLit),
+                Err(UnderflowError::Normal) => Err(ValueError::CopyLarge),
+                Err(UnderflowError::SlideEmpty) => Err(ValueError::EmptyLit),
             },
-            LazySize::Overflow => Err(NumberError::CopyLarge),
-            LazySize::EmptyLit => Err(NumberError::EmptyLit),
+            LazySize::Overflow => Err(ValueError::CopyLarge),
+            LazySize::EmptyLit => Err(ValueError::EmptyLit),
         };
         let val = match res {
             Ok(val) => val,
@@ -445,18 +445,18 @@ impl LazySize {
     }
 }
 
-impl From<&NumberLit> for LazySize {
+impl From<&IntegerLit> for LazySize {
     #[inline]
-    fn from(n: &NumberLit) -> Self {
+    fn from(n: &IntegerLit) -> Self {
         match n {
-            NumberLit::Number(n) => {
+            IntegerLit::Integer(n) => {
                 if let Some(n) = n.to_usize() {
                     LazySize::Finite(n)
                 } else {
                     LazySize::Overflow
                 }
             }
-            NumberLit::Empty => LazySize::EmptyLit,
+            IntegerLit::Empty => LazySize::EmptyLit,
         }
     }
 }

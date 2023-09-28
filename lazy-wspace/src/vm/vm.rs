@@ -4,14 +4,14 @@ use std::io::Write;
 
 use utf8_chars::BufReadCharsExt;
 
-use crate::ast::{Inst, LabelLit, NumberLit};
-use crate::error::{EagerError, Error, NumberError, ParseError, UnderflowError};
-use crate::vm::{Number, NumberRef, Op};
+use crate::ast::{Inst, IntegerLit, LabelLit};
+use crate::error::{EagerError, Error, ParseError, UnderflowError, ValueError};
+use crate::vm::{Op, Value, ValueRef};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VM<'a, I, O: ?Sized> {
     prog: Vec<Inst>,
-    stack: Vec<NumberRef>,
+    stack: Vec<ValueRef>,
     heap: Heap,
     pc: usize,
     call_stack: Vec<usize>,
@@ -23,7 +23,7 @@ pub struct VM<'a, I, O: ?Sized> {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Heap {
-    heap: HashMap<u32, NumberRef>,
+    heap: HashMap<u32, ValueRef>,
     len: u32,
 }
 
@@ -50,7 +50,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
     }
 
     #[inline]
-    pub fn stack(&self) -> &[NumberRef] {
+    pub fn stack(&self) -> &[ValueRef] {
         &self.stack
     }
 
@@ -71,7 +71,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
         macro_rules! arith(($op:expr) => {{
             let y = pop!()?;
             let x = pop!()?;
-            self.stack.push(Number::Op($op, x, y).into());
+            self.stack.push(Value::Op($op, x, y).into());
         }});
         macro_rules! jump(($l:expr) => {{
             self.pc = *self
@@ -91,19 +91,19 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Copy(n) => {
                 let x = match n {
-                    NumberLit::Number(n) => {
+                    IntegerLit::Integer(n) => {
                         if n.cmp0() == Ordering::Less {
-                            NumberError::CopyNegative.into()
+                            ValueError::CopyNegative.into()
                         } else {
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             let i = self.stack.len().wrapping_sub(n.wrapping_add(1));
                             match self.stack.get(i) {
                                 Some(x) => x.clone(),
-                                None => NumberError::CopyLarge.into(),
+                                None => ValueError::CopyLarge.into(),
                             }
                         }
                     }
-                    NumberLit::Empty => NumberError::EmptyLit.into(),
+                    IntegerLit::Empty => ValueError::EmptyLit.into(),
                 };
                 self.stack.push(x);
             }
@@ -117,14 +117,14 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             Inst::Slide(n) => {
                 let top = pop!()?;
                 match n {
-                    NumberLit::Number(n) => {
+                    IntegerLit::Integer(n) => {
                         // Negative values slide nothing.
                         if n.cmp0() == Ordering::Greater {
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             self.stack.truncate(self.stack.len().saturating_sub(n));
                         }
                     }
-                    NumberLit::Empty => {
+                    IntegerLit::Empty => {
                         // If the stack later underflows, the empty argument
                         // from this slide is evaluated and the resulting error
                         // takes precedence over the underflow error.
@@ -188,13 +188,13 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             Inst::Readc => {
                 let addr = pop!()?;
                 let ch = self.stdin.read_char()?.ok_or(EagerError::ReadEof)?;
-                self.heap.store(addr, Number::from(ch as u32).into())?;
+                self.heap.store(addr, Value::from(ch as u32).into())?;
             }
             Inst::Readi => {
                 let addr = pop!()?;
                 let mut line = String::new();
                 self.stdin.read_line(&mut line)?;
-                let n: Number = line.parse()?;
+                let n: Value = line.parse()?;
                 self.heap.store(addr, n.into())?;
             }
             Inst::ParseError(err) => return Err(Error::Parse(err.clone())),
@@ -222,7 +222,7 @@ impl Heap {
     ///
     /// This implementation mimics the upper address bound, by only allowing
     /// addresses up to 2^32, but does not have the linear performance issues.
-    pub fn store(&mut self, addr: NumberRef, n: NumberRef) -> Result<(), Error> {
+    pub fn store(&mut self, addr: ValueRef, n: ValueRef) -> Result<(), Error> {
         let addr = addr.eval()?;
         if addr.cmp0() == Ordering::Less {
             return Err(EagerError::StoreNegative.into());
@@ -235,24 +235,24 @@ impl Heap {
         Err(EagerError::StoreOverflow.into())
     }
 
-    pub fn retrieve(&mut self, addr: NumberRef) -> NumberRef {
+    pub fn retrieve(&mut self, addr: ValueRef) -> ValueRef {
         let addr = match addr.eval() {
             Ok(n) => n,
             Err(err) => return err.into(),
         };
         if addr.cmp0() == Ordering::Less {
-            return NumberError::RetrieveNegative.into();
+            return ValueError::RetrieveNegative.into();
         }
         if let Some(addr) = addr.to_u32() {
             if addr < self.len {
                 return self
                     .heap
                     .entry(addr)
-                    .or_insert(Number::zero().into())
+                    .or_insert(Value::zero().into())
                     .clone();
             }
         }
-        NumberError::RetrieveLarge.into()
+        ValueError::RetrieveLarge.into()
     }
 }
 
@@ -262,42 +262,42 @@ mod tests {
 
     #[test]
     fn copy_empty() {
-        let prog = vec![Inst::Copy(NumberLit::Empty)];
+        let prog = vec![Inst::Copy(IntegerLit::Empty)];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(NumberError::EmptyLit)], vm.stack());
+        assert_eq!(&[ValueRef::from(ValueError::EmptyLit)], vm.stack());
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn copy_negative() {
-        let prog = vec![Inst::Copy(NumberLit::new(-1))];
+        let prog = vec![Inst::Copy(IntegerLit::new(-1))];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(NumberError::CopyNegative)], vm.stack());
+        assert_eq!(&[ValueRef::from(ValueError::CopyNegative)], vm.stack());
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn copy_large() {
-        let prog = vec![Inst::Copy(NumberLit::new(1))];
+        let prog = vec![Inst::Copy(IntegerLit::new(1))];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[NumberRef::from(NumberError::CopyLarge)], vm.stack());
+        assert_eq!(&[ValueRef::from(ValueError::CopyLarge)], vm.stack());
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn slide_empty() {
         let prog = vec![
-            Inst::Push(NumberLit::new(1)),
-            Inst::Slide(NumberLit::Empty),
+            Inst::Push(IntegerLit::new(1)),
+            Inst::Slide(IntegerLit::Empty),
             Inst::Drop,
             Inst::Drop,
         ];
@@ -307,15 +307,15 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(NumberError::EmptyLit.into()), vm.step());
+        assert_eq!(Err(ValueError::EmptyLit.into()), vm.step());
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 
     #[test]
     fn slide_negative() {
         let prog = vec![
-            Inst::Push(NumberLit::new(1)),
-            Inst::Slide(NumberLit::new(-2)),
+            Inst::Push(IntegerLit::new(1)),
+            Inst::Slide(IntegerLit::new(-2)),
             Inst::Drop,
             Inst::Drop,
         ];

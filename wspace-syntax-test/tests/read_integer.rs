@@ -120,7 +120,7 @@ fn get_tests() -> Vec<Test> {
     ];
 
     // All characters with the Unicode property White_Space, excluding non-ASCII
-    // line-breaks, are allowed before or after the number, or between the `-`
+    // line-breaks, are allowed before or after the digits, or between the `-`
     // sign and the digits.
     let ok_spaces = [
         // Unicode White_Space

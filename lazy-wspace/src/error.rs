@@ -9,17 +9,17 @@ use thiserror::Error;
 use rug::Integer;
 use wspace_syntax::hs::Show;
 
-use crate::ast::{ArgKind, Inst, LabelLit};
+use crate::ast::{Inst, LabelLit};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
     #[error("incorrect usage")]
     Usage,
-    #[error("parse error: {0}")]
+    #[error(transparent)]
     Parse(#[from] ParseError),
-    #[error("number error: {0}")]
-    Number(#[from] NumberError),
-    #[error("eager error: {0}")]
+    #[error(transparent)]
+    Value(#[from] ValueError),
+    #[error(transparent)]
     Eager(#[from] EagerError),
 }
 
@@ -29,8 +29,10 @@ pub enum ParseError {
     IncompleteInst,
     #[error("unrecognized instruction opcode")]
     UnrecognizedInst,
-    #[error("unterminated {0} argument")]
-    UnterminatedArg(ArgKind),
+    #[error("unterminated integer")]
+    UnterminatedInteger,
+    #[error("unterminated label")]
+    UnterminatedLabel,
     #[error("undefined label {0}")]
     UndefinedLabel(LabelLit),
     #[error("implicit end")]
@@ -40,8 +42,8 @@ pub enum ParseError {
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
-pub enum NumberError {
-    #[error("empty number literal")]
+pub enum ValueError {
+    #[error("empty integer literal")]
     EmptyLit,
     #[error("copy index out of bounds")]
     CopyLarge,
@@ -53,7 +55,7 @@ pub enum NumberError {
     RetrieveLarge,
     #[error("retrieve at negative address")]
     RetrieveNegative,
-    #[error("invalid number from readi")]
+    #[error("invalid integer from readi")]
     ReadiParse,
     #[error("BUG! internal error")]
     Internal,
@@ -155,7 +157,7 @@ impl UnderflowError {
             UnderflowError::Normal => inst
                 .err()
                 .unwrap_or_else(|| EagerError::Underflow(inst.clone()).into()),
-            UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
+            UnderflowError::SlideEmpty => ValueError::EmptyLit.into(),
         }
     }
 }
@@ -169,7 +171,7 @@ impl Error {
                 HaskellError::stdout("wspace 0.3 (c) 2003 Edwin Brady\n-------------------------------\nUsage: wspace [file]\n".to_owned())
             }
             Error::Parse(err) => err.to_haskell(wspace, filename),
-            Error::Number(err) => err.to_haskell(wspace, filename),
+            Error::Value(err) => err.to_haskell(wspace, filename),
             Error::Eager(err) => err.to_haskell(wspace, filename),
         }
     }
@@ -182,10 +184,10 @@ impl ParseError {
             ParseError::IncompleteInst | ParseError::UnrecognizedInst => {
                 HaskellError::stderr(format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n"), 1)
             }
-            ParseError::UnterminatedArg(ArgKind::Number) => {
+            ParseError::UnterminatedInteger => {
                 HaskellError::stderr(format!("{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n\n"), 1)
             }
-            ParseError::UnterminatedArg(ArgKind::Label) => {
+            ParseError::UnterminatedLabel => {
                 HaskellError::stderr(format!("{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n\n"), 1)
             }
             ParseError::UndefinedLabel(l) => {
@@ -201,26 +203,26 @@ impl ParseError {
     }
 }
 
-impl NumberError {
+impl ValueError {
     #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &str, _filename: &str) -> HaskellError {
         match self {
-            NumberError::EmptyLit => {
+            ValueError::EmptyLit => {
                 HaskellError::stderr(format!("{wspace}: Prelude.last: empty list\n"), 1)
             }
-            NumberError::CopyLarge | NumberError::RetrieveLarge => {
+            ValueError::CopyLarge | ValueError::RetrieveLarge => {
                 HaskellError::stderr(format!("{wspace}: Prelude.!!: index too large\n"), 1)
             }
-            NumberError::CopyNegative | NumberError::RetrieveNegative => {
+            ValueError::CopyNegative | ValueError::RetrieveNegative => {
                 HaskellError::stderr(format!("{wspace}: Prelude.!!: negative index\n"), 1)
             }
-            NumberError::DivModZero => {
+            ValueError::DivModZero => {
                 HaskellError::stderr(format!("{wspace}: divide by zero\n"), 1)
             }
-            NumberError::ReadiParse => {
+            ValueError::ReadiParse => {
                 HaskellError::stderr(format!("{wspace}: Prelude.read: no parse\n"), 1)
             },
-            NumberError::Internal => panic!("BUG: internal error"),
+            ValueError::Internal => panic!("BUG: internal error"),
         }
     }
 }

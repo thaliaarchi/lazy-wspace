@@ -4,7 +4,7 @@ use std::path::Path;
 
 use bitvec::prelude::*;
 
-use crate::ast::{ArgKind, LabelLit, Lexer, Parser};
+use crate::ast::{LabelLit, Lexer, Parser};
 use crate::error::{Error, ParseError};
 use crate::vm::VM;
 
@@ -54,14 +54,14 @@ fn execute_expected() {
     test!("parse/unrecognized_tstl.ws", b"" => Err(ParseError::UnrecognizedInst.into()), b"");
     test!("parse/unrecognized_ttl.ws", b"" => Err(ParseError::UnrecognizedInst.into()), b"");
 
-    test!("parse/unterminated_push.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Number).into()), b"");
-    test!("parse/unterminated_copy.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Number).into()), b"");
-    test!("parse/unterminated_slide.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Number).into()), b"");
-    test!("parse/unterminated_label.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
-    test!("parse/unterminated_call.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
-    test!("parse/unterminated_jmp.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
-    test!("parse/unterminated_jz.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
-    test!("parse/unterminated_jn.ws", b"" => Err(ParseError::UnterminatedArg(ArgKind::Label).into()), b"");
+    test!("parse/unterminated_push.ws", b"" => Err(ParseError::UnterminatedInteger.into()), b"");
+    test!("parse/unterminated_copy.ws", b"" => Err(ParseError::UnterminatedInteger.into()), b"");
+    test!("parse/unterminated_slide.ws", b"" => Err(ParseError::UnterminatedInteger.into()), b"");
+    test!("parse/unterminated_label.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
+    test!("parse/unterminated_call.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
+    test!("parse/unterminated_jmp.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
+    test!("parse/unterminated_jz.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
+    test!("parse/unterminated_jn.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
 
     test!("parse/undefined_label_call.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
     test!("parse/undefined_label_jmp.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
