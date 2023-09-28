@@ -66,7 +66,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
         self.pc += 1;
 
         macro_rules! pop(() => {
-            self.stack.pop().ok_or_else(|| self.underflow(inst))
+            self.stack.pop().ok_or_else(|| self.on_underflow.to_error(inst))
         });
         macro_rules! arith(($op:expr) => {{
             let y = pop!()?;
@@ -86,7 +86,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Dup => {
                 let i = self.stack.len().wrapping_sub(1);
-                let top = self.stack.get(i).ok_or_else(|| self.underflow(inst))?;
+                let top = (self.stack.get(i)).ok_or_else(|| self.on_underflow.to_error(inst))?;
                 self.stack.push(top.clone());
             }
             Inst::Copy(n) => {
@@ -201,17 +201,6 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
         }
         Ok(())
     }
-
-    #[inline]
-    fn underflow(&self, inst: &Inst) -> Error {
-        match self.on_underflow {
-            UnderflowError::Normal => match inst.to_printable() {
-                Ok(inst) => EagerError::Underflow(inst).into(),
-                Err(err) => err,
-            },
-            UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
-        }
-    }
 }
 
 impl Heap {
@@ -269,8 +258,6 @@ impl Heap {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::PrintableInst;
-
     use super::*;
 
     #[test]
@@ -338,10 +325,7 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(
-            Err(EagerError::Underflow(PrintableInst::Drop).into()),
-            vm.step()
-        );
+        assert_eq!(Err(EagerError::Underflow(Inst::Drop).into()), vm.step());
         assert_eq!(Vec::<u8>::new(), stdout);
     }
 }

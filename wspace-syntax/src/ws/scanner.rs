@@ -3,6 +3,7 @@ use std::slice::Iter;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 
+use crate::hs;
 use crate::ws::MappingWriter;
 
 /// Whitespace token.
@@ -14,6 +15,18 @@ pub enum Token {
     T,
     /// Line feed
     L,
+}
+
+impl hs::Show for Token {
+    fn show(&self) -> String {
+        // Matches the manual instance of `Show` in `Tokens.hs`, which does not
+        // produce valid Haskell syntax.
+        match self {
+            Token::S => " ".into(),
+            Token::T => "\t".into(),
+            Token::L => "\n".into(),
+        }
+    }
 }
 
 pub struct Mapping {

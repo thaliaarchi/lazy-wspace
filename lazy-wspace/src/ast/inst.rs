@@ -7,9 +7,9 @@ use rug::integer::Order;
 use rug::ops::NegAssign;
 use rug::Integer;
 use strum::Display;
+use wspace_syntax::hs;
 
 use crate::error::{Error, NumberError, ParseError};
-use crate::vm::IntegerExt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Inst {
@@ -40,34 +40,6 @@ pub enum Inst {
     ParseError(ParseError),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PrintableInst {
-    Push(Rc<Integer>),
-    Dup,
-    Copy(Rc<Integer>),
-    Swap,
-    Drop,
-    Slide(Rc<Integer>),
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Store,
-    Retrieve,
-    Label(LabelLit),
-    Call(LabelLit),
-    Jmp(LabelLit),
-    Jz(LabelLit),
-    Jn(LabelLit),
-    Ret,
-    End,
-    Printc,
-    Printi,
-    Readc,
-    Readi,
-}
-
 #[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum ArgKind {
@@ -84,43 +56,6 @@ pub enum NumberLit {
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LabelLit(pub BitVec);
-
-impl From<ParseError> for Inst {
-    #[inline]
-    fn from(err: ParseError) -> Self {
-        Inst::ParseError(err)
-    }
-}
-
-impl NumberLit {
-    #[inline]
-    pub fn new<T: Into<Integer>>(n: T) -> Self {
-        NumberLit::Number(Rc::new(n.into()))
-    }
-}
-
-impl From<Integer> for NumberLit {
-    #[inline]
-    fn from(n: Integer) -> Self {
-        NumberLit::Number(Rc::new(n))
-    }
-}
-
-impl From<BitVec> for NumberLit {
-    fn from(bits: BitVec) -> Self {
-        match bits.split_first() {
-            Some((sign, bits)) => NumberLit::from(integer_from_bits(bits, *sign)),
-            None => NumberLit::Empty,
-        }
-    }
-}
-
-impl From<BitVec> for LabelLit {
-    #[inline]
-    fn from(bits: BitVec) -> Self {
-        LabelLit(bits)
-    }
-}
 
 impl Inst {
     #[inline]
@@ -163,33 +98,13 @@ impl Inst {
     }
 
     #[inline]
-    pub fn to_printable(&self) -> Result<PrintableInst, Error> {
+    pub fn err(&self) -> Option<Error> {
         match self {
-            Inst::Push(n) => Ok(PrintableInst::Push(n.unwrap()?.clone())),
-            Inst::Dup => Ok(PrintableInst::Dup),
-            Inst::Copy(n) => Ok(PrintableInst::Copy(n.unwrap()?.clone())),
-            Inst::Swap => Ok(PrintableInst::Swap),
-            Inst::Drop => Ok(PrintableInst::Drop),
-            Inst::Slide(n) => Ok(PrintableInst::Slide(n.unwrap()?.clone())),
-            Inst::Add => Ok(PrintableInst::Add),
-            Inst::Sub => Ok(PrintableInst::Sub),
-            Inst::Mul => Ok(PrintableInst::Mul),
-            Inst::Div => Ok(PrintableInst::Div),
-            Inst::Mod => Ok(PrintableInst::Mod),
-            Inst::Store => Ok(PrintableInst::Store),
-            Inst::Retrieve => Ok(PrintableInst::Retrieve),
-            Inst::Label(l) => Ok(PrintableInst::Label(l.clone())),
-            Inst::Call(l) => Ok(PrintableInst::Call(l.clone())),
-            Inst::Jmp(l) => Ok(PrintableInst::Jmp(l.clone())),
-            Inst::Jz(l) => Ok(PrintableInst::Jz(l.clone())),
-            Inst::Jn(l) => Ok(PrintableInst::Jn(l.clone())),
-            Inst::Ret => Ok(PrintableInst::Ret),
-            Inst::End => Ok(PrintableInst::End),
-            Inst::Printc => Ok(PrintableInst::Printc),
-            Inst::Printi => Ok(PrintableInst::Printi),
-            Inst::Readc => Ok(PrintableInst::Readc),
-            Inst::Readi => Ok(PrintableInst::Readi),
-            Inst::ParseError(err) => Err(err.clone().into()),
+            Inst::Push(NumberLit::Empty)
+            | Inst::Copy(NumberLit::Empty)
+            | Inst::Slide(NumberLit::Empty) => Some(NumberError::EmptyLit.into()),
+            Inst::ParseError(err) => Some(err.clone().into()),
+            _ => None,
         }
     }
 }
@@ -226,33 +141,56 @@ impl Display for Inst {
     }
 }
 
-impl Display for PrintableInst {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl hs::Show for Inst {
+    fn show(&self) -> String {
         match self {
-            PrintableInst::Push(n) => write!(f, "Push {}", n.to_haskell_show()),
-            PrintableInst::Dup => f.write_str("Dup"),
-            PrintableInst::Copy(n) => write!(f, "Ref {}", n.to_haskell_show()),
-            PrintableInst::Swap => f.write_str("Swap"),
-            PrintableInst::Drop => f.write_str("Discard"),
-            PrintableInst::Slide(n) => write!(f, "Slide {}", n.to_haskell_show()),
-            PrintableInst::Add => f.write_str("Infix Plus"),
-            PrintableInst::Sub => f.write_str("Infix Minus"),
-            PrintableInst::Mul => f.write_str("Infix Times"),
-            PrintableInst::Div => f.write_str("Infix Divide"),
-            PrintableInst::Mod => f.write_str("Infix Modulo"),
-            PrintableInst::Store => f.write_str("Store"),
-            PrintableInst::Retrieve => f.write_str("Retrieve"),
-            PrintableInst::Label(l) => write!(f, "Label {}", l.to_haskell_show()),
-            PrintableInst::Call(l) => write!(f, "Call {}", l.to_haskell_show()),
-            PrintableInst::Jmp(l) => write!(f, "Jump {}", l.to_haskell_show()),
-            PrintableInst::Jz(l) => write!(f, "If Zero {}", l.to_haskell_show()),
-            PrintableInst::Jn(l) => write!(f, "If Negative {}", l.to_haskell_show()),
-            PrintableInst::Ret => f.write_str("Return"),
-            PrintableInst::End => f.write_str("End"),
-            PrintableInst::Printc => f.write_str("OutputChar"),
-            PrintableInst::Printi => f.write_str("OutputNum"),
-            PrintableInst::Readc => f.write_str("ReadChar"),
-            PrintableInst::Readi => f.write_str("ReadNum"),
+            Inst::Push(NumberLit::Number(n)) => format!("Push {}", n.show()),
+            Inst::Dup => "Dup".into(),
+            Inst::Copy(NumberLit::Number(n)) => format!("Ref {}", n.show()),
+            Inst::Swap => "Swap".into(),
+            Inst::Drop => "Discard".into(),
+            Inst::Slide(NumberLit::Number(n)) => format!("Slide {}", n.show()),
+            Inst::Add => "Infix Plus".into(),
+            Inst::Sub => "Infix Minus".into(),
+            Inst::Mul => "Infix Times".into(),
+            Inst::Div => "Infix Divide".into(),
+            Inst::Mod => "Infix Modulo".into(),
+            Inst::Store => "Store".into(),
+            Inst::Retrieve => "Retrieve".into(),
+            Inst::Label(l) => format!("Label {}", l.show()),
+            Inst::Call(l) => format!("Call {}", l.show()),
+            Inst::Jmp(l) => format!("Jump {}", l.show()),
+            Inst::Jz(l) => format!("If Zero {}", l.show()),
+            Inst::Jn(l) => format!("If Negative {}", l.show()),
+            Inst::Ret => "Return".into(),
+            Inst::End => "End".into(),
+            Inst::Printc => "OutputChar".into(),
+            Inst::Printi => "OutputNum".into(),
+            Inst::Readc => "ReadChar".into(),
+            Inst::Readi => "ReadNum".into(),
+            _ => panic!("cannot show {self:?}"),
+        }
+    }
+}
+
+impl From<ParseError> for Inst {
+    #[inline]
+    fn from(err: ParseError) -> Self {
+        Inst::ParseError(err)
+    }
+}
+
+impl NumberLit {
+    #[inline]
+    pub fn new<T: Into<Integer>>(n: T) -> Self {
+        NumberLit::Number(Rc::new(n.into()))
+    }
+
+    #[inline]
+    pub fn ok(&self) -> Result<&Rc<Integer>, NumberError> {
+        match self {
+            NumberLit::Number(n) => Ok(n),
+            NumberLit::Empty => Err(NumberError::EmptyLit),
         }
     }
 }
@@ -264,6 +202,34 @@ impl Display for NumberLit {
             NumberLit::Empty => write!(f, "<empty>"),
         }
     }
+}
+
+impl From<Integer> for NumberLit {
+    #[inline]
+    fn from(n: Integer) -> Self {
+        NumberLit::Number(Rc::new(n))
+    }
+}
+
+impl From<BitVec> for NumberLit {
+    fn from(bits: BitVec) -> Self {
+        match bits.split_first() {
+            Some((sign, bits)) => NumberLit::from(integer_from_bits(bits, *sign)),
+            None => NumberLit::Empty,
+        }
+    }
+}
+
+fn integer_from_bits(bits: &BitSlice<usize, Lsb0>, is_negative: bool) -> Integer {
+    let mut bits = BitBox::<usize, Lsb0>::from(bits);
+    bits.force_align();
+    bits.fill_uninitialized(false);
+    bits.reverse();
+    let mut n = Integer::from_digits(bits.as_raw_slice(), Order::LsfLe);
+    if is_negative {
+        n.neg_assign();
+    }
+    n
 }
 
 impl Display for LabelLit {
@@ -289,10 +255,10 @@ impl Display for LabelLit {
             }
         }
 
-        // Print in binary, if it has leading zeros
+        // Print in binary, if it has leading zeros or is empty
         if bits.first().as_deref() != Some(&true) {
             write!(f, "0b")?;
-            for bit in &self.0 {
+            for bit in bits {
                 f.write_str(if *bit { "1" } else { "0" })?;
             }
             return Ok(());
@@ -304,17 +270,9 @@ impl Display for LabelLit {
     }
 }
 
-impl NumberLit {
-    #[inline]
-    pub fn unwrap(&self) -> Result<&Rc<Integer>, NumberError> {
-        match self {
-            NumberLit::Number(n) => Ok(n),
-            NumberLit::Empty => Err(NumberError::EmptyLit),
-        }
-    }
-}
-
 impl LabelLit {
+    /// Converts to the string representation for labels used in the reference
+    /// interpreter.
     pub fn to_haskell_string(&self) -> String {
         let mut s = String::with_capacity(self.0.len());
         for bit in self.0.iter().rev() {
@@ -322,8 +280,11 @@ impl LabelLit {
         }
         s
     }
+}
 
-    pub fn to_haskell_show(&self) -> String {
+/// A quoted version of [`LabelLit::to_haskell_string`].
+impl hs::Show for LabelLit {
+    fn show(&self) -> String {
         let mut s = String::with_capacity(self.0.len() + self.0.count_ones() + 2);
         s.push('"');
         for bit in self.0.iter().rev() {
@@ -334,66 +295,52 @@ impl LabelLit {
     }
 }
 
-fn integer_from_bits(bits: &BitSlice<usize, Lsb0>, is_negative: bool) -> Integer {
-    let mut bits = BitBox::<usize, Lsb0>::from(bits);
-    bits.force_align();
-    bits.fill_uninitialized(false);
-    bits.reverse();
-    let mut n = Integer::from_digits(bits.as_raw_slice(), Order::LsfLe);
-    if is_negative {
-        n.neg_assign();
+impl From<BitVec> for LabelLit {
+    #[inline]
+    fn from(bits: BitVec) -> Self {
+        LabelLit(bits)
     }
-    n
 }
 
 #[cfg(test)]
 mod tests {
     use bitvec::prelude::*;
+    use wspace_syntax::hs::Show;
 
     use super::*;
 
     #[test]
-    fn display_inst() {
-        macro_rules! test(($str:literal, $inst:expr) => {
-            let inst = $inst.to_printable().unwrap();
-            assert_eq!($str.to_owned(), inst.to_string())
-        });
-        macro_rules! test_empty(($inst:expr) => {
-            assert_eq!(Err(NumberError::EmptyLit.into()), $inst.to_printable())
-        });
+    fn show_inst() {
         let l = LabelLit(bitvec![0, 1, 0, 0, 1, 1, 0, 0]);
-        test_empty!(Inst::Push(NumberLit::Empty));
-        test!("Push 0", Inst::Push(NumberLit::new(0)));
-        test!("Push 1234", Inst::Push(NumberLit::new(1234)));
-        test!("Push (-1234)", Inst::Push(NumberLit::new(-1234)));
-        test!("Dup", Inst::Dup);
-        test_empty!(Inst::Copy(NumberLit::Empty));
-        test!("Ref 0", Inst::Copy(NumberLit::new(0)));
-        test!("Ref 1234", Inst::Copy(NumberLit::new(1234)));
-        test!("Ref (-1234)", Inst::Copy(NumberLit::new(-1234)));
-        test!("Swap", Inst::Swap);
-        test!("Discard", Inst::Drop);
-        test_empty!(Inst::Slide(NumberLit::Empty));
-        test!("Slide 0", Inst::Slide(NumberLit::new(0)));
-        test!("Slide 1234", Inst::Slide(NumberLit::new(1234)));
-        test!("Slide (-1234)", Inst::Slide(NumberLit::new(-1234)));
-        test!("Infix Plus", Inst::Add);
-        test!("Infix Minus", Inst::Sub);
-        test!("Infix Times", Inst::Mul);
-        test!("Infix Divide", Inst::Div);
-        test!("Infix Modulo", Inst::Mod);
-        test!("Store", Inst::Store);
-        test!("Retrieve", Inst::Retrieve);
-        test!(r#"Label "  \t\t  \t ""#, Inst::Label(l.clone()));
-        test!(r#"Call "  \t\t  \t ""#, Inst::Call(l.clone()));
-        test!(r#"Jump "  \t\t  \t ""#, Inst::Jmp(l.clone()));
-        test!(r#"If Zero "  \t\t  \t ""#, Inst::Jz(l.clone()));
-        test!(r#"If Negative "  \t\t  \t ""#, Inst::Jn(l));
-        test!("Return", Inst::Ret);
-        test!("End", Inst::End);
-        test!("OutputChar", Inst::Printc);
-        test!("OutputNum", Inst::Printi);
-        test!("ReadChar", Inst::Readc);
-        test!("ReadNum", Inst::Readi);
+        assert_eq!("Push 0", Inst::Push(NumberLit::new(0)).show());
+        assert_eq!("Push 1234", Inst::Push(NumberLit::new(1234)).show());
+        assert_eq!("Push (-1234)", Inst::Push(NumberLit::new(-1234)).show());
+        assert_eq!("Dup", Inst::Dup.show());
+        assert_eq!("Ref 0", Inst::Copy(NumberLit::new(0)).show());
+        assert_eq!("Ref 1234", Inst::Copy(NumberLit::new(1234)).show());
+        assert_eq!("Ref (-1234)", Inst::Copy(NumberLit::new(-1234)).show());
+        assert_eq!("Swap", Inst::Swap.show());
+        assert_eq!("Discard", Inst::Drop.show());
+        assert_eq!("Slide 0", Inst::Slide(NumberLit::new(0)).show());
+        assert_eq!("Slide 1234", Inst::Slide(NumberLit::new(1234)).show());
+        assert_eq!("Slide (-1234)", Inst::Slide(NumberLit::new(-1234)).show());
+        assert_eq!("Infix Plus", Inst::Add.show());
+        assert_eq!("Infix Minus", Inst::Sub.show());
+        assert_eq!("Infix Times", Inst::Mul.show());
+        assert_eq!("Infix Divide", Inst::Div.show());
+        assert_eq!("Infix Modulo", Inst::Mod.show());
+        assert_eq!("Store", Inst::Store.show());
+        assert_eq!("Retrieve", Inst::Retrieve.show());
+        assert_eq!(r#"Label "  \t\t  \t ""#, Inst::Label(l.clone()).show());
+        assert_eq!(r#"Call "  \t\t  \t ""#, Inst::Call(l.clone()).show());
+        assert_eq!(r#"Jump "  \t\t  \t ""#, Inst::Jmp(l.clone()).show());
+        assert_eq!(r#"If Zero "  \t\t  \t ""#, Inst::Jz(l.clone()).show());
+        assert_eq!(r#"If Negative "  \t\t  \t ""#, Inst::Jn(l).show());
+        assert_eq!("Return", Inst::Ret.show());
+        assert_eq!("End", Inst::End.show());
+        assert_eq!("OutputChar", Inst::Printc.show());
+        assert_eq!("OutputNum", Inst::Printi.show());
+        assert_eq!("ReadChar", Inst::Readc.show());
+        assert_eq!("ReadNum", Inst::Readi.show());
     }
 }

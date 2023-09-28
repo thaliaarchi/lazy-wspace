@@ -7,9 +7,9 @@ use std::rc::Rc;
 use thiserror::Error;
 
 use rug::Integer;
+use wspace_syntax::hs::Show;
 
-use crate::ast::{ArgKind, Inst, LabelLit, PrintableInst};
-use crate::vm::IntegerExt;
+use crate::ast::{ArgKind, Inst, LabelLit};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
@@ -62,7 +62,7 @@ pub enum NumberError {
 #[derive(Clone, Debug, Error)]
 pub enum EagerError {
     #[error("stack underflow: {0}")]
-    Underflow(PrintableInst),
+    Underflow(Inst),
     #[error("store address overflow")]
     StoreOverflow,
     #[error("store at negative address")]
@@ -152,10 +152,9 @@ impl UnderflowError {
     #[inline]
     pub fn to_error(self, inst: &Inst) -> Error {
         match self {
-            UnderflowError::Normal => match inst.to_printable() {
-                Ok(inst) => EagerError::Underflow(inst).into(),
-                Err(err) => err,
-            },
+            UnderflowError::Normal => inst
+                .err()
+                .unwrap_or_else(|| EagerError::Underflow(inst.clone()).into()),
             UnderflowError::SlideEmpty => NumberError::EmptyLit.into(),
         }
     }
@@ -231,7 +230,7 @@ impl EagerError {
     pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
         match self {
             EagerError::Underflow(inst) => {
-                HaskellError::stderr(format!("{wspace}: user error (Can't do {inst})\n"), 1)
+                HaskellError::stderr(format!("{wspace}: user error (Can't do {})\n", inst.show()), 1)
             }
             EagerError::StoreOverflow | EagerError::StoreNegative => {
                 HaskellError::stderr(format!("{wspace}: Stack space overflow: current size 33624 bytes.\n{wspace}: Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it.\n"), 2)
@@ -241,7 +240,7 @@ impl EagerError {
             }
             EagerError::Io(err) => panic!("{err}"),
             EagerError::PrintcInvalid(n) => {
-                HaskellError::stderr(format!("{wspace}: Prelude.chr: bad argument: {}", n.to_haskell_show()), 1)
+                HaskellError::stderr(format!("{wspace}: Prelude.chr: bad argument: {}", n.show()), 1)
             }
             EagerError::ReadEof => {
                 HaskellError::stderr(format!("{wspace}: <stdin>: hGetChar: end of file\n"), 1)

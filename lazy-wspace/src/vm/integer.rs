@@ -64,17 +64,17 @@ impl Number {
             Op::Add => {
                 let rhs = rhs.eval()?;
                 let lhs = lhs.eval()?;
-                lhs.add_rc(rhs)
+                add_rc(lhs, rhs)
             }
             Op::Sub => {
                 let rhs = rhs.eval()?;
                 let lhs = lhs.eval()?;
-                lhs.sub_rc(rhs)
+                sub_rc(lhs, rhs)
             }
             Op::Mul => {
                 let lhs = lhs.eval()?;
                 let rhs = rhs.eval()?;
-                lhs.mul_rc(rhs)
+                mul_rc(lhs, rhs)
             }
             Op::Div => {
                 let rhs = rhs.eval()?;
@@ -82,7 +82,7 @@ impl Number {
                     return Err(NumberError::DivModZero);
                 }
                 let lhs = lhs.eval()?;
-                lhs.div_floor_rc(rhs)
+                div_floor_rc(lhs, rhs)
             }
             Op::Mod => {
                 let rhs = rhs.eval()?;
@@ -90,7 +90,7 @@ impl Number {
                     return Err(NumberError::DivModZero);
                 }
                 let lhs = lhs.eval()?;
-                lhs.div_floor_rc(rhs)
+                rem_floor_rc(lhs, rhs)
             }
         };
         Ok(Rc::new(v))
@@ -130,15 +130,6 @@ impl NumberRef {
     }
 }
 
-pub trait IntegerExt {
-    fn add_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn sub_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn mul_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer;
-    fn to_haskell_show(&self) -> String;
-}
-
 macro_rules! arith_op(($lhs:expr, $rhs:expr, $op:ident, $op_assign:ident, $op_from:ident) => {
     match (Rc::try_unwrap($lhs), Rc::try_unwrap($rhs)) {
         (Ok(mut lhs), Ok(mut rhs)) => {
@@ -168,34 +159,24 @@ fn rhs_has_more_alloc(lhs: &Integer, rhs: &Integer) -> bool {
     unsafe { (*lhs.as_raw()).alloc < (*rhs.as_raw()).alloc }
 }
 
-impl IntegerExt for Integer {
-    fn add_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
-        arith_op!(self, rhs, add, add_assign, add_from)
-    }
+fn add_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
+    arith_op!(lhs, rhs, add, add_assign, add_from)
+}
 
-    fn sub_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
-        arith_op!(self, rhs, sub, sub_assign, sub_from)
-    }
+fn sub_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
+    arith_op!(lhs, rhs, sub, sub_assign, sub_from)
+}
 
-    fn mul_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
-        arith_op!(self, rhs, mul, mul_assign, mul_from)
-    }
+fn mul_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
+    arith_op!(lhs, rhs, mul, mul_assign, mul_from)
+}
 
-    fn div_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
-        arith_op!(self, rhs, div_floor, div_floor_assign, div_floor_from)
-    }
+fn div_floor_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
+    arith_op!(lhs, rhs, div_floor, div_floor_assign, div_floor_from)
+}
 
-    fn rem_floor_rc(self: Rc<Self>, rhs: Rc<Self>) -> Integer {
-        arith_op!(self, rhs, rem_floor, rem_floor_assign, rem_floor_from)
-    }
-
-    fn to_haskell_show(&self) -> String {
-        if self.cmp0() == Ordering::Less {
-            format!("({self})")
-        } else {
-            self.to_string()
-        }
-    }
+fn rem_floor_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
+    arith_op!(lhs, rhs, rem_floor, rem_floor_assign, rem_floor_from)
 }
 
 impl From<&NumberLit> for Number {
