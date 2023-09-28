@@ -57,8 +57,6 @@ pub enum ValueError {
     RetrieveNegative,
     #[error("invalid integer from readi")]
     ReadiParse,
-    #[error("BUG! internal error")]
-    Internal,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -143,7 +141,7 @@ impl Hash for EagerError {
             EagerError::StoreNegative => {}
             EagerError::RetUnderflow => {}
             EagerError::Io(err) => Rc::as_ptr(err).hash(state),
-            EagerError::PrintcInvalid(_) => {}
+            EagerError::PrintcInvalid(n) => n.hash(state),
             EagerError::ReadEof => {}
             EagerError::ReadInvalidUtf8 => {}
         }
@@ -222,7 +220,7 @@ impl ValueError {
             ValueError::ReadiParse => {
                 HaskellError::stderr(format!("{wspace}: Prelude.read: no parse\n"), 1)
             },
-            ValueError::Internal => panic!("BUG: internal error"),
+
         }
     }
 }

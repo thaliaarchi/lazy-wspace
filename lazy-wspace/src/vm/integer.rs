@@ -106,7 +106,7 @@ impl ValueRef {
         }
 
         let cell = self.0;
-        let n = cell.replace(Value::Error(ValueError::Internal));
+        let n = cell.replace(Value::Error(ValueError::EmptyLit));
         let res = match n {
             Value::Op(op, lhs, rhs) => Value::eval_op(op, lhs, rhs),
             _ => unreachable!(),
@@ -115,7 +115,7 @@ impl ValueRef {
             Ok(n) => Value::Integer(n.clone()),
             Err(err) => Value::Error(err.clone()),
         });
-        debug_assert_eq!(Value::Error(ValueError::Internal), inner);
+        debug_assert_eq!(Value::Error(ValueError::EmptyLit), inner);
         res
     }
 
