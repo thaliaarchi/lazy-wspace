@@ -3,31 +3,7 @@ use std::slice::Iter;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 
-use crate::hs;
-use crate::ws::MappingWriter;
-
-/// Whitespace token.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Token {
-    /// Space
-    S,
-    /// Tab
-    T,
-    /// Line feed
-    L,
-}
-
-impl hs::Show for Token {
-    fn show(&self) -> String {
-        // Matches the manual instance of `Show` in `Tokens.hs`, which does not
-        // produce valid Haskell syntax.
-        match self {
-            Token::S => " ".into(),
-            Token::T => "\t".into(),
-            Token::L => "\n".into(),
-        }
-    }
-}
+use crate::ws::{MappingWriter, Token};
 
 pub struct Mapping {
     pub s: Vec<u8>,
@@ -58,31 +34,32 @@ impl Default for Mapping {
     }
 }
 
-/// Trait for token scanning.
-pub trait Scanner: Iterator<Item = Token> {
+/// Trait for token lexing.
+pub trait Lexer: Iterator<Item = Token> {
     fn offset(&self) -> usize;
 }
 
-/// Scan with the default space, tab, and LF lexemes.
+/// Constructs a lexer with the default space, tab, and LF lexemes.
 #[inline]
-pub fn scan_default(src: &str) -> ByteScanner<'_> {
-    ByteScanner::new(b' ', b'\t', b'\n', src.as_bytes())
+pub fn default_lexer(src: &str) -> ByteLexer<'_> {
+    ByteLexer::new(b' ', b'\t', b'\n', src.as_bytes())
 }
 
-/// Scan with the given lexemes, choosing the more efficient algorithm.
+/// Constructs a lexer with the given lexemes, choosing the more efficient
+/// algorithm.
 #[inline]
-pub fn scan<'a>(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Box<dyn Scanner + 'a> {
+pub fn lexer<'a>(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Box<dyn Lexer + 'a> {
     if s.len() == 1 && t.len() == 1 && l.len() == 1 {
-        Box::new(ByteScanner::new(s[0], t[1], l[1], src))
+        Box::new(ByteLexer::new(s[0], t[1], l[1], src))
     } else {
-        Box::new(StringScanner::new(s, t, l, src))
+        Box::new(StringLexer::new(s, t, l, src))
     }
 }
 
-/// Scanner for Whitespace tokens, that recognizes 1-byte fixed lexemes using
+/// Lexer for Whitespace tokens, that recognizes 1-byte fixed lexemes using
 /// memchr.
 #[derive(Clone, Debug)]
-pub struct ByteScanner<'a> {
+pub struct ByteLexer<'a> {
     s: u8,
     t: u8,
     l: u8,
@@ -90,10 +67,10 @@ pub struct ByteScanner<'a> {
     len: usize,
 }
 
-impl<'a> ByteScanner<'a> {
+impl<'a> ByteLexer<'a> {
     #[inline]
     pub fn new(s: u8, t: u8, l: u8, src: &'a [u8]) -> Self {
-        ByteScanner {
+        ByteLexer {
             s,
             t,
             l,
@@ -103,14 +80,14 @@ impl<'a> ByteScanner<'a> {
     }
 }
 
-impl Scanner for ByteScanner<'_> {
+impl Lexer for ByteLexer<'_> {
     #[inline]
     fn offset(&self) -> usize {
         self.len - self.iter.as_slice().len()
     }
 }
 
-impl Iterator for ByteScanner<'_> {
+impl Iterator for ByteLexer<'_> {
     type Item = Token;
 
     #[inline]
@@ -128,36 +105,36 @@ impl Iterator for ByteScanner<'_> {
     }
 }
 
-impl FusedIterator for ByteScanner<'_> {}
+impl FusedIterator for ByteLexer<'_> {}
 
-/// Scanner for Whitespace tokens, that recognizes arbitrary-length fixed
+/// Lexer for Whitespace tokens, that recognizes arbitrary-length fixed
 /// lexemes using the Aho–Corasick algorithm.
 #[derive(Clone, Debug)]
-pub struct StringScanner<'a> {
+pub struct StringLexer<'a> {
     ac: AhoCorasick,
     src: &'a [u8],
     offset: usize,
 }
 
-impl<'a> StringScanner<'a> {
+impl<'a> StringLexer<'a> {
     #[inline]
     pub fn new(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Self {
         let ac = AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostLongest)
             .build(&[s, t, l])
             .unwrap();
-        StringScanner { ac, src, offset: 0 }
+        StringLexer { ac, src, offset: 0 }
     }
 }
 
-impl Scanner for StringScanner<'_> {
+impl Lexer for StringLexer<'_> {
     #[inline]
     fn offset(&self) -> usize {
         self.offset
     }
 }
 
-impl Iterator for StringScanner<'_> {
+impl Iterator for StringLexer<'_> {
     type Item = Token;
 
     #[inline]
@@ -183,4 +160,4 @@ impl Iterator for StringScanner<'_> {
     }
 }
 
-impl FusedIterator for StringScanner<'_> {}
+impl FusedIterator for StringLexer<'_> {}

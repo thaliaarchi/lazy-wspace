@@ -5,10 +5,11 @@
 
 mod ast;
 mod builder;
-mod scanner;
+pub mod lex;
 #[cfg(test)]
 mod tests;
+mod token;
 
 pub use ast::*;
 pub use builder::*;
-pub use scanner::*;
+pub use token::*;

@@ -1,7 +1,8 @@
 use bitvec::slice::BitSlice;
 use rug::Integer;
 
-use crate::ws::{Mapping, Token};
+use crate::ws::lex::Mapping;
+use crate::ws::Token;
 
 pub trait FormatTokens {
     fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>);

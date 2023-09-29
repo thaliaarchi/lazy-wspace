@@ -1,10 +1,8 @@
 mod tutorial {
     use bitvec::prelude::*;
 
-    use crate::ws::{
-        scan_default, Builder, FormatTokens, Inst, IntegerLit, LabelLit, Mapping, StringScanner,
-        Token,
-    };
+    use crate::ws::lex::{default_lexer, Mapping, StringLexer};
+    use crate::ws::{Builder, FormatTokens, Inst, IntegerLit, LabelLit, Token};
     use Token::*;
 
     const SRC_STL: &str = "   \t\n\n   \t    \t\t\n \n \t\n \t   \t \t \n\t\n     \t\n\t    \n    \t \t\t\n\t  \t\n\t  \t   \t \t\n\n \n \t    \t\t\n\n   \t   \t \t\n \n\n\n\n\n";
@@ -50,13 +48,13 @@ mod tutorial {
 
     #[test]
     fn scan_byte() {
-        let scan = scan_default(SRC_STL);
+        let scan = default_lexer(SRC_STL);
         assert_eq!(TOKENS, scan.collect::<Vec<_>>());
     }
 
     #[test]
     fn scan_string() {
-        let scan = StringScanner::new(b"[Space]", b"[Tab]", b"[LF]", SRC_ANNOTATED.as_bytes());
+        let scan = StringLexer::new(b"[Space]", b"[Tab]", b"[LF]", SRC_ANNOTATED.as_bytes());
         assert_eq!(TOKENS, scan.collect::<Vec<_>>());
     }
 
