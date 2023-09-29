@@ -1,8 +1,9 @@
 use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
+use wspace_syntax::ws::Token;
 
-use crate::ast::{Inst, IntegerLit, LabelLit, Lexer, Token};
+use crate::ast::{Inst, IntegerLit, LabelLit, Lexer};
 use crate::error::ParseError;
 
 pub struct Parser<'a> {
@@ -22,9 +23,8 @@ impl<'a> Parser<'a> {
                 Some(Token::S) => arg.push(false),
                 Some(Token::T) => arg.push(true),
                 Some(Token::L) => return Ok(arg),
-                Some(Token::InvalidUtf8) => return Err(ParseError::InvalidUtf8),
-                None => return Err(unterminated_err),
-            };
+                None => return Err(self.eof(unterminated_err)),
+            }
         }
     }
 
@@ -43,6 +43,16 @@ impl<'a> Parser<'a> {
             Err(err) => err.into(),
         }
     }
+
+    #[inline]
+    fn eof(&mut self, err: ParseError) -> ParseError {
+        if self.lex.invalid_utf8 {
+            self.lex.invalid_utf8 = false;
+            ParseError::InvalidUtf8
+        } else {
+            err
+        }
+    }
 }
 
 impl Iterator for Parser<'_> {
@@ -59,8 +69,7 @@ impl Iterator for Parser<'_> {
                     Some(Token::S) => default!($($on_s)?, Some(ParseError::UnrecognizedInst.into())),
                     Some(Token::T) => default!($($on_t)?, Some(ParseError::UnrecognizedInst.into())),
                     Some(Token::L) => default!($($on_l)?, Some(ParseError::UnrecognizedInst.into())),
-                    Some(Token::InvalidUtf8) => Some(ParseError::InvalidUtf8.into()),
-                    None => default!($($on_none)?, Some(ParseError::IncompleteInst.into())),
+                    None => default!($($on_none)?, Some(self.eof(ParseError::IncompleteInst).into())),
                 }
             }
         );
