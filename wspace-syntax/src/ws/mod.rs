@@ -6,6 +6,7 @@
 mod ast;
 mod builder;
 pub mod lex;
+pub mod mappings;
 #[cfg(test)]
 mod tests;
 mod token;

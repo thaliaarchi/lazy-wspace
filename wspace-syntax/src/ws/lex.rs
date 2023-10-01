@@ -2,6 +2,8 @@ use std::iter::FusedIterator;
 use std::slice::Iter;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
+use regex_automata::meta::{BuildError, FindMatches, Regex};
+use thiserror::Error;
 
 use crate::ws::{MappingWriter, Token};
 
@@ -161,3 +163,55 @@ impl Iterator for StringLexer<'_> {
 }
 
 impl FusedIterator for StringLexer<'_> {}
+
+#[derive(Clone, Debug)]
+pub struct PatternLexer {
+    re: Regex,
+    tokens: [Token; 3],
+}
+
+#[derive(Debug)]
+pub struct PatternIter<'l, 's> {
+    lex: &'l PatternLexer,
+    iter: FindMatches<'l, 's>,
+}
+
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum PatternError {
+    #[error(transparent)]
+    Build(#[from] BuildError),
+}
+
+impl PatternLexer {
+    #[inline]
+    pub fn new(
+        token1: Token,
+        pattern1: &str,
+        token2: Token,
+        pattern2: &str,
+        token3: Token,
+        pattern3: &str,
+    ) -> Result<Self, PatternError> {
+        let re = Regex::new_many(&[pattern1, pattern2, pattern3])?;
+        Ok(PatternLexer {
+            re,
+            tokens: [token1, token2, token3],
+        })
+    }
+
+    pub fn lex<'l, 's>(&'l self, src: &'s str) -> PatternIter<'l, 's> {
+        let iter = self.re.find_iter(src);
+        PatternIter { lex: self, iter }
+    }
+}
+
+impl Iterator for PatternIter<'_, '_> {
+    type Item = Token;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let m = self.iter.next()?;
+        Some(self.lex.tokens[m.pattern().as_usize()])
+    }
+}
