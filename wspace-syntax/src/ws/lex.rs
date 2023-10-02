@@ -1,5 +1,4 @@
-use std::iter::{FusedIterator, Peekable};
-use std::ops::Range;
+use std::iter::FusedIterator;
 use std::slice::Iter;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
@@ -61,14 +60,6 @@ pub fn lexer<'a>(s: &[u8], t: &[u8], l: &[u8], src: &'a [u8]) -> Box<dyn Lexer +
     } else {
         Box::new(StringLexer::new(s, t, l, src))
     }
-}
-
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub enum TokenError {
-    #[error("invalid UTF-8")]
-    InvalidUtf8,
-    #[error("invalid token at {0:?}")]
-    Invalid(Range<usize>),
 }
 
 /// Lexer for Whitespace tokens, that recognizes 1-byte fixed lexemes using
@@ -186,9 +177,7 @@ pub struct PatternLexer {
 #[derive(Debug)]
 pub struct PatternIter<'l, 's> {
     lex: &'l PatternLexer,
-    iter: Peekable<FindMatches<'l, 's>>,
-    offset: usize,
-    len: usize,
+    iter: FindMatches<'l, 's>,
 }
 
 #[derive(Debug, Error)]
@@ -209,58 +198,33 @@ impl PatternLexer {
         pattern2: &str,
         token3: Token,
         pattern3: &str,
-        comment_pattern: Option<&str>,
     ) -> Result<Self, PatternError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
             return Err(PatternError::RepeatedToken);
         }
         let tokens = [token1, token2, token3];
-        let patterns = [pattern1, pattern2, pattern3, comment_pattern.unwrap_or("")];
-        let patterns = if comment_pattern.is_some() {
-            &patterns[..]
-        } else {
-            &patterns[..3]
-        };
+        let patterns = [pattern1, pattern2, pattern3];
         let re = Regex::builder()
             .syntax(syntax::Config::new().multi_line(true))
             .configure(Regex::config().which_captures(WhichCaptures::Implicit))
-            .build_many(patterns)?;
+            .build_many(&patterns)?;
         Ok(PatternLexer { re, tokens })
     }
 
     #[inline]
     pub fn lex<'l, 's>(&'l self, src: &'s str) -> PatternIter<'l, 's> {
-        PatternIter {
-            lex: self,
-            iter: self.re.find_iter(src).peekable(),
-            offset: 0,
-            len: src.len(),
-        }
+        let iter = self.re.find_iter(src);
+        PatternIter { lex: self, iter }
     }
 }
 
 impl Iterator for PatternIter<'_, '_> {
-    type Item = Result<Token, TokenError>;
+    type Item = Token;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(&m) = self.iter.peek() {
-            let offset = self.offset;
-            self.offset = m.end();
-            if offset < m.start() {
-                return Some(Err(TokenError::Invalid(offset..m.start())));
-            }
-            self.iter.next();
-            if let Some(&tok) = self.lex.tokens.get(m.pattern().as_usize()) {
-                return Some(Ok(tok));
-            }
-        }
-        if self.offset < self.len {
-            let offset = self.offset;
-            self.offset = self.len;
-            return Some(Err(TokenError::Invalid(offset..self.len)));
-        }
-        None
+        let m = self.iter.next()?;
+        Some(self.lex.tokens[m.pattern().as_usize()])
     }
 }
 

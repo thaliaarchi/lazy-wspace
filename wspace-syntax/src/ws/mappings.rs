@@ -9,7 +9,6 @@ pub fn gorispace_ja() -> PatternLexer {
         "ウ[^ウッホーイ]*ッ(?:[^ウッホーイ]*ホ)+",
         Token::S,
         "ウ(?:[^ウッホーイ]*ホ)+",
-        Some("[^ウッホーイ]+"),
     )
     .unwrap()
 }
@@ -22,15 +21,12 @@ pub fn gorispace_en() -> PatternLexer {
         "h(?:[^hoswragh]*o){2,}[^hoswragh]*s",
         Token::S,
         "h(?:[^hoswragh]*o){2,}",
-        Some("[^hoswragh]+"),
     )
     .unwrap()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ws::lex::TokenError;
-
     use super::*;
     use Token::*;
 
@@ -48,10 +44,7 @@ mod tests {
             S, S, S, S, L, S, S, S, T, S, S, S, T, S, T, L, T, T, S, S, S, S, T, L, S, S, S, T, T,
             S, T, T, T, S, L, T, T, S, S, S, S, T, S, L, S, S, S, T, T, T, S, T,
         ];
-        let lexed_toks = gorispace_ja()
-            .lex(src)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let lexed_toks = gorispace_ja().lex(src).collect::<Vec<_>>();
         assert_eq!(toks, lexed_toks);
     }
 
@@ -70,19 +63,14 @@ mod tests {
             S, T, T, T, S, L, T, T, S, S, S, S, T, S, L, S, S, S, T, T, T, S, T, S, S, L, T, T, S,
             S, S, S, T, T,
         ];
-        let lexed_toks = gorispace_en()
-            .lex(src)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let lexed_toks = gorispace_en().lex(src).collect::<Vec<_>>();
         assert_eq!(toks, lexed_toks);
     }
 
     #[test]
     fn gorispace_error() {
+        // Gorispace ignores invalid sequences of [ウッホーイ]+ or [hoswragh]+
         let lex = gorispace_en();
-        assert_eq!(
-            vec![Ok(S), Err(TokenError::Invalid(4..9)), Ok(T)],
-            lex.lex("hoo howro, hoos").collect::<Vec<_>>(),
-        );
+        assert_eq!(vec![S, T], lex.lex("hoo howro, hoos").collect::<Vec<_>>());
     }
 }
