@@ -1,4 +1,5 @@
 use crate::hs;
+use crate::ws::MappingWriter;
 
 /// Whitespace token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,6 +20,35 @@ impl hs::Show for Token {
             Token::S => " ".into(),
             Token::T => "\t".into(),
             Token::L => "\n".into(),
+        }
+    }
+}
+
+pub struct Mapping {
+    pub s: Vec<u8>,
+    pub t: Vec<u8>,
+    pub l: Vec<u8>,
+}
+
+impl Mapping {
+    #[inline]
+    pub fn new(s: Vec<u8>, t: Vec<u8>, l: Vec<u8>) -> Self {
+        Mapping { s, t, l }
+    }
+
+    #[inline]
+    pub fn writer(&self) -> MappingWriter<'_> {
+        MappingWriter::new(self)
+    }
+}
+
+impl Default for Mapping {
+    #[inline]
+    fn default() -> Self {
+        Mapping {
+            s: b" ".to_vec(),
+            t: b"\t".to_vec(),
+            l: b"\n".to_vec(),
         }
     }
 }

@@ -1,8 +1,8 @@
-use crate::ws::lex::PatternLexer;
+use crate::ws::lex::RegexLexer;
 use crate::ws::Token;
 
-pub fn gorispace_ja() -> PatternLexer {
-    PatternLexer::new(
+pub fn gorispace_ja() -> RegexLexer {
+    RegexLexer::new(
         Token::L,
         "ウ(?:[^ウッホーイ]*ホ)+[^ウッホーイ]*ー[^ウッホーイ]*イ",
         Token::T,
@@ -13,8 +13,8 @@ pub fn gorispace_ja() -> PatternLexer {
     .unwrap()
 }
 
-pub fn gorispace_en() -> PatternLexer {
-    PatternLexer::new(
+pub fn gorispace_en() -> RegexLexer {
+    RegexLexer::new(
         Token::L,
         "w[^hoswragh]*r(?:[^hoswragh]*a){2,}[^hoswragh]*g[^hoswragh]*h",
         Token::T,
@@ -27,6 +27,8 @@ pub fn gorispace_en() -> PatternLexer {
 
 #[cfg(test)]
 mod tests {
+    use crate::ws::lex::Span;
+
     use super::*;
     use Token::*;
 
@@ -44,7 +46,10 @@ mod tests {
             S, S, S, S, L, S, S, S, T, S, S, S, T, S, T, L, T, T, S, S, S, S, T, L, S, S, S, T, T,
             S, T, T, T, S, L, T, T, S, S, S, S, T, S, L, S, S, S, T, T, T, S, T,
         ];
-        let lexed_toks = gorispace_ja().lex(src).collect::<Vec<_>>();
+        let lexed_toks = gorispace_ja()
+            .lex(src.as_bytes())
+            .map(|(tok, _)| tok)
+            .collect::<Vec<_>>();
         assert_eq!(toks, lexed_toks);
     }
 
@@ -63,7 +68,10 @@ mod tests {
             S, T, T, T, S, L, T, T, S, S, S, S, T, S, L, S, S, S, T, T, T, S, T, S, S, L, T, T, S,
             S, S, S, T, T,
         ];
-        let lexed_toks = gorispace_en().lex(src).collect::<Vec<_>>();
+        let lexed_toks = gorispace_en()
+            .lex(src.as_bytes())
+            .map(|(tok, _)| tok)
+            .collect::<Vec<_>>();
         assert_eq!(toks, lexed_toks);
     }
 
@@ -71,6 +79,9 @@ mod tests {
     fn gorispace_error() {
         // Gorispace ignores invalid sequences of [ウッホーイ]+ or [hoswragh]+
         let lex = gorispace_en();
-        assert_eq!(vec![S, T], lex.lex("hoo howro, hoos").collect::<Vec<_>>());
+        assert_eq!(
+            vec![(S, Span::from(0..3)), (T, Span::from(11..15))],
+            lex.lex(b"hoo howro, hoos").collect::<Vec<_>>()
+        );
     }
 }
