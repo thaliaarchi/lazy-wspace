@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
 use std::str::Chars;
 
-use crate::ws::lex::{ConflictingPatternError, Lexer, Span};
+use crate::ws::lex::{Lexer, LexerError, Span};
 use crate::ws::Token;
 
 /// Lexer for Whitespace tokens, that recognizes `char` lexemes.
@@ -22,9 +22,9 @@ pub struct CharIter<'l, 's> {
 
 impl CharLexer {
     #[inline]
-    pub fn new(s: char, t: char, l: char) -> Result<Self, ConflictingPatternError> {
+    pub fn new(s: char, t: char, l: char) -> Result<Self, LexerError> {
         if s == t || s == l || t == l {
-            return Err(ConflictingPatternError);
+            return Err(LexerError::ConflictingPatterns);
         }
         Ok(CharLexer { s, t, l })
     }

@@ -1,13 +1,13 @@
 use std::iter::FusedIterator;
 
 use regex_automata::{
-    meta::{BuildError, FindMatches, Regex},
+    meta::{Builder as RegexBuilder, FindMatches, Regex},
     nfa::thompson::WhichCaptures,
     util::syntax,
 };
-use thiserror::Error;
+use regex_syntax::hir::Hir;
 
-use crate::ws::lex::{Lexer, Span};
+use crate::ws::lex::{Lexer, LexerError, Span};
 use crate::ws::Token;
 
 /// Lexer for Whitespace tokens, that recognizes by regular expressions.
@@ -24,15 +24,6 @@ pub struct RegexIter<'l, 's> {
     tokens: [Token; 3],
 }
 
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum RegexLexerError {
-    #[error("multiple patterns defined for token")]
-    RepeatedToken,
-    #[error(transparent)]
-    Build(#[from] BuildError),
-}
-
 impl RegexLexer {
     #[inline]
     pub fn new(
@@ -42,17 +33,39 @@ impl RegexLexer {
         pattern2: &str,
         token3: Token,
         pattern3: &str,
-    ) -> Result<Self, RegexLexerError> {
+    ) -> Result<Self, LexerError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
-            return Err(RegexLexerError::RepeatedToken);
+            return Err(LexerError::RepeatedToken);
         }
-        let tokens = [token1, token2, token3];
-        let patterns = [pattern1, pattern2, pattern3];
-        let re = Regex::builder()
-            .syntax(syntax::Config::new().multi_line(true))
-            .configure(Regex::config().which_captures(WhichCaptures::Implicit))
-            .build_many(&patterns)?;
-        Ok(RegexLexer { re, tokens })
+        Ok(RegexLexer {
+            re: Self::builder().build_many(&[pattern1, pattern2, pattern3])?,
+            tokens: [token1, token2, token3],
+        })
+    }
+
+    #[inline]
+    pub fn from_hirs(
+        token1: Token,
+        hir1: Hir,
+        token2: Token,
+        hir2: Hir,
+        token3: Token,
+        hir3: Hir,
+    ) -> Result<Self, LexerError> {
+        if token1 == token2 || token1 == token3 || token2 == token3 {
+            return Err(LexerError::RepeatedToken);
+        }
+        Ok(RegexLexer {
+            re: Self::builder().build_many_from_hir(&[hir1, hir2, hir3])?,
+            tokens: [token1, token2, token3],
+        })
+    }
+
+    fn builder() -> RegexBuilder {
+        let mut builder = Regex::builder();
+        builder.syntax(syntax::Config::new().multi_line(true));
+        builder.configure(Regex::config().which_captures(WhichCaptures::Implicit));
+        builder
     }
 
     #[inline]

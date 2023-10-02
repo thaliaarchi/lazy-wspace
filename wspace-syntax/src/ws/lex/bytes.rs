@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, FindIter, MatchKind};
 
-use crate::ws::lex::{ConflictingPatternError, Lexer, Span};
+use crate::ws::lex::{Lexer, LexerError, Span};
 use crate::ws::Token;
 
 /// Lexer for Whitespace tokens, that recognizes byte string lexemes.
@@ -19,9 +19,9 @@ pub struct BytesIter<'l, 's> {
 
 impl BytesLexer {
     #[inline]
-    pub fn new(s: &[u8], t: &[u8], l: &[u8]) -> Result<Self, ConflictingPatternError> {
+    pub fn new(s: &[u8], t: &[u8], l: &[u8]) -> Result<Self, LexerError> {
         if s == t || s == l || t == l {
-            return Err(ConflictingPatternError);
+            return Err(LexerError::ConflictingPatterns);
         }
         let ac = AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostLongest)

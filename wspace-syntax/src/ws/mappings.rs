@@ -2,6 +2,7 @@ use crate::ws::lex::RegexLexer;
 use crate::ws::Token;
 
 pub fn gorispace_ja() -> RegexLexer {
+    // TODO: Requires UTF-8 input
     RegexLexer::new(
         Token::L,
         "ウ(?:[^ウッホーイ]*ホ)+[^ウッホーイ]*ー[^ウッホーイ]*イ",
@@ -14,6 +15,7 @@ pub fn gorispace_ja() -> RegexLexer {
 }
 
 pub fn gorispace_en() -> RegexLexer {
+    // TODO: Requires UTF-8 input
     RegexLexer::new(
         Token::L,
         "w[^hoswragh]*r(?:[^hoswragh]*a){2,}[^hoswragh]*g[^hoswragh]*h",
