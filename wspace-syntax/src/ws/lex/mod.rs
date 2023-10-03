@@ -1,3 +1,4 @@
+mod bit;
 mod byte;
 mod bytes;
 mod char;
@@ -6,6 +7,7 @@ mod meta;
 mod regex;
 mod span;
 
+pub use self::bit::*;
 pub use self::byte::*;
 pub use self::bytes::*;
 pub use self::char::*;
