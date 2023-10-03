@@ -32,7 +32,7 @@ pub enum LexerError {
     #[error("conflicting patterns")]
     ConflictingPatterns,
     #[error(transparent)]
-    RegexBuild(#[from] RegexBuildError),
+    RegexBuild(Box<RegexBuildError>),
 }
 
 impl MetaLexer {
@@ -203,5 +203,12 @@ impl<'a> Pattern<'a> {
             Pattern::Literal(lit) => Hir::literal(lit.into_owned()),
             Pattern::Regex(hir) => hir,
         }
+    }
+}
+
+impl From<RegexBuildError> for LexerError {
+    #[inline]
+    fn from(err: RegexBuildError) -> Self {
+        LexerError::RegexBuild(Box::new(err))
     }
 }
