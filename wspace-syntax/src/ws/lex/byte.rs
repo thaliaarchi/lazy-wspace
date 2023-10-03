@@ -1,49 +1,62 @@
 use std::iter::FusedIterator;
 use std::slice::Iter;
 
-use crate::ws::lex::{Lexer, LexerError, Span};
+use crate::ws::lex::{Lexer, MatcherError, Span};
 use crate::ws::Token;
 
-/// Lexer for Whitespace tokens, that recognizes byte lexemes.
-#[derive(Clone, Debug)]
-pub struct ByteLexer {
+/// Builder for [`ByteLexer`].
+#[derive(Clone, Copy, Debug)]
+pub struct ByteMatcher {
     s: u8,
     t: u8,
     l: u8,
 }
 
-/// Iterator over tokens in source text, created by [`ByteLexer`].
+/// Lexer for Whitespace tokens represented by arbitrary bytes.
 #[derive(Clone, Debug)]
-pub struct ByteIter<'l, 's> {
-    lex: &'l ByteLexer,
-    iter: Iter<'s, u8>,
+pub struct ByteLexer<'a> {
+    matcher: ByteMatcher,
+    iter: Iter<'a, u8>,
     len: usize,
 }
 
-impl ByteLexer {
+impl ByteMatcher {
     #[inline]
-    pub fn new(s: u8, t: u8, l: u8) -> Result<Self, LexerError> {
+    pub fn new(s: u8, t: u8, l: u8) -> Result<Self, MatcherError> {
         if s == t || s == l || t == l {
-            return Err(LexerError::ConflictingPatterns);
+            return Err(MatcherError::ConflictingPatterns);
         }
-        Ok(ByteLexer { s, t, l })
+        Ok(ByteMatcher { s, t, l })
     }
 
     #[inline]
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> ByteIter<'l, 's> {
-        ByteIter {
-            lex: self,
+    pub fn lex<'a>(&self, src: &'a [u8]) -> ByteLexer<'a> {
+        ByteLexer {
+            matcher: *self,
             iter: src.iter(),
             len: src.len(),
+        }
+    }
+
+    #[inline]
+    pub fn token(&self, b: u8) -> Option<Token> {
+        if b == self.s {
+            Some(Token::S)
+        } else if b == self.t {
+            Some(Token::T)
+        } else if b == self.l {
+            Some(Token::L)
+        } else {
+            None
         }
     }
 }
 
 /// Constructs a lexer with the default space, tab, and LF lexemes.
-impl Default for ByteLexer {
+impl Default for ByteMatcher {
     #[inline]
     fn default() -> Self {
-        ByteLexer {
+        ByteMatcher {
             s: b' ',
             t: b'\t',
             l: b'\n',
@@ -51,26 +64,19 @@ impl Default for ByteLexer {
     }
 }
 
-impl Lexer for ByteIter<'_, '_> {}
+impl Lexer for ByteLexer<'_> {}
 
-impl Iterator for ByteIter<'_, '_> {
+impl Iterator for ByteLexer<'_> {
     type Item = (Token, Span);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(&ch) = self.iter.next() {
-            let tok = if ch == self.lex.s {
-                Token::S
-            } else if ch == self.lex.t {
-                Token::T
-            } else if ch == self.lex.l {
-                Token::L
-            } else {
-                continue;
-            };
-            let end = self.len - self.iter.len();
-            let start = end - 1;
-            return Some((tok, Span::from(start..end)));
+        while let Some(&b) = self.iter.next() {
+            if let Some(tok) = self.matcher.token(b) {
+                let end = self.len - self.iter.len();
+                let start = end - 1;
+                return Some((tok, Span::from(start..end)));
+            }
         }
         None
     }
@@ -81,7 +87,7 @@ impl Iterator for ByteIter<'_, '_> {
     }
 }
 
-impl FusedIterator for ByteIter<'_, '_> {}
+impl FusedIterator for ByteLexer<'_> {}
 
 #[test]
 fn test_lex() {
@@ -95,7 +101,7 @@ fn test_lex() {
             (Token::T, Span::from(8..9)),
             (Token::L, Span::from(10..11)),
         ],
-        ByteLexer::new(b'A', b'B', b'C')
+        ByteMatcher::new(b'A', b'B', b'C')
             .unwrap()
             .lex(b" ABBA A B C ")
             .collect::<Vec<_>>()

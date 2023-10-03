@@ -1,9 +1,9 @@
-use crate::ws::lex::RegexLexer;
+use crate::ws::lex::RegexMatcher;
 use crate::ws::Token;
 
-pub fn gorispace_ja() -> RegexLexer {
+pub fn gorispace_ja() -> RegexMatcher {
     // TODO: Requires UTF-8 input
-    RegexLexer::new(
+    RegexMatcher::new(
         Token::L,
         "ウ(?:[^ウッホーイ]*ホ)+[^ウッホーイ]*ー[^ウッホーイ]*イ",
         Token::T,
@@ -14,9 +14,9 @@ pub fn gorispace_ja() -> RegexLexer {
     .unwrap()
 }
 
-pub fn gorispace_en() -> RegexLexer {
+pub fn gorispace_en() -> RegexMatcher {
     // TODO: Requires UTF-8 input
-    RegexLexer::new(
+    RegexMatcher::new(
         Token::L,
         "w[^hoswragh]*r(?:[^hoswragh]*a){2,}[^hoswragh]*g[^hoswragh]*h",
         Token::T,

@@ -2,45 +2,45 @@ use std::iter::FusedIterator;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, FindIter, MatchKind};
 
-use crate::ws::lex::{Lexer, LexerError, Span};
+use crate::ws::lex::{Lexer, MatcherError, Span};
 use crate::ws::Token;
 
-/// Lexer for Whitespace tokens, that recognizes byte string lexemes.
+/// Builder for [`BytesLexer`].
 #[derive(Clone, Debug)]
-pub struct BytesLexer {
+pub struct BytesMatcher {
     ac: AhoCorasick,
 }
 
-/// Iterator over tokens in source text, created by [`BytesLexer`].
+/// Lexer for Whitespace tokens represented by arbitrary byte strings.
 #[derive(Debug)]
-pub struct BytesIter<'l, 's> {
-    iter: FindIter<'l, 's>,
+pub struct BytesLexer<'s, 'a> {
+    iter: FindIter<'s, 'a>,
 }
 
-impl BytesLexer {
+impl BytesMatcher {
     #[inline]
-    pub fn new(s: &[u8], t: &[u8], l: &[u8]) -> Result<Self, LexerError> {
+    pub fn new(s: &[u8], t: &[u8], l: &[u8]) -> Result<Self, MatcherError> {
         if s == t || s == l || t == l {
-            return Err(LexerError::ConflictingPatterns);
+            return Err(MatcherError::ConflictingPatterns);
         }
         let ac = AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostLongest)
             .build(&[s, t, l])
             .unwrap();
-        Ok(BytesLexer { ac })
+        Ok(BytesMatcher { ac })
     }
 
     #[inline]
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> BytesIter<'l, 's> {
-        BytesIter {
+    pub fn lex<'s, 'a>(&'s self, src: &'a [u8]) -> BytesLexer<'s, 'a> {
+        BytesLexer {
             iter: self.ac.find_iter(src),
         }
     }
 }
 
-impl Lexer for BytesIter<'_, '_> {}
+impl Lexer for BytesLexer<'_, '_> {}
 
-impl Iterator for BytesIter<'_, '_> {
+impl Iterator for BytesLexer<'_, '_> {
     type Item = (Token, Span);
 
     #[inline]
@@ -56,4 +56,4 @@ impl Iterator for BytesIter<'_, '_> {
     }
 }
 
-impl FusedIterator for BytesIter<'_, '_> {}
+impl FusedIterator for BytesLexer<'_, '_> {}

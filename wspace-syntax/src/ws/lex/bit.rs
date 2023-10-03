@@ -11,11 +11,6 @@ use crate::ws::lex::{Lexer, Span};
 use crate::ws::Token;
 
 #[derive(Clone, Debug)]
-pub struct BitSyntax {
-    order: DynBitOrder,
-}
-
-#[derive(Clone, Debug)]
 pub struct BitLexer<'a, T = u8, O = Lsb0>
 where
     T: BitStore,
@@ -41,24 +36,14 @@ pub enum DynBitOrder {
     LocalBits,
 }
 
-impl BitSyntax {
-    #[inline]
-    pub fn new(order: DynBitOrder) -> Self {
-        BitSyntax { order }
-    }
-
+impl DynBitOrder {
     #[inline]
     pub fn lex<'a, T: BitStore>(&self, src: &'a [T]) -> DynBitLexer<'a, T> {
-        match self.order {
+        match self {
             DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<T, Lsb0>::new(src)),
             DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<T, Msb0>::new(src)),
             DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<T, LocalBits>::new(src)),
         }
-    }
-
-    #[inline]
-    pub fn order(&self) -> DynBitOrder {
-        self.order
     }
 }
 

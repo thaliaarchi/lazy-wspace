@@ -1,47 +1,60 @@
 use std::iter::FusedIterator;
 use std::str::Chars;
 
-use crate::ws::lex::{Lexer, LexerError, Span};
+use crate::ws::lex::{Lexer, MatcherError, Span};
 use crate::ws::Token;
 
-/// Lexer for Whitespace tokens, that recognizes `char` lexemes.
-#[derive(Clone, Debug)]
-pub struct CharLexer {
+/// Builder for [`CharLexer`].
+#[derive(Clone, Copy, Debug)]
+pub struct CharMatcher {
     s: char,
     t: char,
     l: char,
 }
 
-/// Iterator over tokens in source text, created by [`CharLexer`].
+/// Lexer for Whitespace tokens represented by arbitrary chars.
 #[derive(Clone, Debug)]
-pub struct CharIter<'l, 's> {
-    lex: &'l CharLexer,
+pub struct CharLexer<'s> {
+    matcher: CharMatcher,
     iter: Chars<'s>,
     len: usize,
 }
 
-impl CharLexer {
+impl CharMatcher {
     #[inline]
-    pub fn new(s: char, t: char, l: char) -> Result<Self, LexerError> {
+    pub fn new(s: char, t: char, l: char) -> Result<Self, MatcherError> {
         if s == t || s == l || t == l {
-            return Err(LexerError::ConflictingPatterns);
+            return Err(MatcherError::ConflictingPatterns);
         }
-        Ok(CharLexer { s, t, l })
+        Ok(CharMatcher { s, t, l })
     }
 
     #[inline]
-    pub fn lex<'l, 's>(&'l self, src: &'s str) -> CharIter<'l, 's> {
-        CharIter {
-            lex: self,
+    pub fn lex<'s>(&self, src: &'s str) -> CharLexer<'s> {
+        CharLexer {
+            matcher: *self,
             iter: src.chars(),
             len: src.len(),
         }
     }
+
+    #[inline]
+    pub fn token(&self, ch: char) -> Option<Token> {
+        if ch == self.s {
+            Some(Token::S)
+        } else if ch == self.t {
+            Some(Token::T)
+        } else if ch == self.l {
+            Some(Token::L)
+        } else {
+            None
+        }
+    }
 }
 
-impl Lexer for CharIter<'_, '_> {}
+impl Lexer for CharLexer<'_> {}
 
-impl Iterator for CharIter<'_, '_> {
+impl Iterator for CharLexer<'_> {
     type Item = (Token, Span);
 
     #[inline]
@@ -49,18 +62,11 @@ impl Iterator for CharIter<'_, '_> {
         loop {
             let pre_len = self.iter.as_str().len();
             let ch = self.iter.next()?;
-            let tok = if ch == self.lex.s {
-                Token::S
-            } else if ch == self.lex.t {
-                Token::T
-            } else if ch == self.lex.l {
-                Token::L
-            } else {
-                continue;
-            };
-            let start = self.len - pre_len;
-            let end = self.len - self.iter.as_str().len();
-            return Some((tok, Span::from(start..end)));
+            if let Some(tok) = self.matcher.token(ch) {
+                let start = self.len - pre_len;
+                let end = self.len - self.iter.as_str().len();
+                return Some((tok, Span::from(start..end)));
+            }
         }
     }
 
@@ -70,7 +76,7 @@ impl Iterator for CharIter<'_, '_> {
     }
 }
 
-impl FusedIterator for CharIter<'_, '_> {}
+impl FusedIterator for CharLexer<'_> {}
 
 #[test]
 fn test_lex() {
@@ -87,7 +93,7 @@ fn test_lex() {
             (Token::S, Span::from(34..38)),
             (Token::L, Span::from(39..43)),
         ],
-        CharLexer::new('𝓢', '𝓣', '𝓛')
+        CharMatcher::new('𝓢', '𝓣', '𝓛')
             .unwrap()
             .lex("𝓢𝓢 𝓢 𝓣𝓢𝓣𝓢𝓣𝓢 𝓛\n")
             .collect::<Vec<_>>()

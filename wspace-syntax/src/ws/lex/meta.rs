@@ -6,27 +6,29 @@ use regex_syntax::hir::{Hir, HirKind};
 use thiserror::Error;
 
 use crate::ws::lex::{
-    ByteIter, ByteLexer, BytesIter, BytesLexer, Lexer, RegexIter, RegexLexer, Span,
+    ByteLexer, ByteMatcher, BytesLexer, BytesMatcher, Lexer, RegexLexer, RegexMatcher, Span,
 };
 use crate::ws::Token;
 
+/// Builder for [`MetaLexer`].
 #[derive(Clone, Debug)]
-pub enum MetaLexer {
-    Byte(ByteLexer),
-    Bytes(BytesLexer),
-    Regex(RegexLexer),
+pub enum MetaMatcher {
+    Byte(ByteMatcher),
+    Bytes(BytesMatcher),
+    Regex(RegexMatcher),
 }
 
+/// Lexer for Whitespace tokens represented by arbitrary patterns.
 #[derive(Debug)]
-pub enum MetaIter<'l, 's> {
-    Byte(ByteIter<'l, 's>),
-    Bytes(BytesIter<'l, 's>),
-    Regex(RegexIter<'l, 's>),
+pub enum MetaLexer<'s, 'a> {
+    Byte(ByteLexer<'a>),
+    Bytes(BytesLexer<'s, 'a>),
+    Regex(RegexLexer<'s, 'a>),
 }
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum LexerError {
+pub enum MatcherError {
     #[error("multiple patterns defined for token")]
     RepeatedToken,
     #[error("conflicting patterns")]
@@ -35,7 +37,7 @@ pub enum LexerError {
     RegexBuild(Box<RegexBuildError>),
 }
 
-impl MetaLexer {
+impl MetaMatcher {
     pub fn new<'a>(
         token1: Token,
         pattern1: Pattern<'a>,
@@ -43,9 +45,9 @@ impl MetaLexer {
         pattern2: Pattern<'a>,
         token3: Token,
         pattern3: Pattern<'a>,
-    ) -> Result<MetaLexer, LexerError> {
+    ) -> Result<MetaMatcher, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
-            return Err(LexerError::RepeatedToken);
+            return Err(MatcherError::RepeatedToken);
         }
 
         match (
@@ -58,7 +60,7 @@ impl MetaLexer {
             | (_, Some(lit1), Some(lit2))
                 if lit1 == lit2 =>
             {
-                return Err(LexerError::ConflictingPatterns);
+                return Err(MatcherError::ConflictingPatterns);
             }
 
             (Some(_), Some(_), Some(_)) => {
@@ -71,11 +73,11 @@ impl MetaLexer {
                 let [(_, s), (_, t), (_, l)] = lits;
 
                 if let (&[s], &[t], &[l]) = (&*s, &*t, &*l) {
-                    let lex = ByteLexer::new(s, t, l)?;
-                    Ok(MetaLexer::Byte(lex))
+                    let matcher = ByteMatcher::new(s, t, l)?;
+                    Ok(MetaMatcher::Byte(matcher))
                 } else {
-                    let lex = BytesLexer::new(&*s, &*t, &*l)?;
-                    Ok(MetaLexer::Bytes(lex))
+                    let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
+                    Ok(MetaMatcher::Bytes(matcher))
                 }
             }
 
@@ -83,84 +85,84 @@ impl MetaLexer {
                 let hir1 = pattern1.into_hir();
                 let hir2 = pattern2.into_hir();
                 let hir3 = pattern3.into_hir();
-                let lex = RegexLexer::from_hirs(token1, hir1, token2, hir2, token3, hir3)?;
-                Ok(MetaLexer::Regex(lex))
+                let matcher = RegexMatcher::from_hirs(token1, hir1, token2, hir2, token3, hir3)?;
+                Ok(MetaMatcher::Regex(matcher))
             }
         }
     }
 
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> MetaIter<'l, 's> {
+    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> MetaLexer<'l, 's> {
         match self {
-            MetaLexer::Byte(inner) => MetaIter::from(inner.lex(src)),
-            MetaLexer::Bytes(inner) => MetaIter::from(inner.lex(src)),
-            MetaLexer::Regex(inner) => MetaIter::from(inner.lex(src)),
+            MetaMatcher::Byte(inner) => MetaLexer::from(inner.lex(src)),
+            MetaMatcher::Bytes(inner) => MetaLexer::from(inner.lex(src)),
+            MetaMatcher::Regex(inner) => MetaLexer::from(inner.lex(src)),
         }
     }
 }
 
-impl From<ByteLexer> for MetaLexer {
+impl From<ByteMatcher> for MetaMatcher {
     #[inline]
-    fn from(lex: ByteLexer) -> Self {
-        MetaLexer::Byte(lex)
+    fn from(matcher: ByteMatcher) -> Self {
+        MetaMatcher::Byte(matcher)
     }
 }
 
-impl From<BytesLexer> for MetaLexer {
+impl From<BytesMatcher> for MetaMatcher {
     #[inline]
-    fn from(lex: BytesLexer) -> Self {
-        MetaLexer::Bytes(lex)
+    fn from(matcher: BytesMatcher) -> Self {
+        MetaMatcher::Bytes(matcher)
     }
 }
 
-impl From<RegexLexer> for MetaLexer {
+impl From<RegexMatcher> for MetaMatcher {
     #[inline]
-    fn from(lex: RegexLexer) -> Self {
-        MetaLexer::Regex(lex)
+    fn from(matcher: RegexMatcher) -> Self {
+        MetaMatcher::Regex(matcher)
     }
 }
 
-impl Lexer for MetaIter<'_, '_> {}
+impl Lexer for MetaLexer<'_, '_> {}
 
-impl Iterator for MetaIter<'_, '_> {
+impl Iterator for MetaLexer<'_, '_> {
     type Item = (Token, Span);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            MetaIter::Byte(inner) => inner.next(),
-            MetaIter::Bytes(inner) => inner.next(),
-            MetaIter::Regex(inner) => inner.next(),
+            MetaLexer::Byte(inner) => inner.next(),
+            MetaLexer::Bytes(inner) => inner.next(),
+            MetaLexer::Regex(inner) => inner.next(),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match self {
-            MetaIter::Byte(inner) => inner.size_hint(),
-            MetaIter::Bytes(inner) => inner.size_hint(),
-            MetaIter::Regex(inner) => inner.size_hint(),
+            MetaLexer::Byte(inner) => inner.size_hint(),
+            MetaLexer::Bytes(inner) => inner.size_hint(),
+            MetaLexer::Regex(inner) => inner.size_hint(),
         }
     }
 }
 
-impl FusedIterator for MetaIter<'_, '_> {}
+impl FusedIterator for MetaLexer<'_, '_> {}
 
-impl<'l, 's> From<ByteIter<'l, 's>> for MetaIter<'l, 's> {
+impl<'a> From<ByteLexer<'a>> for MetaLexer<'static, 'a> {
     #[inline]
-    fn from(iter: ByteIter<'l, 's>) -> Self {
-        MetaIter::Byte(iter)
+    fn from(lex: ByteLexer<'a>) -> Self {
+        MetaLexer::Byte(lex)
     }
 }
 
-impl<'l, 's> From<BytesIter<'l, 's>> for MetaIter<'l, 's> {
+impl<'l, 's> From<BytesLexer<'l, 's>> for MetaLexer<'l, 's> {
     #[inline]
-    fn from(iter: BytesIter<'l, 's>) -> Self {
-        MetaIter::Bytes(iter)
+    fn from(lex: BytesLexer<'l, 's>) -> Self {
+        MetaLexer::Bytes(lex)
     }
 }
 
-impl<'l, 's> From<RegexIter<'l, 's>> for MetaIter<'l, 's> {
+impl<'l, 's> From<RegexLexer<'l, 's>> for MetaLexer<'l, 's> {
     #[inline]
-    fn from(iter: RegexIter<'l, 's>) -> Self {
-        MetaIter::Regex(iter)
+    fn from(lex: RegexLexer<'l, 's>) -> Self {
+        MetaLexer::Regex(lex)
     }
 }
 
@@ -206,9 +208,9 @@ impl<'a> Pattern<'a> {
     }
 }
 
-impl From<RegexBuildError> for LexerError {
+impl From<RegexBuildError> for MatcherError {
     #[inline]
     fn from(err: RegexBuildError) -> Self {
-        LexerError::RegexBuild(Box::new(err))
+        MatcherError::RegexBuild(Box::new(err))
     }
 }

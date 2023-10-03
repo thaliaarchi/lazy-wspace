@@ -1,7 +1,7 @@
 mod tutorial {
     use bitvec::prelude::*;
 
-    use crate::ws::lex::{ByteLexer, BytesLexer};
+    use crate::ws::lex::{ByteMatcher, BytesMatcher};
     use crate::ws::{Builder, FormatTokens, Inst, IntegerLit, LabelLit, Mapping, Token};
     use Token::*;
 
@@ -48,8 +48,8 @@ mod tutorial {
 
     #[test]
     fn scan_byte() {
-        let lex = ByteLexer::default();
-        let toks = lex
+        let syntax = ByteMatcher::default();
+        let toks = syntax
             .lex(SRC_STL.as_bytes())
             .map(|(tok, _)| tok)
             .collect::<Vec<_>>();
@@ -58,8 +58,8 @@ mod tutorial {
 
     #[test]
     fn scan_string() {
-        let lex = BytesLexer::new(b"[Space]", b"[Tab]", b"[LF]").unwrap();
-        let toks = lex
+        let syntax = BytesMatcher::new(b"[Space]", b"[Tab]", b"[LF]").unwrap();
+        let toks = syntax
             .lex(SRC_ANNOTATED.as_bytes())
             .map(|(tok, _)| tok)
             .collect::<Vec<_>>();

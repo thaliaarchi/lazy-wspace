@@ -7,24 +7,24 @@ use regex_automata::{
 };
 use regex_syntax::hir::Hir;
 
-use crate::ws::lex::{Lexer, LexerError, Span};
+use crate::ws::lex::{Lexer, MatcherError, Span};
 use crate::ws::Token;
 
-/// Lexer for Whitespace tokens, that recognizes by regular expressions.
+/// Builder for [`RegexLexer`].
 #[derive(Clone, Debug)]
-pub struct RegexLexer {
+pub struct RegexMatcher {
     re: Regex,
     tokens: [Token; 3],
 }
 
-/// Iterator over tokens in source text, created by [`RegexLexer`].
+/// Lexer for Whitespace tokens represented by arbitrary regular expressions.
 #[derive(Debug)]
-pub struct RegexIter<'l, 's> {
-    iter: FindMatches<'l, 's>,
+pub struct RegexLexer<'s, 'a> {
+    iter: FindMatches<'s, 'a>,
     tokens: [Token; 3],
 }
 
-impl RegexLexer {
+impl RegexMatcher {
     #[inline]
     pub fn new(
         token1: Token,
@@ -33,11 +33,11 @@ impl RegexLexer {
         pattern2: &str,
         token3: Token,
         pattern3: &str,
-    ) -> Result<Self, LexerError> {
+    ) -> Result<Self, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
-            return Err(LexerError::RepeatedToken);
+            return Err(MatcherError::RepeatedToken);
         }
-        Ok(RegexLexer {
+        Ok(RegexMatcher {
             re: Self::builder().build_many(&[pattern1, pattern2, pattern3])?,
             tokens: [token1, token2, token3],
         })
@@ -51,11 +51,11 @@ impl RegexLexer {
         hir2: Hir,
         token3: Token,
         hir3: Hir,
-    ) -> Result<Self, LexerError> {
+    ) -> Result<Self, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
-            return Err(LexerError::RepeatedToken);
+            return Err(MatcherError::RepeatedToken);
         }
-        Ok(RegexLexer {
+        Ok(RegexMatcher {
             re: Self::builder().build_many_from_hir(&[hir1, hir2, hir3])?,
             tokens: [token1, token2, token3],
         })
@@ -69,17 +69,17 @@ impl RegexLexer {
     }
 
     #[inline]
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> RegexIter<'l, 's> {
-        RegexIter {
+    pub fn lex<'s, 'a>(&'s self, src: &'a [u8]) -> RegexLexer<'s, 'a> {
+        RegexLexer {
             iter: self.re.find_iter(src),
             tokens: self.tokens,
         }
     }
 }
 
-impl Lexer for RegexIter<'_, '_> {}
+impl Lexer for RegexLexer<'_, '_> {}
 
-impl Iterator for RegexIter<'_, '_> {
+impl Iterator for RegexLexer<'_, '_> {
     type Item = (Token, Span);
 
     #[inline]
@@ -90,4 +90,4 @@ impl Iterator for RegexIter<'_, '_> {
     }
 }
 
-impl FusedIterator for RegexIter<'_, '_> {}
+impl FusedIterator for RegexLexer<'_, '_> {}
