@@ -12,6 +12,17 @@ pub enum Token {
     L,
 }
 
+/// Whitespace token, extended with additional variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ExtToken {
+    Token(Token),
+    /// Invalid UTF-8 sequence.
+    InvalidUtf8,
+    /// River crab alias for [`End`](crate::ws::Inst::End) from
+    /// [GrassMudHorse](crate::ws::dialects::GrassMudHorseLexer).
+    RiverCrab,
+}
+
 impl hs::Show for Token {
     fn show(&self) -> String {
         // Matches the manual instance of `Show` in `Tokens.hs`, which does not
@@ -21,6 +32,13 @@ impl hs::Show for Token {
             Token::T => "\t".into(),
             Token::L => "\n".into(),
         }
+    }
+}
+
+impl From<Token> for ExtToken {
+    #[inline]
+    fn from(tok: Token) -> Self {
+        ExtToken::Token(tok)
     }
 }
 

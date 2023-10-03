@@ -1,8 +1,8 @@
 use std::iter::FusedIterator;
 use std::str::Chars;
 
-use crate::ws::lex::{Lexer, Span};
-use crate::ws::Token;
+use crate::ws::lex::{ExtLexer, Span};
+use crate::ws::{ExtToken, Token};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GmhToken {
@@ -31,15 +31,9 @@ struct GmhScanner<'a> {
 }
 
 /// Lexer for GrassMudHorse.
-//
-// TODO: `R C` needs to expand to `End`, not to `L L L`.
 #[derive(Clone, Debug)]
 pub struct GmhLexer<'a> {
     iter: GmhScanner<'a>,
-    /// The number of `L` tokens remaining to emit for an `R C` sequence.
-    l_remaining: usize,
-    /// The combined span of the last `R C` sequence.
-    rc_span: Span,
 }
 
 impl<'a> GmhScanner<'a> {
@@ -87,36 +81,29 @@ impl<'a> GmhLexer<'a> {
     pub fn new(src: &'a str) -> Self {
         GmhLexer {
             iter: GmhScanner::new(src),
-            l_remaining: 0,
-            rc_span: Span::from(0..0),
         }
     }
 }
 
-impl Lexer for GmhLexer<'_> {}
+impl ExtLexer for GmhLexer<'_> {}
 
 impl Iterator for GmhLexer<'_> {
-    type Item = (Token, Span);
+    type Item = (ExtToken, Span);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.l_remaining != 0 {
-            self.l_remaining -= 1;
-            return Some((Token::L, self.rc_span));
-        }
         let mut r_span = None;
         loop {
             let (tok, span) = self.iter.next()?;
             match tok {
-                GmhToken::G => return Some((Token::S, span)),
-                GmhToken::M => return Some((Token::T, span)),
-                GmhToken::H => return Some((Token::L, span)),
+                GmhToken::G => return Some((Token::S.into(), span)),
+                GmhToken::M => return Some((Token::T.into(), span)),
+                GmhToken::H => return Some((Token::L.into(), span)),
                 GmhToken::R => r_span = Some(span),
                 GmhToken::C => {
                     if let Some(r_span) = r_span {
-                        self.rc_span = Span::from(r_span.start..span.end);
-                        self.l_remaining = 2;
-                        return Some((Token::L, self.rc_span));
+                        let rc_span = Span::from(r_span.start..span.end);
+                        return Some((ExtToken::RiverCrab, rc_span));
                     }
                 }
             }
@@ -155,18 +142,14 @@ fn unpaired_rc() {
     ];
     assert_eq!(gmh_toks, GmhScanner::new(src).collect::<Vec<_>>());
     let toks = vec![
-        (Token::S, Span::from(1..4)),
-        (Token::T, Span::from(11..14)),
-        (Token::L, Span::from(21..24)),
-        (Token::L, Span::from(26..34)),
-        (Token::L, Span::from(26..34)),
-        (Token::L, Span::from(26..34)),
-        (Token::S, Span::from(36..39)),
-        (Token::T, Span::from(51..54)),
-        (Token::L, Span::from(66..74)),
-        (Token::L, Span::from(66..74)),
-        (Token::L, Span::from(66..74)),
-        (Token::L, Span::from(81..84)),
+        (Token::S.into(), Span::from(1..4)),
+        (Token::T.into(), Span::from(11..14)),
+        (Token::L.into(), Span::from(21..24)),
+        (ExtToken::RiverCrab, Span::from(26..34)),
+        (Token::S.into(), Span::from(36..39)),
+        (Token::T.into(), Span::from(51..54)),
+        (ExtToken::RiverCrab, Span::from(66..74)),
+        (Token::L.into(), Span::from(81..84)),
     ];
     assert_eq!(toks, GmhLexer::new(src).collect::<Vec<_>>());
 }
