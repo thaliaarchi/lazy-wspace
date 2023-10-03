@@ -53,7 +53,7 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
 
     #[inline]
-    fn next(&mut self) -> Option<Token<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         let start = self.offset;
         let kind = match self.bump()? {
             b' ' | b'\t' => {

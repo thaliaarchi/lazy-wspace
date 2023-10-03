@@ -195,7 +195,7 @@ impl Iterator for NodeTableIter<'_> {
     type Item = NodeRef;
 
     #[inline]
-    fn next(&mut self) -> Option<NodeRef> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|bucket| *unsafe { bucket.as_ref() })
     }
 

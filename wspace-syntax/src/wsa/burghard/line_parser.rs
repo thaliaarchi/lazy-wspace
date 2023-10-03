@@ -136,7 +136,7 @@ impl<'a> LineParser<'a> {
 impl Iterator for LineParser<'_> {
     type Item = Vec<Word>;
 
-    fn next(&mut self) -> Option<Vec<Word>> {
+    fn next(&mut self) -> Option<Self::Item> {
         let mut line = Vec::new();
         self.next_line(&mut line);
         if line.len() != 0 {
