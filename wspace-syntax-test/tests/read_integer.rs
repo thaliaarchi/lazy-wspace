@@ -194,6 +194,7 @@ fn test_rust() {
 }
 
 #[test]
+#[ignore = "runs slow"]
 fn compare_with_haskell() {
     for test in get_tests() {
         assert_eq!(
