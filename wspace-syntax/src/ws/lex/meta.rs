@@ -1,22 +1,27 @@
 use std::borrow::Cow;
+use std::iter::FusedIterator;
 
 use regex_automata::meta::BuildError as RegexBuildError;
 use regex_syntax::hir::{Hir, HirKind};
 use thiserror::Error;
 
-use crate::ws::lex::{ByteLexer, BytesLexer, Lexer, RegexLexer};
+use crate::ws::lex::{
+    ByteIter, ByteLexer, BytesIter, BytesLexer, Lexer, RegexIter, RegexLexer, Span,
+};
 use crate::ws::Token;
 
 #[derive(Clone, Debug)]
-pub struct MetaLexer {
-    repr: LexerRepr,
-}
-
-#[derive(Clone, Debug)]
-enum LexerRepr {
+pub enum MetaLexer {
     Byte(ByteLexer),
     Bytes(BytesLexer),
     Regex(RegexLexer),
+}
+
+#[derive(Debug)]
+pub enum MetaIter<'l, 's> {
+    Byte(ByteIter<'l, 's>),
+    Bytes(BytesIter<'l, 's>),
+    Regex(RegexIter<'l, 's>),
 }
 
 #[derive(Debug, Error)]
@@ -43,7 +48,7 @@ impl MetaLexer {
             return Err(LexerError::RepeatedToken);
         }
 
-        let repr = match (
+        match (
             pattern1.as_literal(),
             pattern2.as_literal(),
             pattern3.as_literal(),
@@ -67,10 +72,10 @@ impl MetaLexer {
 
                 if let (&[s], &[t], &[l]) = (&*s, &*t, &*l) {
                     let lex = ByteLexer::new(s, t, l)?;
-                    LexerRepr::Byte(lex)
+                    Ok(MetaLexer::Byte(lex))
                 } else {
                     let lex = BytesLexer::new(&*s, &*t, &*l)?;
-                    LexerRepr::Bytes(lex)
+                    Ok(MetaLexer::Bytes(lex))
                 }
             }
 
@@ -79,21 +84,83 @@ impl MetaLexer {
                 let hir2 = pattern2.into_hir();
                 let hir3 = pattern3.into_hir();
                 let lex = RegexLexer::from_hirs(token1, hir1, token2, hir2, token3, hir3)?;
-                LexerRepr::Regex(lex)
+                Ok(MetaLexer::Regex(lex))
             }
-        };
-        Ok(MetaLexer { repr })
+        }
     }
 
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> Box<dyn Lexer + 'l>
-    where
-        's: 'l,
-    {
-        match &self.repr {
-            LexerRepr::Byte(lex) => Box::new(lex.lex(src)),
-            LexerRepr::Bytes(lex) => Box::new(lex.lex(src)),
-            LexerRepr::Regex(lex) => Box::new(lex.lex(src)),
+    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> MetaIter<'l, 's> {
+        match self {
+            MetaLexer::Byte(inner) => MetaIter::from(inner.lex(src)),
+            MetaLexer::Bytes(inner) => MetaIter::from(inner.lex(src)),
+            MetaLexer::Regex(inner) => MetaIter::from(inner.lex(src)),
         }
+    }
+}
+
+impl From<ByteLexer> for MetaLexer {
+    #[inline]
+    fn from(lex: ByteLexer) -> Self {
+        MetaLexer::Byte(lex)
+    }
+}
+
+impl From<BytesLexer> for MetaLexer {
+    #[inline]
+    fn from(lex: BytesLexer) -> Self {
+        MetaLexer::Bytes(lex)
+    }
+}
+
+impl From<RegexLexer> for MetaLexer {
+    #[inline]
+    fn from(lex: RegexLexer) -> Self {
+        MetaLexer::Regex(lex)
+    }
+}
+
+impl Lexer for MetaIter<'_, '_> {}
+
+impl Iterator for MetaIter<'_, '_> {
+    type Item = (Token, Span);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            MetaIter::Byte(inner) => inner.next(),
+            MetaIter::Bytes(inner) => inner.next(),
+            MetaIter::Regex(inner) => inner.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            MetaIter::Byte(inner) => inner.size_hint(),
+            MetaIter::Bytes(inner) => inner.size_hint(),
+            MetaIter::Regex(inner) => inner.size_hint(),
+        }
+    }
+}
+
+impl FusedIterator for MetaIter<'_, '_> {}
+
+impl<'l, 's> From<ByteIter<'l, 's>> for MetaIter<'l, 's> {
+    #[inline]
+    fn from(iter: ByteIter<'l, 's>) -> Self {
+        MetaIter::Byte(iter)
+    }
+}
+
+impl<'l, 's> From<BytesIter<'l, 's>> for MetaIter<'l, 's> {
+    #[inline]
+    fn from(iter: BytesIter<'l, 's>) -> Self {
+        MetaIter::Bytes(iter)
+    }
+}
+
+impl<'l, 's> From<RegexIter<'l, 's>> for MetaIter<'l, 's> {
+    #[inline]
+    fn from(iter: RegexIter<'l, 's>) -> Self {
+        MetaIter::Regex(iter)
     }
 }
 

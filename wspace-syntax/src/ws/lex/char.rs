@@ -63,6 +63,11 @@ impl Iterator for CharIter<'_, '_> {
             return Some((tok, Span::from(start..end)));
         }
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.iter.as_str().len()))
+    }
 }
 
 impl FusedIterator for CharIter<'_, '_> {}

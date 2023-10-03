@@ -74,6 +74,11 @@ impl Iterator for ByteIter<'_, '_> {
         }
         None
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.iter.len()))
+    }
 }
 
 impl FusedIterator for ByteIter<'_, '_> {}
