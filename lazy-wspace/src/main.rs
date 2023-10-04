@@ -2,9 +2,10 @@ use std::fs::File;
 use std::io::Read;
 use std::{env, path::PathBuf};
 
-use lazy_wspace::ast::{Lexer, Parser};
+use lazy_wspace::ast::Parser;
 use lazy_wspace::error::Error;
 use lazy_wspace::ir::{Cfg, Graph};
+use wspace_syntax::ws::lex::{ByteMatcher, Lexer};
 
 fn main() {
     let mut args = env::args_os();
@@ -23,7 +24,8 @@ fn main() {
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
 
-    let prog: Vec<_> = Parser::new(Lexer::new(&src)).collect();
+    let lex = ByteMatcher::default().lex(&src).into_extended();
+    let prog = Parser::new(lex).map(|(inst, _)| inst).collect::<Vec<_>>();
     // SAFETY: This is the only graph constructed, so all refs belong to it.
     let graph = unsafe { Graph::new() };
     let ir = Cfg::new(&prog, &graph);

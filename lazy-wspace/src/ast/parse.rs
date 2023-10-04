@@ -1,31 +1,132 @@
+use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
-use wspace_syntax::ws::Token;
+use wspace_syntax::ws::lex::{ExtLexer, Span};
+use wspace_syntax::ws::{ExtToken, Token};
 
-use crate::ast::{Inst, IntegerLit, LabelLit, Lexer};
+use crate::ast::{Inst, IntegerLit, LabelLit};
 use crate::error::ParseError;
 
-pub struct Parser<'a> {
-    lex: Lexer<'a>,
+pub struct Parser<L: ExtLexer> {
+    lex: L,
+    curr: Span,
 }
 
-impl<'a> Parser<'a> {
+impl<L: ExtLexer> Parser<L> {
     #[inline]
-    pub fn new(lex: Lexer<'a>) -> Self {
-        Parser { lex }
+    pub fn new(lex: L) -> Self {
+        Parser {
+            lex,
+            curr: Span::from(0..0),
+        }
+    }
+
+    #[inline]
+    fn next_inst(&mut self) -> Result<Option<Inst>, ParseError> {
+        let first_tok = match self.next_token_inner() {
+            Some((maybe_tok, span)) => {
+                self.curr.start = span.start;
+                maybe_tok?
+            }
+            None => return Ok(None),
+        };
+        let inst = match first_tok {
+            Token::S => match self.next_token()? {
+                Token::S => self.parse_integer(Inst::Push),
+                Token::T => match self.next_token()? {
+                    Token::S => self.parse_integer(Inst::Copy),
+                    Token::T => ParseError::UnrecognizedOpcode.into(),
+                    Token::L => self.parse_integer(Inst::Slide),
+                },
+                Token::L => match self.next_token()? {
+                    Token::S => Inst::Dup,
+                    Token::T => Inst::Swap,
+                    Token::L => Inst::Drop,
+                },
+            },
+            Token::T => match self.next_token()? {
+                Token::S => match self.next_token()? {
+                    Token::S => match self.next_token()? {
+                        Token::S => Inst::Add,
+                        Token::T => Inst::Sub,
+                        Token::L => Inst::Mul,
+                    },
+                    Token::T => match self.next_token()? {
+                        Token::S => Inst::Div,
+                        Token::T => Inst::Mod,
+                        Token::L => ParseError::UnrecognizedOpcode.into(),
+                    },
+                    Token::L => ParseError::UnrecognizedOpcode.into(),
+                },
+                Token::T => match self.next_token()? {
+                    Token::S => Inst::Store,
+                    Token::T => Inst::Retrieve,
+                    Token::L => ParseError::UnrecognizedOpcode.into(),
+                },
+                Token::L => match self.next_token()? {
+                    Token::S => match self.next_token()? {
+                        Token::S => Inst::Printc,
+                        Token::T => Inst::Printi,
+                        Token::L => ParseError::UnrecognizedOpcode.into(),
+                    },
+                    Token::T => match self.next_token()? {
+                        Token::S => Inst::Readc,
+                        Token::T => Inst::Readi,
+                        Token::L => ParseError::UnrecognizedOpcode.into(),
+                    },
+                    Token::L => ParseError::UnrecognizedOpcode.into(),
+                },
+            },
+            Token::L => match self.next_token()? {
+                Token::S => match self.next_token()? {
+                    Token::S => self.parse_label(Inst::Label),
+                    Token::T => self.parse_label(Inst::Call),
+                    Token::L => self.parse_label(Inst::Jmp),
+                },
+                Token::T => match self.next_token()? {
+                    Token::S => self.parse_label(Inst::Jz),
+                    Token::T => self.parse_label(Inst::Jn),
+                    Token::L => Inst::Ret,
+                },
+                Token::L => match self.next_token()? {
+                    Token::S => ParseError::UnrecognizedOpcode.into(),
+                    Token::T => ParseError::UnrecognizedOpcode.into(),
+                    Token::L => Inst::End,
+                },
+            },
+        };
+        Ok(Some(inst))
+    }
+
+    fn next_token(&mut self) -> Result<Token, ParseError> {
+        match self.next_token_inner() {
+            Some((res, _)) => res,
+            None => Err(ParseError::IncompleteOpcode),
+        }
+    }
+
+    fn next_token_inner(&mut self) -> Option<(Result<Token, ParseError>, Span)> {
+        let (tok, span) = self.lex.next()?;
+        let res = match tok {
+            ExtToken::Token(tok) => Ok(tok),
+            ExtToken::InvalidUtf8 => Err(ParseError::InvalidUtf8),
+            ExtToken::RiverCrab => Err(ParseError::UnexpectedRiverCrab),
+        };
+        self.curr.end = span.end;
+        Some((res, span))
     }
 
     fn parse_arg(&mut self, unterminated_err: ParseError) -> Result<BitVec, ParseError> {
         let mut arg = BitVec::new();
-        loop {
-            match self.lex.next() {
-                Some(Token::S) => arg.push(false),
-                Some(Token::T) => arg.push(true),
-                Some(Token::L) => return Ok(arg),
-                None => return Err(self.eof(unterminated_err)),
+        while let Some((maybe_tok, _)) = self.next_token_inner() {
+            match maybe_tok? {
+                Token::S => arg.push(false),
+                Token::T => arg.push(true),
+                Token::L => return Ok(arg),
             }
         }
+        Err(unterminated_err)
     }
 
     #[inline]
@@ -43,95 +144,33 @@ impl<'a> Parser<'a> {
             Err(err) => err.into(),
         }
     }
+}
 
-    #[inline]
-    fn eof(&mut self, err: ParseError) -> ParseError {
-        if self.lex.invalid_utf8 {
-            self.lex.invalid_utf8 = false;
-            ParseError::InvalidUtf8
-        } else {
-            err
+impl<L: ExtLexer> Iterator for Parser<L> {
+    type Item = (Inst, Span);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let inst = self.next_inst().transpose()?.into();
+        Some((inst, self.curr))
+    }
+}
+
+impl<L: ExtLexer + FusedIterator> FusedIterator for Parser<L> {}
+
+impl<L: ExtLexer + Clone> Clone for Parser<L> {
+    fn clone(&self) -> Self {
+        Parser {
+            lex: self.lex.clone(),
+            curr: self.curr,
         }
     }
 }
 
-impl Iterator for Parser<'_> {
-    type Item = Inst;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        macro_rules! default(
-            ($val:expr, $default:expr) => { $val };
-            (, $default:expr) => { $default };
-        );
-        macro_rules! match_token(
-            ($(S => $on_s:expr,)? $(T => $on_t:expr,)? $(L => $on_l:expr,)? $(None => $on_none:expr,)?) => {
-                match self.lex.next() {
-                    Some(Token::S) => default!($($on_s)?, Some(ParseError::UnrecognizedInst.into())),
-                    Some(Token::T) => default!($($on_t)?, Some(ParseError::UnrecognizedInst.into())),
-                    Some(Token::L) => default!($($on_l)?, Some(ParseError::UnrecognizedInst.into())),
-                    None => default!($($on_none)?, Some(self.eof(ParseError::IncompleteInst).into())),
-                }
-            }
-        );
-
-        match_token!(
-            S => match_token!(
-                S => Some(self.parse_integer(Inst::Push)),
-                T => match_token!(
-                    S => Some(self.parse_integer(Inst::Copy)),
-                    L => Some(self.parse_integer(Inst::Slide)),
-                ),
-                L => match_token!(
-                    S => Some(Inst::Dup),
-                    T => Some(Inst::Swap),
-                    L => Some(Inst::Drop),
-                ),
-            ),
-            T => match_token!(
-                S => match_token!(
-                    S => match_token!(
-                        S => Some(Inst::Add),
-                        T => Some(Inst::Sub),
-                        L => Some(Inst::Mul),
-                    ),
-                    T => match_token!(
-                        S => Some(Inst::Div),
-                        T => Some(Inst::Mod),
-                    ),
-                ),
-                T => match_token!(
-                    S => Some(Inst::Store),
-                    T => Some(Inst::Retrieve),
-                ),
-                L => match_token!(
-                    S => match_token!(
-                        S => Some(Inst::Printc),
-                        T => Some(Inst::Printi),
-                    ),
-                    T => match_token!(
-                        S => Some(Inst::Readc),
-                        T => Some(Inst::Readi),
-                    ),
-                ),
-            ),
-            L => match_token!(
-                S => match_token!(
-                    S => Some(self.parse_label(Inst::Label)),
-                    T => Some(self.parse_label(Inst::Call)),
-                    L => Some(self.parse_label(Inst::Jmp)),
-                ),
-                T => match_token!(
-                    S => Some(self.parse_label(Inst::Jz)),
-                    T => Some(self.parse_label(Inst::Jn)),
-                    L => Some(Inst::Ret),
-                ),
-                L => match_token!(
-                    L => Some(Inst::End),
-                ),
-            ),
-            None => None,
-        )
+impl<L: ExtLexer + Debug> Debug for Parser<L> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Parser")
+            .field("lex", &self.lex)
+            .field("curr", &self.curr)
+            .finish()
     }
 }
-
-impl FusedIterator for Parser<'_> {}

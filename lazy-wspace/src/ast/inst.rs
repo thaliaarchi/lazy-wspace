@@ -172,6 +172,13 @@ impl From<ParseError> for Inst {
     }
 }
 
+impl From<Result<Inst, ParseError>> for Inst {
+    #[inline]
+    fn from(res: Result<Inst, ParseError>) -> Self {
+        res.unwrap_or_else(|err| err.into())
+    }
+}
+
 impl IntegerLit {
     #[inline]
     pub fn new<T: Into<Integer>>(n: T) -> Self {

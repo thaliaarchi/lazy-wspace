@@ -26,9 +26,9 @@ pub enum Error {
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum ParseError {
     #[error("incomplete instruction opcode")]
-    IncompleteInst,
+    IncompleteOpcode,
     #[error("unrecognized instruction opcode")]
-    UnrecognizedInst,
+    UnrecognizedOpcode,
     #[error("unterminated integer")]
     UnterminatedInteger,
     #[error("unterminated label")]
@@ -39,6 +39,8 @@ pub enum ParseError {
     ImplicitEnd,
     #[error("invalid UTF-8 sequence")]
     InvalidUtf8,
+    #[error("unexpected river crab")]
+    UnexpectedRiverCrab,
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
@@ -179,7 +181,7 @@ impl ParseError {
     #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
         match self {
-            ParseError::IncompleteInst | ParseError::UnrecognizedInst => {
+            ParseError::IncompleteOpcode | ParseError::UnrecognizedOpcode => {
                 HaskellError::stderr(format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n"), 1)
             }
             ParseError::UnterminatedInteger => {
@@ -197,6 +199,7 @@ impl ParseError {
             ParseError::InvalidUtf8 => {
                 HaskellError::stderr(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
             }
+            ParseError::UnexpectedRiverCrab => panic!("not an error in wspace"),
         }
     }
 }
