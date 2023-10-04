@@ -475,6 +475,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "simdutf8",
  "strum",
  "thiserror",
  "uncased",

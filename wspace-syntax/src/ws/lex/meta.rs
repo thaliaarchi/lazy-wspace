@@ -1,29 +1,56 @@
 use std::borrow::Cow;
 use std::iter::FusedIterator;
+use std::str;
 
+use bitvec::order::{Lsb0, Msb0};
 use regex_automata::meta::BuildError as RegexBuildError;
 use regex_syntax::hir::{Hir, HirKind};
 use thiserror::Error;
 
 use crate::ws::lex::{
-    ByteLexer, ByteMatcher, BytesLexer, BytesMatcher, Lexer, RegexLexer, RegexMatcher, Span,
+    BitLexer, ByteLexer, ByteMatcher, BytesLexer, BytesMatcher, CharLexer, CharMatcher,
+    DynBitLexer, DynBitOrder, ExtLexer, RegexLexer, RegexMatcher, Span,
 };
-use crate::ws::Token;
+use crate::ws::{ExtToken, Token};
 
 /// Builder for [`MetaLexer`].
 #[derive(Clone, Debug)]
-pub enum MetaMatcher {
+pub struct MetaMatcher {
+    inner: MetaMatcherRepr,
+    encoding: Encoding,
+}
+
+#[derive(Clone, Debug)]
+enum MetaMatcherRepr {
     Byte(ByteMatcher),
+    Char(CharMatcher),
     Bytes(BytesMatcher),
     Regex(RegexMatcher),
+    Bit(DynBitOrder),
 }
 
 /// Lexer for Whitespace tokens represented by arbitrary patterns.
 #[derive(Debug)]
-pub enum MetaLexer<'s, 'a> {
+pub struct MetaLexer<'s, 'a> {
+    inner: MetaLexerRepr<'s, 'a>,
+    invalid_utf8: Option<Span>,
+}
+
+#[derive(Debug)]
+enum MetaLexerRepr<'s, 'a> {
     Byte(ByteLexer<'a>),
+    Char(CharLexer<'a>),
     Bytes(BytesLexer<'s, 'a>),
     Regex(RegexLexer<'s, 'a>),
+    BitLsb0(BitLexer<'a, Lsb0>),
+    BitMsb0(BitLexer<'a, Msb0>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Encoding {
+    Bytes,
+    Utf8,
+    LazyUtf8,
 }
 
 #[derive(Debug, Error)]
@@ -37,6 +64,13 @@ pub enum MatcherError {
     RegexBuild(Box<RegexBuildError>),
 }
 
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum LexerError {
+    #[error("invalid UTF-8 sequence")]
+    InvalidUtf8,
+}
+
 impl MetaMatcher {
     pub fn new<'a>(
         token1: Token,
@@ -45,6 +79,7 @@ impl MetaMatcher {
         pattern2: Pattern<'a>,
         token3: Token,
         pattern3: Pattern<'a>,
+        encoding: Encoding,
     ) -> Result<MetaMatcher, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
             return Err(MatcherError::RepeatedToken);
@@ -60,7 +95,7 @@ impl MetaMatcher {
             | (_, Some(lit1), Some(lit2))
                 if lit1 == lit2 =>
             {
-                return Err(MatcherError::ConflictingPatterns);
+                Err(MatcherError::ConflictingPatterns)
             }
 
             (Some(_), Some(_), Some(_)) => {
@@ -74,10 +109,10 @@ impl MetaMatcher {
 
                 if let (&[s], &[t], &[l]) = (&*s, &*t, &*l) {
                     let matcher = ByteMatcher::new(s, t, l)?;
-                    Ok(MetaMatcher::Byte(matcher))
+                    Ok(MetaMatcher::new_byte(matcher, encoding))
                 } else {
                     let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
-                    Ok(MetaMatcher::Bytes(matcher))
+                    Ok(MetaMatcher::new_bytes(matcher, encoding))
                 }
             }
 
@@ -86,85 +121,134 @@ impl MetaMatcher {
                 let hir2 = pattern2.into_hir();
                 let hir3 = pattern3.into_hir();
                 let matcher = RegexMatcher::from_hirs(token1, hir1, token2, hir2, token3, hir3)?;
-                Ok(MetaMatcher::Regex(matcher))
+                Ok(MetaMatcher::new_regex(matcher, encoding))
             }
         }
     }
 
-    pub fn lex<'l, 's>(&'l self, src: &'s [u8]) -> MetaLexer<'l, 's> {
-        match self {
-            MetaMatcher::Byte(inner) => MetaLexer::from(inner.lex(src)),
-            MetaMatcher::Bytes(inner) => MetaLexer::from(inner.lex(src)),
-            MetaMatcher::Regex(inner) => MetaLexer::from(inner.lex(src)),
+    #[inline]
+    pub fn new_byte(matcher: ByteMatcher, encoding: Encoding) -> Self {
+        MetaMatcher {
+            inner: MetaMatcherRepr::Byte(matcher),
+            encoding,
         }
     }
-}
 
-impl From<ByteMatcher> for MetaMatcher {
     #[inline]
-    fn from(matcher: ByteMatcher) -> Self {
-        MetaMatcher::Byte(matcher)
+    pub fn new_char(matcher: CharMatcher, encoding: Encoding) -> Self {
+        if encoding == Encoding::Bytes {
+            panic!("char lexing requires UTF-8");
+        }
+        MetaMatcher {
+            inner: MetaMatcherRepr::Char(matcher),
+            encoding,
+        }
+    }
+
+    #[inline]
+    pub fn new_bytes(matcher: BytesMatcher, encoding: Encoding) -> Self {
+        MetaMatcher {
+            inner: MetaMatcherRepr::Bytes(matcher),
+            encoding,
+        }
+    }
+
+    #[inline]
+    pub fn new_regex(matcher: RegexMatcher, encoding: Encoding) -> Self {
+        MetaMatcher {
+            inner: MetaMatcherRepr::Regex(matcher),
+            encoding,
+        }
+    }
+
+    #[inline]
+    pub fn new_bit(order: DynBitOrder, encoding: Encoding) -> Self {
+        if encoding != Encoding::Bytes {
+            panic!("bit lexing requires bytes");
+        }
+        MetaMatcher {
+            inner: MetaMatcherRepr::Bit(order),
+            encoding,
+        }
+    }
+
+    pub fn lex<'s, 'a>(&'s self, src: &'a [u8]) -> Result<MetaLexer<'s, 'a>, LexerError> {
+        let (src_str, invalid_utf8) = match self.encoding {
+            Encoding::Bytes => (None, None),
+            Encoding::Utf8 => {
+                let src = simdutf8::basic::from_utf8(src)?;
+                (Some(src), None)
+            }
+            Encoding::LazyUtf8 => match simdutf8::compat::from_utf8(src) {
+                Ok(src) => (Some(src), None),
+                Err(err) => {
+                    let valid_prefix =
+                        unsafe { str::from_utf8_unchecked(&src[..err.valid_up_to()]) };
+                    let err_start = err.valid_up_to();
+                    let err_end = err
+                        .error_len()
+                        .map(|len| err_start + len)
+                        .unwrap_or(src.len());
+                    (Some(valid_prefix), Some(Span::from(err_start..err_end)))
+                }
+            },
+        };
+        let src = src_str.map(|s| s.as_bytes()).unwrap_or(src);
+        let inner = match &self.inner {
+            MetaMatcherRepr::Byte(inner) => MetaLexerRepr::Byte(inner.lex(src)),
+            MetaMatcherRepr::Char(inner) => {
+                MetaLexerRepr::Char(inner.lex(src_str.expect("char lexing requires UTF-8")))
+            }
+            MetaMatcherRepr::Bytes(inner) => MetaLexerRepr::Bytes(inner.lex(src)),
+            MetaMatcherRepr::Regex(inner) => MetaLexerRepr::Regex(inner.lex(src)),
+            MetaMatcherRepr::Bit(order) => match order.lex(src) {
+                DynBitLexer::Lsb0(lex) => MetaLexerRepr::BitLsb0(lex),
+                DynBitLexer::Msb0(lex) => MetaLexerRepr::BitMsb0(lex),
+            },
+        };
+        Ok(MetaLexer {
+            inner,
+            invalid_utf8,
+        })
     }
 }
 
-impl From<BytesMatcher> for MetaMatcher {
-    #[inline]
-    fn from(matcher: BytesMatcher) -> Self {
-        MetaMatcher::Bytes(matcher)
-    }
-}
-
-impl From<RegexMatcher> for MetaMatcher {
-    #[inline]
-    fn from(matcher: RegexMatcher) -> Self {
-        MetaMatcher::Regex(matcher)
-    }
-}
-
-impl Lexer for MetaLexer<'_, '_> {}
+impl ExtLexer for MetaLexer<'_, '_> {}
 
 impl Iterator for MetaLexer<'_, '_> {
-    type Item = (Token, Span);
+    type Item = (ExtToken, Span);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            MetaLexer::Byte(inner) => inner.next(),
-            MetaLexer::Bytes(inner) => inner.next(),
-            MetaLexer::Regex(inner) => inner.next(),
-        }
+        let res = match &mut self.inner {
+            MetaLexerRepr::Byte(inner) => inner.next(),
+            MetaLexerRepr::Char(inner) => inner.next(),
+            MetaLexerRepr::Bytes(inner) => inner.next(),
+            MetaLexerRepr::Regex(inner) => inner.next(),
+            MetaLexerRepr::BitLsb0(inner) => inner.next(),
+            MetaLexerRepr::BitMsb0(inner) => inner.next(),
+        };
+        res.map(|(tok, span)| (tok.into(), span)).or_else(|| {
+            self.invalid_utf8
+                .take()
+                .map(|span| (ExtToken::InvalidUtf8, span))
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            MetaLexer::Byte(inner) => inner.size_hint(),
-            MetaLexer::Bytes(inner) => inner.size_hint(),
-            MetaLexer::Regex(inner) => inner.size_hint(),
-        }
+        let (lo, hi) = match &self.inner {
+            MetaLexerRepr::Byte(inner) => inner.size_hint(),
+            MetaLexerRepr::Char(inner) => inner.size_hint(),
+            MetaLexerRepr::Bytes(inner) => inner.size_hint(),
+            MetaLexerRepr::Regex(inner) => inner.size_hint(),
+            MetaLexerRepr::BitLsb0(inner) => inner.size_hint(),
+            MetaLexerRepr::BitMsb0(inner) => inner.size_hint(),
+        };
+        let has_err = self.invalid_utf8.is_some() as usize;
+        (lo + has_err, hi.map(|hi| hi + has_err))
     }
 }
 
 impl FusedIterator for MetaLexer<'_, '_> {}
-
-impl<'a> From<ByteLexer<'a>> for MetaLexer<'static, 'a> {
-    #[inline]
-    fn from(lex: ByteLexer<'a>) -> Self {
-        MetaLexer::Byte(lex)
-    }
-}
-
-impl<'l, 's> From<BytesLexer<'l, 's>> for MetaLexer<'l, 's> {
-    #[inline]
-    fn from(lex: BytesLexer<'l, 's>) -> Self {
-        MetaLexer::Bytes(lex)
-    }
-}
-
-impl<'l, 's> From<RegexLexer<'l, 's>> for MetaLexer<'l, 's> {
-    #[inline]
-    fn from(lex: RegexLexer<'l, 's>) -> Self {
-        MetaLexer::Regex(lex)
-    }
-}
 
 // TODO: how to do UTF-8 vs bytes?
 #[derive(Clone, Debug)]
@@ -212,5 +296,12 @@ impl From<RegexBuildError> for MatcherError {
     #[inline]
     fn from(err: RegexBuildError) -> Self {
         MatcherError::RegexBuild(Box::new(err))
+    }
+}
+
+impl From<simdutf8::basic::Utf8Error> for LexerError {
+    #[inline]
+    fn from(_err: simdutf8::basic::Utf8Error) -> Self {
+        LexerError::InvalidUtf8
     }
 }

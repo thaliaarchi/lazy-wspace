@@ -37,7 +37,7 @@ pub enum ParseError {
     UndefinedLabel(LabelLit),
     #[error("implicit end")]
     ImplicitEnd,
-    #[error("invalid UTF-8")]
+    #[error("invalid UTF-8 sequence")]
     InvalidUtf8,
 }
 
@@ -75,7 +75,7 @@ pub enum EagerError {
     PrintcInvalid(Rc<Integer>),
     #[error("read at EOF")]
     ReadEof,
-    #[error("read invalid UTF-8")]
+    #[error("read invalid UTF-8 sequence")]
     ReadInvalidUtf8,
 }
 

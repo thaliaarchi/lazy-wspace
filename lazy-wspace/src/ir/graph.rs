@@ -107,9 +107,9 @@ impl Graph {
     }
 
     #[inline]
-    pub fn as_display<'s, 'a>(&'s self, cfg: &'a Cfg<'_>) -> impl Display + 'a
+    pub fn as_display<'s, 'a>(&'s self, cfg: &'a Cfg<'_>) -> impl Display + 's
     where
-        's: 'a,
+        'a: 's,
     {
         GraphDisplay { graph: self, cfg }
     }

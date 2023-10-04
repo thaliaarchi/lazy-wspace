@@ -11,10 +11,10 @@ use crate::ws::lex::{Lexer, Span};
 use crate::ws::Token;
 
 #[derive(Clone, Debug)]
-pub struct BitLexer<'a, T = u8, O = Lsb0>
+pub struct BitLexer<'a, O = Lsb0, T = u8>
 where
-    T: BitStore,
     O: BitOrder,
+    T: BitStore,
 {
     iter: BitIter<'a, T, O>,
     len: usize,
@@ -22,8 +22,8 @@ where
 
 #[derive(Clone, Debug)]
 pub enum DynBitLexer<'a, T: BitStore = u8> {
-    Lsb0(BitLexer<'a, T, Lsb0>),
-    Msb0(BitLexer<'a, T, Msb0>),
+    Lsb0(BitLexer<'a, Lsb0, T>),
+    Msb0(BitLexer<'a, Msb0, T>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -40,14 +40,14 @@ impl DynBitOrder {
     #[inline]
     pub fn lex<'a, T: BitStore>(&self, src: &'a [T]) -> DynBitLexer<'a, T> {
         match self {
-            DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<T, Lsb0>::new(src)),
-            DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<T, Msb0>::new(src)),
-            DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<T, LocalBits>::new(src)),
+            DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<Lsb0, T>::new(src)),
+            DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<Msb0, T>::new(src)),
+            DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<LocalBits, T>::new(src)),
         }
     }
 }
 
-impl<'a, T: BitStore, O: BitOrder> BitLexer<'a, T, O> {
+impl<'a, O: BitOrder, T: BitStore> BitLexer<'a, O, T> {
     #[inline]
     pub fn new(src: &'a [T]) -> Self {
         let mut bits = BitSlice::from_slice(src);
@@ -60,7 +60,7 @@ impl<'a, T: BitStore, O: BitOrder> BitLexer<'a, T, O> {
     }
 }
 
-impl<'a, T: BitStore, O: BitOrder> From<&'a BitSlice<T, O>> for BitLexer<'a, T, O> {
+impl<'a, O: BitOrder, T: BitStore> From<&'a BitSlice<T, O>> for BitLexer<'a, O, T> {
     #[inline]
     fn from(bits: &'a BitSlice<T, O>) -> Self {
         BitLexer {
@@ -70,9 +70,9 @@ impl<'a, T: BitStore, O: BitOrder> From<&'a BitSlice<T, O>> for BitLexer<'a, T, 
     }
 }
 
-impl<T: BitStore, O: BitOrder> Lexer for BitLexer<'_, T, O> {}
+impl<O: BitOrder, T: BitStore> Lexer for BitLexer<'_, O, T> {}
 
-impl<T: BitStore, O: BitOrder> Iterator for BitLexer<'_, T, O> {
+impl<O: BitOrder, T: BitStore> Iterator for BitLexer<'_, O, T> {
     type Item = (Token, Span);
 
     #[inline]
@@ -99,7 +99,7 @@ impl<T: BitStore, O: BitOrder> Iterator for BitLexer<'_, T, O> {
     }
 }
 
-impl<T: BitStore, O: BitOrder> FusedIterator for BitLexer<'_, T, O> {}
+impl<O: BitOrder, T: BitStore> FusedIterator for BitLexer<'_, O, T> {}
 
 impl<T: BitStore> Lexer for DynBitLexer<'_, T> {}
 
@@ -125,16 +125,16 @@ impl<T: BitStore> Iterator for DynBitLexer<'_, T> {
 
 impl<T: BitStore> FusedIterator for DynBitLexer<'_, T> {}
 
-impl<'a, T: BitStore> From<BitLexer<'a, T, Lsb0>> for DynBitLexer<'a, T> {
+impl<'a, T: BitStore> From<BitLexer<'a, Lsb0, T>> for DynBitLexer<'a, T> {
     #[inline]
-    fn from(lex: BitLexer<'a, T, Lsb0>) -> Self {
+    fn from(lex: BitLexer<'a, Lsb0, T>) -> Self {
         DynBitLexer::Lsb0(lex)
     }
 }
 
-impl<'a, T: BitStore> From<BitLexer<'a, T, Msb0>> for DynBitLexer<'a, T> {
+impl<'a, T: BitStore> From<BitLexer<'a, Msb0, T>> for DynBitLexer<'a, T> {
     #[inline]
-    fn from(lex: BitLexer<'a, T, Msb0>) -> Self {
+    fn from(lex: BitLexer<'a, Msb0, T>) -> Self {
         DynBitLexer::Msb0(lex)
     }
 }
