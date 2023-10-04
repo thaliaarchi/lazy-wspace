@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use rug::Integer;
 
-use crate::source::{FileId, Span};
+use crate::source::{FileId, FileSpan};
 
 // TODO:
 // - Interning: The AST should not depend on slices of the source, because that
@@ -154,7 +154,7 @@ pub enum Opcode {
 pub struct Word {
     pub text: String,
     pub format: WordFormat,
-    pub span: Span,
+    pub span: FileSpan,
 }
 
 /// Format of a word.
@@ -175,7 +175,7 @@ pub enum WordFormat {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Arg<T> {
     pub value: T,
-    pub space_before: Option<Span>,
+    pub space_before: Option<FileSpan>,
 }
 
 /// Integer literal or variable reference.

@@ -1,10 +1,12 @@
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{Index, IndexMut, Range};
 
+use crate::source::{FileId, FileSpan};
+
 /// A range of byte offsets in a contiguous region of bytes.
 ///
 /// `Span` is essentially [`Range<usize>`], but with `Copy`.
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
 pub struct Span {
     /// The start byte offset of the span, inclusive.
     pub start: usize,
@@ -13,28 +15,29 @@ pub struct Span {
 }
 
 impl Span {
-    /// Returns the length of this span.
     #[inline]
     pub fn len(&self) -> usize {
         self.end.saturating_sub(self.start)
     }
 
-    /// Returns whether this span is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.start >= self.end
     }
 
-    /// Returns true when the given offset is contained within this span.
     #[inline]
     pub fn contains(&self, offset: usize) -> bool {
         self.start <= offset && offset < self.end
     }
 
-    /// Returns this span as a range.
     #[inline]
     pub fn range(&self) -> Range<usize> {
         Range::from(*self)
+    }
+
+    #[inline]
+    pub fn with_file(&self, file: FileId) -> FileSpan {
+        FileSpan::new(file, self.start, self.len())
     }
 }
 

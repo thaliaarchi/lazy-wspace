@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use thiserror::Error;
 
-use crate::source::{FileId, Span};
+use crate::source::{FileId, FileSpan};
 use crate::wsa::burghard::{Lexer, TokenKind};
 use crate::wsa::{Word, WordFormat};
 
@@ -18,15 +18,15 @@ pub struct LineParser<'a> {
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum ParseError {
     #[error("unterminated string at {0:?}")]
-    UnterminatedString(Span),
+    UnterminatedString(FileSpan),
     #[error("unopened block comment at {0:?}")]
-    UnopenedBlockComment(Span),
+    UnopenedBlockComment(FileSpan),
     #[error("unclosed block comment at {0:?}")]
-    UnclosedBlockComment(Span),
+    UnclosedBlockComment(FileSpan),
     #[error("block comment between words concatenated {0:?} and {1:?}")]
-    ConcatenatedWords(Span, Span),
+    ConcatenatedWords(FileSpan, FileSpan),
     #[error("missing space between {0:?} and {1:?}")]
-    MissingSpace(Span, Span),
+    MissingSpace(FileSpan, FileSpan),
 }
 
 impl<'a> LineParser<'a> {
@@ -47,7 +47,7 @@ impl<'a> LineParser<'a> {
         let mut adjacent = None;
 
         while let Some(tok) = self.lex.next() {
-            let span = Span::new(self.file, tok.start, tok.end - tok.start);
+            let span = FileSpan::new(self.file, tok.start, tok.end - tok.start);
 
             let word = match tok.kind {
                 TokenKind::Word => {
@@ -60,7 +60,7 @@ impl<'a> LineParser<'a> {
                                 adjacent = Some(span);
                                 last.text += tok.text;
                                 last.format = WordFormat::Spliced;
-                                last.span = Span::new(
+                                last.span = FileSpan::new(
                                     self.file,
                                     last.span.start(),
                                     tok.end - last.span.start(),
