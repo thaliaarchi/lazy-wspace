@@ -97,23 +97,28 @@ impl FileSpan {
         &files[self.file].source_text[self.range()]
     }
 
-    /// Returns the line-column positions (both inclusive) for this span in the
-    /// file.
-    pub fn line_column(&self, files: &FileSet) -> (LineColumn, LineColumn) {
+    /// Returns the line-column positions for the start (inclusive) and end
+    /// (exclusive) of this span in the file.
+    pub fn line_columns(&self, files: &FileSet) -> (LineColumn, LineColumn) {
         let file = self.file_info(files);
         debug_assert!(
             self.start() <= file.len() && self.end() <= file.len(),
             "out of bounds"
         );
         let start = file.line_column(self.start());
-        let end = if !self.is_empty() {
-            let (offset, _) = file.source_text[..self.end()]
-                .char_indices()
-                .last()
-                .unwrap();
-            file.line_column(offset)
-        } else {
+        let end = if self.is_empty() {
             start
+        } else if !file
+            .line_starts
+            .get(start.line)
+            .is_some_and(|&line_end| self.end() as u32 >= line_end)
+        {
+            // Start and end offsets are on the same line
+            let chars = file.source_text[self.range()].chars().count();
+            LineColumn::new(start.line, start.column + chars)
+        } else {
+            // Slower general case
+            file.line_column(self.end())
         };
         (start, end)
     }
@@ -232,6 +237,7 @@ impl FileInfo {
         self.source_text.len()
     }
 
+    #[inline]
     pub fn line_column(&self, offset: usize) -> LineColumn {
         assert!(offset <= self.len(), "offset out of bounds");
         let line = self.line_starts.partition_point(|&l| l <= offset as u32);
@@ -248,20 +254,24 @@ fn line_column() {
     let f = files.insert("empty".into(), "".into());
     assert_eq!(
         (LineColumn::new(1, 1), LineColumn::new(1, 1)),
-        FileSpan::from_span(f, 0..0).line_column(&files)
+        FileSpan::from_span(f, 0..0).line_columns(&files)
     );
 
     let f = files.insert("utf-8".into(), "\nsüß\n".into());
     assert_eq!(
-        (LineColumn::new(1, 1), LineColumn::new(1, 1)),
-        FileSpan::from_span(f, 0..1).line_column(&files)
+        (LineColumn::new(1, 1), LineColumn::new(2, 1)),
+        FileSpan::from_span(f, 0..1).line_columns(&files)
     );
     assert_eq!(
         (LineColumn::new(2, 1), LineColumn::new(2, 4)),
-        FileSpan::from_span(f, 1..7).line_column(&files)
+        FileSpan::from_span(f, 1..6).line_columns(&files)
     );
     assert_eq!(
         (LineColumn::new(3, 1), LineColumn::new(3, 1)),
-        FileSpan::from_span(f, 7..7).line_column(&files)
+        FileSpan::from_span(f, 7..7).line_columns(&files)
+    );
+    assert_eq!(
+        (LineColumn::new(1, 1), LineColumn::new(3, 1)),
+        FileSpan::from_span(f, 0..7).line_columns(&files)
     );
 }
