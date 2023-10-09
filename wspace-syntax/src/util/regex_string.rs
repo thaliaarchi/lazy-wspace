@@ -5,12 +5,13 @@
 //! ```bnf
 //! string_lit     ::= "\"" char_or_byte* "\""
 //! char_or_byte   ::= unicode_char | unicode_escape | byte_escape | named_escape
-//! unicode_char   ::= /* An arbitrary Unicode codepoint, except for LF or CR */
-//! unicode_escape ::= ("\\u" | "\\U") "{" hex_digit{1,6} "}"
-//!                  | "\\u" hex_digit{4}
+//! unicode_char   ::= /* An arbitrary Unicode codepoint, except for LF, CR, or " */
+//! unicode_escape ::= "\\u" hex_digit{4}
 //!                  | "\\U" hex_digit{8}
+//!                  | "\\u" "{" hex_digit+ "}"
+//!                  | "\\U" "{" hex_digit+ "}"
 //! byte_escape    ::= "\\x" hex_digit{2}
-//! named_escape   ::= "\\" ("a" | "f" | "t" | "n" | "r" | "v")
+//! named_escape   ::= "\\" ("a" | "t" | "n" | "v" | "f" | "r" | "\"" | "'" | "\\")
 //! hex_digit      ::= [0-9 a-f A-F]
 //! ```
 //!
@@ -26,122 +27,232 @@
 //!
 //! # Differences from `regex_syntax`
 //!
+//! - `\xhh` escapes must be ASCII in UTF-8 strings
+//! - No `\x{…}` escapes
 //! - No superfluous escapes are allowed (as in [`regex_syntax::is_escapeable_character`])
+
+// Derived from [unescape.rs](https://github.com/rust-lang/rust/blob/master/compiler/rustc_lexer/src/unescape.rs)
+// in rustc_lexer.
 
 use std::ops::Range;
 use std::str::Chars;
 
-/// Errors and warnings that can occur during string unescaping.
-#[derive(Debug, PartialEq, Eq)]
-pub enum EscapeError {
-    /// Escaped `\` character without continuation.
-    LoneSlash,
-    /// Invalid escape character (e.g., `\z`).
-    InvalidEscape,
-    /// Raw `\n` encountered.
-    BareLineFeed,
-    /// Raw `\r` encountered.
-    BareCarriageReturn,
-    /// Unescaped character that was expected to be escaped (e.g., `"`).
-    EscapeOnlyChar,
+use thiserror::Error;
 
-    /// Numeric character escape is too short (e.g., `\x1`).
-    TooShortHexEscape,
-    /// Invalid character in numeric escape (e.g., `\xz`).
-    InvalidCharInHexEscape,
-
-    /// `\u` not followed by `{`.
-    NoBraceInUnicodeEscape,
-    /// Non-hexadecimal value in `\u{…}`.
-    InvalidCharInUnicodeEscape,
-    /// Unicode escape `\u{}` without digits.
-    EmptyUnicodeEscape,
-    /// No closing brace in `\u{…}` (e.g., `\u{12`).
-    UnclosedUnicodeEscape,
-    /// Invalid in-bound unicode character code (e.g., `\u{DFFF}`).
-    LoneSurrogateUnicodeEscape,
-    /// Out of bounds unicode character code (e.g., `\u{FFFFFF}`).
-    OutOfRangeUnicodeEscape,
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("{kind} at {span:?}")]
+pub struct EscapeError {
+    pub kind: EscapeErrorKind,
+    pub span: Range<usize>,
 }
 
-pub fn unescape_string<F, T: From<u8> + From<char>>(src: &str, callback: &mut F)
+/// Errors that can occur during string unescaping.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum EscapeErrorKind {
+    #[error("bare line feed (`\\n`)")]
+    BareLineFeed,
+    #[error("bare carriage return (`\\r`)")]
+    BareCarriageReturn,
+    #[error("bare double quote (`\"`)")]
+    BareDoubleQuote,
+    #[error("lone `\\` without escape sequence")]
+    LoneSlash,
+    #[error("invalid escape character")]
+    InvalidEscape,
+
+    #[error("numeric escape is too short")]
+    TooShortHexEscape,
+    #[error("invalid character in numeric escape")]
+    InvalidCharInHexEscape,
+    #[error("braced numeric escape without digits")]
+    EmptyBraceEscape,
+    #[error("missing closing brace in numeric escape")]
+    UnclosedBraceEscape,
+    #[error("invalid Unicode code point (surrogate half)")]
+    LoneSurrogateUnicodeEscape,
+    #[error("invalid Unicode code point (out of range)")]
+    OutOfRangeUnicodeEscape,
+    #[error("non-ASCII byte escape")]
+    NonAsciiByte,
+}
+
+pub fn unescape_string(src: &str) -> Result<String, EscapeError> {
+    let mut unescaped = String::new();
+    scan_string(src, &mut |res, _span| {
+        match res? {
+            ByteOrChar::Byte(b) if b >= 0x80 => return Err(EscapeErrorKind::NonAsciiByte),
+            ByteOrChar::Byte(b) => unescaped.push(b as char),
+            ByteOrChar::Char(ch) => unescaped.push(ch),
+        }
+        Ok(())
+    })?;
+    Ok(unescaped)
+}
+
+pub fn unescape_byte_string(src: &str) -> Result<Vec<u8>, EscapeError> {
+    let mut unescaped = Vec::new();
+    scan_string(src, &mut |res, _span| {
+        match res? {
+            ByteOrChar::Byte(b) => unescaped.push(b),
+            ByteOrChar::Char(ch) => match ch.len_utf8() {
+                1 => unescaped.push(ch as u8),
+                _ => unescaped.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+            },
+        }
+        Ok(())
+    })?;
+    Ok(unescaped)
+}
+
+enum ByteOrChar {
+    Byte(u8),
+    Char(char),
+}
+
+impl From<u8> for ByteOrChar {
+    #[inline]
+    fn from(b: u8) -> Self {
+        ByteOrChar::Byte(b)
+    }
+}
+
+impl From<char> for ByteOrChar {
+    #[inline]
+    fn from(ch: char) -> Self {
+        ByteOrChar::Char(ch)
+    }
+}
+
+#[inline]
+pub fn scan_string<F, T: From<u8> + From<char>>(
+    src: &str,
+    callback: &mut F,
+) -> Result<(), EscapeError>
 where
-    F: FnMut(Range<usize>, Result<T, EscapeError>),
+    F: FnMut(Result<T, EscapeErrorKind>, Range<usize>) -> Result<(), EscapeErrorKind>,
 {
     let mut chars = src.chars();
     let mut start = 0;
     while let Some(c) = chars.next() {
         let res = match c {
             '\\' => scan_escape(&mut chars),
-            '\n' => Err(EscapeError::BareLineFeed),
-            '\r' => Err(EscapeError::BareCarriageReturn),
-            '"' => Err(EscapeError::EscapeOnlyChar),
+            '\n' => Err(EscapeErrorKind::BareLineFeed),
+            '\r' => Err(EscapeErrorKind::BareCarriageReturn),
+            '"' => Err(EscapeErrorKind::BareDoubleQuote),
             _ => Ok(c.into()),
         };
         let end = src.len() - chars.as_str().len();
-        callback(start..end, res);
+        if let Err(err) = callback(res, start..end) {
+            return Err(EscapeError {
+                kind: err,
+                span: start..end,
+            });
+        }
         start = end;
     }
+    Ok(())
 }
 
-fn scan_escape<T: From<u8> + From<char>>(chars: &mut Chars<'_>) -> Result<T, EscapeError> {
-    // Previous character was '\\', unescape what follows.
-    let res = match chars.next().ok_or(EscapeError::LoneSlash)? {
-        '"' => b'"',
+fn scan_escape<T: From<u8> + From<char>>(chars: &mut Chars<'_>) -> Result<T, EscapeErrorKind> {
+    let res = match chars.next().ok_or(EscapeErrorKind::LoneSlash)? {
         'a' => b'\x07',
-        'f' => b'\x0C',
         't' => b'\t',
         'n' => b'\n',
-        'r' => b'\r',
         'v' => b'\x0B',
-        '\\' => b'\\',
+        'f' => b'\x0C',
+        'r' => b'\r',
+        '"' => b'"',
         '\'' => b'\'',
-        // TODO: range allowed for regex for x, u, and U?
-        'x' => {
-            // Parse hexadecimal character code.
-            let hi = chars.next().ok_or(EscapeError::TooShortHexEscape)?;
-            let hi = hi.to_digit(16).ok_or(EscapeError::InvalidCharInHexEscape)?;
-            let lo = chars.next().ok_or(EscapeError::TooShortHexEscape)?;
-            let lo = lo.to_digit(16).ok_or(EscapeError::InvalidCharInHexEscape)?;
-            (hi * 16 + lo) as u8
-        }
-        'u' => return scan_unicode_brace(chars).map(Into::into),
-        'U' => todo!(),
-        _ => return Err(EscapeError::InvalidEscape),
+        '\\' => b'\\',
+        'x' => scan_hex_digits(chars, 2)? as u8,
+        'u' => return scan_unicode(chars, 4).map(Into::into),
+        'U' => return scan_unicode(chars, 8).map(Into::into),
+        _ => return Err(EscapeErrorKind::InvalidEscape),
     };
     Ok(res.into())
 }
 
-fn scan_unicode_brace(chars: &mut Chars<'_>) -> Result<char, EscapeError> {
-    // We've parsed '\u', now we have to parse '{..}'.
-
-    if chars.next() != Some('{') {
-        return Err(EscapeError::NoBraceInUnicodeEscape);
+fn scan_hex_digits(chars: &mut Chars<'_>, len: usize) -> Result<u32, EscapeErrorKind> {
+    let mut value = 0u32;
+    for _ in 0..len {
+        let digit = chars.next().ok_or(EscapeErrorKind::TooShortHexEscape)?;
+        let digit = digit
+            .to_digit(16)
+            .ok_or(EscapeErrorKind::InvalidCharInHexEscape)?;
+        value = value.saturating_mul(16).saturating_add(digit);
     }
+    Ok(value)
+}
+
+fn scan_unicode(chars: &mut Chars<'_>, len: usize) -> Result<char, EscapeErrorKind> {
+    let value = if chars.clone().next() == Some('{') {
+        scan_unicode_brace(chars)
+    } else {
+        scan_hex_digits(chars, len)
+    }?;
+    char::from_u32(value).ok_or_else(|| {
+        if value > 0x10FFFF {
+            EscapeErrorKind::OutOfRangeUnicodeEscape
+        } else {
+            EscapeErrorKind::LoneSurrogateUnicodeEscape
+        }
+    })
+}
+
+fn scan_unicode_brace(chars: &mut Chars<'_>) -> Result<u32, EscapeErrorKind> {
+    assert!(chars.next() == Some('{'));
     let mut value = 0u32;
     let mut empty = true;
     loop {
         match chars.next() {
-            None => return Err(EscapeError::UnclosedUnicodeEscape),
             Some('}') => {
                 if empty {
-                    return Err(EscapeError::EmptyUnicodeEscape);
+                    return Err(EscapeErrorKind::EmptyBraceEscape);
                 }
-                return char::from_u32(value).ok_or_else(|| {
-                    if value > 0x10FFFF {
-                        EscapeError::OutOfRangeUnicodeEscape
-                    } else {
-                        EscapeError::LoneSurrogateUnicodeEscape
-                    }
-                });
+                break;
             }
             Some(c) => {
                 let digit: u32 = c
                     .to_digit(16)
-                    .ok_or(EscapeError::InvalidCharInUnicodeEscape)?;
+                    .ok_or(EscapeErrorKind::InvalidCharInHexEscape)?;
                 value = value.saturating_mul(16).saturating_add(digit);
                 empty = false;
             }
+            None => return Err(EscapeErrorKind::UnclosedBraceEscape),
         };
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use regex::{bytes::Regex as BytesRegex, Regex};
+
+    use super::*;
+
+    #[test]
+    fn unescape_hex() {
+        assert_eq!(
+            unescape_string(r"\xff"),
+            Err(EscapeError {
+                kind: EscapeErrorKind::NonAsciiByte,
+                span: 0..4,
+            }),
+        );
+        assert_eq!(unescape_byte_string(r"\xff"), Ok(b"\xff".to_vec()));
+    }
+
+    #[test]
+    fn regex_hex_semantics() {
+        let re = Regex::new(r"\xff").unwrap();
+        assert!(re.is_match("\u{ff}"));
+        let re = BytesRegex::new(r"\xff").unwrap();
+        assert!(re.is_match("\u{ff}".as_bytes()));
+        assert!(!re.is_match(b"\xff"));
+
+        assert!(Regex::new(r"(?-u)\xff").is_err());
+        let re = BytesRegex::new(r"(?-u)\xff").unwrap();
+        assert!(!re.is_match("\u{ff}".as_bytes()));
+        assert!(re.is_match(b"\xff"));
     }
 }
