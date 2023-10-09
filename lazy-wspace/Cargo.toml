@@ -9,6 +9,7 @@ repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "MPL-2.0"
 keywords = ["whitespace", "compiler", "interpreter"]
 categories = ["compilers"]
+default-run = "compile"
 
 [dependencies]
 bitvec = "1.0"
