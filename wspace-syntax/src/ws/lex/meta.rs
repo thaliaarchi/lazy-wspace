@@ -1,12 +1,13 @@
-use std::borrow::Cow;
 use std::iter::FusedIterator;
 use std::str;
+use std::sync::OnceLock;
 
 use bitvec::order::{Lsb0, Msb0};
-use regex_automata::meta::BuildError as RegexBuildError;
+use regex::{Captures, Regex};
 use regex_syntax::hir::{Hir, HirKind};
 use thiserror::Error;
 
+use crate::util::regex_string::{unescape_byte_string, unescape_string, EscapeError};
 use crate::ws::lex::{
     BitLexer, ByteLexer, ByteMatcher, BytesLexer, BytesMatcher, CharLexer, CharMatcher,
     DynBitLexer, DynBitOrder, ExtLexer, RegexLexer, RegexMatcher, Span,
@@ -46,22 +47,41 @@ enum MetaLexerRepr<'s, 'a> {
     BitMsb0(BitLexer<'a, Msb0>),
 }
 
+#[derive(Clone, Debug)]
+pub enum Pattern {
+    Literal(Vec<u8>),
+    Regex(Hir),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Encoding {
-    Bytes,
     Utf8,
     LazyUtf8,
+    Bytes,
 }
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum MatcherError {
+    #[error("invalid syntax for matcher")]
+    ParseMatcher,
+    #[error("invalid token")]
+    ParseToken,
+    #[error("invalid syntax for pattern")]
+    ParsePattern,
+    #[error("parsing literal pattern: {0}")]
+    ParseLiteralPattern(#[from] EscapeError),
+    #[error("parsing regex pattern: {0}")]
+    ParseRegexPattern(#[from] regex_syntax::Error),
+    #[error("invalid encoding")]
+    ParseEncoding,
+
     #[error("multiple patterns defined for token")]
     RepeatedToken,
     #[error("conflicting patterns")]
     ConflictingPatterns,
     #[error(transparent)]
-    RegexBuild(Box<RegexBuildError>),
+    BuildRegex(Box<regex_automata::meta::BuildError>),
 }
 
 #[derive(Debug, Error)]
@@ -71,14 +91,91 @@ pub enum LexerError {
     InvalidUtf8,
 }
 
+static META_RE: OnceLock<Regex> = OnceLock::new();
+
 impl MetaMatcher {
-    pub fn new<'a>(
+    pub fn new(patterns: &str) -> Result<MetaMatcher, MatcherError> {
+        let re = META_RE.get_or_init(|| {
+            Regex::new(
+                r#"(?x)
+                ^
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s*
+                (?:, \s*(\w+)\w* )?
+                $
+                "#,
+            )
+            .unwrap()
+        });
+
+        fn get_cap<'a>(caps: &Captures<'a>, index: usize) -> Result<&'a str, MatcherError> {
+            caps.get(index)
+                .map(|m| m.as_str())
+                .ok_or(MatcherError::ParseMatcher)
+        }
+        fn parse_token(s: &str) -> Result<Token, MatcherError> {
+            match s {
+                "S" => Ok(Token::S),
+                "T" => Ok(Token::T),
+                "L" => Ok(Token::L),
+                _ => Err(MatcherError::ParseToken),
+            }
+        }
+        fn parse_pattern(s: &str, enc: Encoding) -> Result<Pattern, MatcherError> {
+            if s.len() >= 2 {
+                let b = s.as_bytes();
+                if b[0] == b'"' && b[b.len() - 1] == b'"' {
+                    let s = &s[1..s.len() - 1];
+                    let lit = match enc {
+                        Encoding::Bytes => unescape_byte_string(s)?,
+                        Encoding::Utf8 | Encoding::LazyUtf8 => unescape_string(s)?.into_bytes(),
+                    };
+                    return Ok(Pattern::Literal(lit));
+                }
+                if b[0] == b'/' && b[b.len() - 1] == b'/' {
+                    let pattern = &s[1..s.len() - 1];
+                    let utf8 = match enc {
+                        Encoding::Utf8 | Encoding::LazyUtf8 => true,
+                        Encoding::Bytes => false,
+                    };
+                    let hir = regex_automata::util::syntax::parse_with(
+                        pattern,
+                        &RegexMatcher::syntax_config(utf8),
+                    )?;
+                    return Ok(Pattern::Regex(hir));
+                }
+            }
+            Err(MatcherError::ParsePattern)
+        }
+
+        let caps = re.captures(patterns).ok_or(MatcherError::ParseMatcher)?;
+        let enc = match get_cap(&caps, 7) {
+            Ok(s) => match s {
+                "utf8" => Encoding::Utf8,
+                "lazy-utf8" => Encoding::LazyUtf8,
+                "bytes" => Encoding::Bytes,
+                _ => return Err(MatcherError::ParseEncoding),
+            },
+            Err(_) => Encoding::Utf8,
+        };
+        let tok1 = get_cap(&caps, 1).and_then(parse_token)?;
+        let pattern1 = get_cap(&caps, 2).and_then(|s| parse_pattern(s, enc))?;
+        let tok2 = get_cap(&caps, 3).and_then(parse_token)?;
+        let pattern2 = get_cap(&caps, 4).and_then(|s| parse_pattern(s, enc))?;
+        let tok3 = get_cap(&caps, 5).and_then(parse_token)?;
+        let pattern3 = get_cap(&caps, 6).and_then(|s| parse_pattern(s, enc))?;
+
+        MetaMatcher::from_patterns(tok1, pattern1, tok2, pattern2, tok3, pattern3, enc)
+    }
+
+    pub fn from_patterns(
         token1: Token,
-        pattern1: Pattern<'a>,
+        pattern1: Pattern,
         token2: Token,
-        pattern2: Pattern<'a>,
+        pattern2: Pattern,
         token3: Token,
-        pattern3: Pattern<'a>,
+        pattern3: Pattern,
         encoding: Encoding,
     ) -> Result<MetaMatcher, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
@@ -109,25 +206,30 @@ impl MetaMatcher {
 
                 if let (&[s], &[t], &[l]) = (&*s, &*t, &*l) {
                     let matcher = ByteMatcher::new(s, t, l)?;
-                    Ok(MetaMatcher::new_byte(matcher, encoding))
+                    Ok(MetaMatcher::from_byte(matcher, encoding))
                 } else {
                     let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
-                    Ok(MetaMatcher::new_bytes(matcher, encoding))
+                    Ok(MetaMatcher::from_bytes(matcher, encoding))
                 }
             }
 
             _ => {
-                let hir1 = pattern1.into_hir();
-                let hir2 = pattern2.into_hir();
-                let hir3 = pattern3.into_hir();
-                let matcher = RegexMatcher::from_hirs(token1, hir1, token2, hir2, token3, hir3)?;
-                Ok(MetaMatcher::new_regex(matcher, encoding))
+                let matcher = RegexMatcher::from_hirs(
+                    token1,
+                    pattern1.into_hir(),
+                    token2,
+                    pattern2.into_hir(),
+                    token3,
+                    pattern3.into_hir(),
+                    encoding.is_utf8(),
+                )?;
+                Ok(MetaMatcher::from_regex(matcher, encoding))
             }
         }
     }
 
     #[inline]
-    pub fn new_byte(matcher: ByteMatcher, encoding: Encoding) -> Self {
+    pub fn from_byte(matcher: ByteMatcher, encoding: Encoding) -> Self {
         MetaMatcher {
             inner: MetaMatcherRepr::Byte(matcher),
             encoding,
@@ -135,7 +237,7 @@ impl MetaMatcher {
     }
 
     #[inline]
-    pub fn new_char(matcher: CharMatcher, encoding: Encoding) -> Self {
+    pub fn from_char(matcher: CharMatcher, encoding: Encoding) -> Self {
         if encoding == Encoding::Bytes {
             panic!("char lexing requires UTF-8");
         }
@@ -146,7 +248,7 @@ impl MetaMatcher {
     }
 
     #[inline]
-    pub fn new_bytes(matcher: BytesMatcher, encoding: Encoding) -> Self {
+    pub fn from_bytes(matcher: BytesMatcher, encoding: Encoding) -> Self {
         MetaMatcher {
             inner: MetaMatcherRepr::Bytes(matcher),
             encoding,
@@ -154,7 +256,7 @@ impl MetaMatcher {
     }
 
     #[inline]
-    pub fn new_regex(matcher: RegexMatcher, encoding: Encoding) -> Self {
+    pub fn from_regex(matcher: RegexMatcher, encoding: Encoding) -> Self {
         MetaMatcher {
             inner: MetaMatcherRepr::Regex(matcher),
             encoding,
@@ -162,7 +264,7 @@ impl MetaMatcher {
     }
 
     #[inline]
-    pub fn new_bit(order: DynBitOrder, encoding: Encoding) -> Self {
+    pub fn from_bit(order: DynBitOrder, encoding: Encoding) -> Self {
         if encoding != Encoding::Bytes {
             panic!("bit lexing requires bytes");
         }
@@ -250,14 +352,7 @@ impl Iterator for MetaLexer<'_, '_> {
 
 impl FusedIterator for MetaLexer<'_, '_> {}
 
-// TODO: how to do UTF-8 vs bytes?
-#[derive(Clone, Debug)]
-pub enum Pattern<'a> {
-    Literal(Cow<'a, [u8]>),
-    Regex(Hir),
-}
-
-impl<'a> Pattern<'a> {
+impl Pattern {
     fn as_literal(&self) -> Option<&[u8]> {
         match self {
             Pattern::Literal(lit) => Some(lit.as_ref()),
@@ -268,7 +363,7 @@ impl<'a> Pattern<'a> {
         }
     }
 
-    fn try_into_literal(self) -> Option<Cow<'a, [u8]>> {
+    fn try_into_literal(self) -> Option<Vec<u8>> {
         match self {
             Pattern::Literal(lit) => Some(lit),
             Pattern::Regex(hir) => match hir.kind() {
@@ -286,16 +381,23 @@ impl<'a> Pattern<'a> {
 
     fn into_hir(self) -> Hir {
         match self {
-            Pattern::Literal(lit) => Hir::literal(lit.into_owned()),
+            Pattern::Literal(lit) => Hir::literal(lit),
             Pattern::Regex(hir) => hir,
         }
     }
 }
 
-impl From<RegexBuildError> for MatcherError {
+impl Encoding {
     #[inline]
-    fn from(err: RegexBuildError) -> Self {
-        MatcherError::RegexBuild(Box::new(err))
+    pub fn is_utf8(&self) -> bool {
+        matches!(self, Encoding::Utf8 | Encoding::LazyUtf8)
+    }
+}
+
+impl From<regex_automata::meta::BuildError> for MatcherError {
+    #[inline]
+    fn from(err: regex_automata::meta::BuildError) -> Self {
+        MatcherError::BuildRegex(Box::new(err))
     }
 }
 

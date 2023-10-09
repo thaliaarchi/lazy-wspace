@@ -1,9 +1,10 @@
 use std::iter::FusedIterator;
 
 use regex_automata::{
-    meta::{Builder as RegexBuilder, FindMatches, Regex},
+    meta::{Builder as RegexBuilder, Config as MetaConfig, FindMatches, Regex},
     nfa::thompson::WhichCaptures,
-    util::syntax,
+    util::syntax::Config as SyntaxConfig,
+    MatchKind,
 };
 use regex_syntax::hir::Hir;
 
@@ -33,12 +34,13 @@ impl RegexMatcher {
         pattern2: &str,
         token3: Token,
         pattern3: &str,
+        utf8: bool,
     ) -> Result<Self, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
             return Err(MatcherError::RepeatedToken);
         }
         Ok(RegexMatcher {
-            re: Self::builder().build_many(&[pattern1, pattern2, pattern3])?,
+            re: Self::builder(utf8).build_many(&[pattern1, pattern2, pattern3])?,
             tokens: [token1, token2, token3],
         })
     }
@@ -51,20 +53,29 @@ impl RegexMatcher {
         hir2: Hir,
         token3: Token,
         hir3: Hir,
+        utf8: bool,
     ) -> Result<Self, MatcherError> {
         if token1 == token2 || token1 == token3 || token2 == token3 {
             return Err(MatcherError::RepeatedToken);
         }
         Ok(RegexMatcher {
-            re: Self::builder().build_many_from_hir(&[hir1, hir2, hir3])?,
+            re: Self::builder(utf8).build_many_from_hir(&[hir1, hir2, hir3])?,
             tokens: [token1, token2, token3],
         })
     }
 
-    fn builder() -> RegexBuilder {
+    pub(crate) fn syntax_config(utf8: bool) -> SyntaxConfig {
+        SyntaxConfig::new().utf8(utf8).multi_line(true)
+    }
+
+    fn builder(utf8: bool) -> RegexBuilder {
+        let metac = MetaConfig::new()
+            .utf8_empty(utf8)
+            .match_kind(MatchKind::LeftmostFirst)
+            .which_captures(WhichCaptures::Implicit);
         let mut builder = Regex::builder();
-        builder.syntax(syntax::Config::new().multi_line(true));
-        builder.configure(Regex::config().which_captures(WhichCaptures::Implicit));
+        builder.syntax(Self::syntax_config(utf8));
+        builder.configure(metac);
         builder
     }
 

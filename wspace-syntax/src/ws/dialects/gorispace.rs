@@ -2,7 +2,6 @@ use crate::ws::lex::RegexMatcher;
 use crate::ws::Token;
 
 pub fn gorispace_ja() -> RegexMatcher {
-    // TODO: Requires UTF-8 input
     RegexMatcher::new(
         Token::L,
         "ウ(?:[^ウッホーイ]*ホ)+[^ウッホーイ]*ー[^ウッホーイ]*イ",
@@ -10,12 +9,12 @@ pub fn gorispace_ja() -> RegexMatcher {
         "ウ[^ウッホーイ]*ッ(?:[^ウッホーイ]*ホ)+",
         Token::S,
         "ウ(?:[^ウッホーイ]*ホ)+",
+        true,
     )
     .unwrap()
 }
 
 pub fn gorispace_en() -> RegexMatcher {
-    // TODO: Requires UTF-8 input
     RegexMatcher::new(
         Token::L,
         "w[^hoswragh]*r(?:[^hoswragh]*a){2,}[^hoswragh]*g[^hoswragh]*h",
@@ -23,6 +22,7 @@ pub fn gorispace_en() -> RegexMatcher {
         "h(?:[^hoswragh]*o){2,}[^hoswragh]*s",
         Token::S,
         "h(?:[^hoswragh]*o){2,}",
+        true,
     )
     .unwrap()
 }
