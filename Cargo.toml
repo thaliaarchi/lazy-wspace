@@ -11,6 +11,7 @@ members = [
   "wspace-syntax",
   "wspace-syntax-test",
 ]
+resolver = "2"
 
 [patch.crates-io]
 # Waiting on rust-phf/rust-phf#289
