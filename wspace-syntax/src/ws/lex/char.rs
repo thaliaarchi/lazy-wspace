@@ -1,3 +1,5 @@
+//! Lexing for Whitespace tokens by chars.
+
 use std::iter::FusedIterator;
 use std::str::Chars;
 

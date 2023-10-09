@@ -1,4 +1,4 @@
-use crate::ws::lex::RegexMatcher;
+use crate::ws::lex::regex::RegexMatcher;
 use crate::ws::Token;
 
 pub fn gorispace_ja() -> RegexMatcher {

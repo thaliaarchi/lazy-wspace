@@ -1,3 +1,5 @@
+//! Lexing for Whitespace tokens by bits.
+
 use std::iter::FusedIterator;
 use std::mem;
 

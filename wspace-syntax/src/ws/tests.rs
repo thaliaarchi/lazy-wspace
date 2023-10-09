@@ -1,7 +1,7 @@
 mod tutorial {
     use bitvec::prelude::*;
 
-    use crate::ws::lex::{ByteMatcher, BytesMatcher};
+    use crate::ws::lex::{byte::ByteMatcher, bytes::BytesMatcher};
     use crate::ws::{Builder, FormatTokens, Inst, IntegerLit, LabelLit, Mapping, Token};
     use Token::*;
 

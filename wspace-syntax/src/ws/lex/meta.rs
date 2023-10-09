@@ -9,8 +9,12 @@ use thiserror::Error;
 
 use crate::util::regex_string::{unescape_byte_string, unescape_string, EscapeError};
 use crate::ws::lex::{
-    BitLexer, ByteLexer, ByteMatcher, BytesLexer, BytesMatcher, CharLexer, CharMatcher,
-    DynBitLexer, DynBitOrder, ExtLexer, RegexLexer, RegexMatcher, Span,
+    bit::{BitLexer, DynBitLexer, DynBitOrder},
+    byte::{ByteLexer, ByteMatcher},
+    bytes::{BytesLexer, BytesMatcher},
+    char::{CharLexer, CharMatcher},
+    regex::{RegexLexer, RegexMatcher},
+    ExtLexer, Span,
 };
 use crate::ws::{ExtToken, Token};
 

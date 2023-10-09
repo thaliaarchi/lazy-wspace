@@ -5,7 +5,7 @@ use std::{env, path::PathBuf};
 use lazy_wspace::ast::Parser;
 use lazy_wspace::error::Error;
 use lazy_wspace::vm::VM;
-use wspace_syntax::ws::lex::{ByteMatcher, Lexer};
+use wspace_syntax::ws::lex::{byte::ByteMatcher, Lexer};
 
 fn main() {
     let mut args = env::args_os();

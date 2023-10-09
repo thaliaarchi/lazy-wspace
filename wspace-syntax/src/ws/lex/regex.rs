@@ -1,3 +1,5 @@
+//! Lexing for Whitespace tokens by regular expressions.
+
 use std::iter::FusedIterator;
 
 use regex_automata::{

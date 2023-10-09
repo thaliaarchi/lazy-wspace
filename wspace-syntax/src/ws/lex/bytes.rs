@@ -1,3 +1,5 @@
+//! Lexing for Whitespace tokens by byte strings.
+
 use std::iter::FusedIterator;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, FindIter, MatchKind};

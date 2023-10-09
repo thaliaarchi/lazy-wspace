@@ -1,3 +1,5 @@
+//! Lexing for Whitespace tokens by bytes.
+
 use std::iter::FusedIterator;
 use std::slice::Iter;
 

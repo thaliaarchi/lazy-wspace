@@ -3,7 +3,7 @@ use std::io::Read;
 use std::path::Path;
 
 use bitvec::prelude::*;
-use wspace_syntax::ws::lex::{ByteMatcher, Lexer};
+use wspace_syntax::ws::lex::{byte::ByteMatcher, Lexer};
 
 use crate::ast::{LabelLit, Parser};
 use crate::error::{Error, ParseError};
