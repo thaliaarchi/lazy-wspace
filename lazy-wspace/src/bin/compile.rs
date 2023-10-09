@@ -5,7 +5,7 @@ use std::{env, path::PathBuf};
 use lazy_wspace::ast::Parser;
 use lazy_wspace::error::Error;
 use lazy_wspace::ir::{Cfg, Graph};
-use wspace_syntax::ws::lex::{byte::ByteMatcher, Lexer};
+use wspace_syntax::ws::lex::StdLexer;
 
 fn main() {
     let mut args = env::args_os();
@@ -24,7 +24,7 @@ fn main() {
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
 
-    let lex = ByteMatcher::default().lex(&src).into_extended();
+    let lex = StdLexer::from(&*src);
     let prog = Parser::new(lex).map(|(inst, _)| inst).collect::<Vec<_>>();
     // SAFETY: This is the only graph constructed, so all refs belong to it.
     let graph = unsafe { Graph::new() };

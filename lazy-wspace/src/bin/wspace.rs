@@ -5,7 +5,7 @@ use std::{env, path::PathBuf};
 use lazy_wspace::ast::Parser;
 use lazy_wspace::error::Error;
 use lazy_wspace::vm::VM;
-use wspace_syntax::ws::lex::{byte::ByteMatcher, Lexer};
+use wspace_syntax::ws::lex::StdLexer;
 
 fn main() {
     let mut args = env::args_os();
@@ -23,7 +23,7 @@ fn main() {
     let mut f = File::open(&filename).unwrap();
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
-    let lex = ByteMatcher::default().lex(&src).into_extended();
+    let lex = StdLexer::from(&*src);
     let prog = Parser::new(lex).map(|(inst, _)| inst).collect::<Vec<_>>();
 
     let mut stdin = io::stdin().lock();
