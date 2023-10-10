@@ -17,9 +17,9 @@ bstr = { version = "1.7", default-features = false }
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
 memchr = "2.6"
 phf = { version = "0.11", features = ["macros", "uncased"] }
-regex = "1.9"
-regex-automata = "0.3"
-regex-syntax = "0.7"
+regex = "1.10"
+regex-automata = "0.4"
+regex-syntax = "0.8"
 rug = { version = "1.22", features = ["integer"], default-features = false }
 simdutf8 = "0.1"
 strum = { version = "0.25", features = ["derive"] }
