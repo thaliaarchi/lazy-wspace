@@ -38,17 +38,6 @@ pub enum DynBitOrder {
     LocalBits,
 }
 
-impl DynBitOrder {
-    #[inline]
-    pub fn lex<'a, T: BitStore>(&self, src: &'a [T]) -> DynBitLexer<'a, T> {
-        match self {
-            DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<Lsb0, T>::new(src)),
-            DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<Msb0, T>::new(src)),
-            DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<LocalBits, T>::new(src)),
-        }
-    }
-}
-
 impl<'a, O: BitOrder, T: BitStore> BitLexer<'a, O, T> {
     #[inline]
     pub fn new(src: &'a [T]) -> Self {
@@ -103,6 +92,17 @@ impl<O: BitOrder, T: BitStore> Iterator for BitLexer<'_, O, T> {
 
 impl<O: BitOrder, T: BitStore> FusedIterator for BitLexer<'_, O, T> {}
 
+impl<'a, T: BitStore> DynBitLexer<'a, T> {
+    #[inline]
+    pub fn new(src: &'a [T], order: DynBitOrder) -> Self {
+        match order {
+            DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<Lsb0, T>::new(src)),
+            DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<Msb0, T>::new(src)),
+            DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<LocalBits, T>::new(src)),
+        }
+    }
+}
+
 impl<T: BitStore> Lexer for DynBitLexer<'_, T> {}
 
 impl<T: BitStore> Iterator for DynBitLexer<'_, T> {
@@ -138,5 +138,12 @@ impl<'a, T: BitStore> From<BitLexer<'a, Msb0, T>> for DynBitLexer<'a, T> {
     #[inline]
     fn from(lex: BitLexer<'a, Msb0, T>) -> Self {
         DynBitLexer::Msb0(lex)
+    }
+}
+
+impl DynBitOrder {
+    #[inline]
+    pub fn lex<'a, T: BitStore>(&self, src: &'a [T]) -> DynBitLexer<'a, T> {
+        DynBitLexer::new(src, *self)
     }
 }
