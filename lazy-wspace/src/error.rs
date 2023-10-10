@@ -1,12 +1,16 @@
+use std::borrow::Cow;
+use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::io::{self, stderr, stdout, ErrorKind, Write};
 use std::mem;
 use std::process;
 use std::rc::Rc;
-use thiserror::Error;
 
+use cfg_if::cfg_if;
 use rug::Integer;
+use thiserror::Error;
 use wspace_syntax::hs::Show;
 
 use crate::ast::{Inst, LabelLit};
@@ -89,12 +93,11 @@ pub enum UnderflowError {
     SlideEmpty,
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
-#[error("{msg}")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HaskellError {
-    out: OutKind,
-    msg: String,
-    code: i32,
+    pub out: OutKind,
+    pub msg: Vec<u8>,
+    pub code: i32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -164,7 +167,7 @@ impl UnderflowError {
 
 impl Error {
     #[rustfmt::skip]
-    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
+    pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
             Error::Usage => {
                 // Does not use binary name
@@ -179,25 +182,25 @@ impl Error {
 
 impl ParseError {
     #[rustfmt::skip]
-    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
+    pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
             ParseError::IncompleteOpcode | ParseError::UnrecognizedOpcode => {
-                HaskellError::stderr(format!("{wspace}: Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input\n"), 1)
+                HaskellError::stderr(wspace, "Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input", 1)
             }
             ParseError::UnterminatedInteger => {
-                HaskellError::stderr(format!("{wspace}: Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n\n"), 1)
+                HaskellError::stderr(wspace, "Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n", 1)
             }
             ParseError::UnterminatedLabel => {
-                HaskellError::stderr(format!("{wspace}: Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n\n"), 1)
+                HaskellError::stderr(wspace, "Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n", 1)
             }
             ParseError::UndefinedLabel(l) => {
-                HaskellError::stderr(format!("{wspace}: user error (Undefined label ({}))\n", l.to_haskell_string()), 1)
+                HaskellError::stderr(wspace, &format!("user error (Undefined label ({}))", l.to_haskell_string()), 1)
             }
             ParseError::ImplicitEnd => {
-                HaskellError::stderr(format!("{wspace}: Prelude.!!: index too large\n"), 1)
+                HaskellError::stderr(wspace, "Prelude.!!: index too large", 1)
             }
             ParseError::InvalidUtf8 => {
-                HaskellError::stderr(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
+                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (invalid byte sequence)", os_str_to_utf8_lossy_remove(filename)), 1)
             }
             ParseError::UnexpectedRiverCrab => panic!("not an error in wspace"),
         }
@@ -206,22 +209,22 @@ impl ParseError {
 
 impl ValueError {
     #[rustfmt::skip]
-    pub fn to_haskell(&self, wspace: &str, _filename: &str) -> HaskellError {
+    pub fn to_haskell(&self, wspace: &OsStr, _filename: &OsStr) -> HaskellError {
         match self {
             ValueError::EmptyLit => {
-                HaskellError::stderr(format!("{wspace}: Prelude.last: empty list\n"), 1)
+                HaskellError::stderr(wspace, "Prelude.last: empty list", 1)
             }
             ValueError::CopyLarge | ValueError::RetrieveLarge => {
-                HaskellError::stderr(format!("{wspace}: Prelude.!!: index too large\n"), 1)
+                HaskellError::stderr(wspace, "Prelude.!!: index too large", 1)
             }
             ValueError::CopyNegative | ValueError::RetrieveNegative => {
-                HaskellError::stderr(format!("{wspace}: Prelude.!!: negative index\n"), 1)
+                HaskellError::stderr(wspace, "Prelude.!!: negative index", 1)
             }
             ValueError::DivModZero => {
-                HaskellError::stderr(format!("{wspace}: divide by zero\n"), 1)
+                HaskellError::stderr(wspace, "divide by zero", 1)
             }
             ValueError::ReadiParse => {
-                HaskellError::stderr(format!("{wspace}: Prelude.read: no parse\n"), 1)
+                HaskellError::stderr(wspace, "Prelude.read: no parse", 1)
             },
 
         }
@@ -230,26 +233,26 @@ impl ValueError {
 
 impl EagerError {
     #[rustfmt::skip]
-    pub fn to_haskell(&self, wspace: &str, filename: &str) -> HaskellError {
+    pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
             EagerError::Underflow(inst) => {
-                HaskellError::stderr(format!("{wspace}: user error (Can't do {})\n", inst.show()), 1)
+                HaskellError::stderr(wspace, &format!("user error (Can't do {})", inst.show()), 1)
             }
             EagerError::StoreOverflow | EagerError::StoreNegative => {
-                HaskellError::stderr(format!("{wspace}: Stack space overflow: current size 33624 bytes.\n{wspace}: Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it.\n"), 2)
+                HaskellError::stderr_lines(wspace, &["Stack space overflow: current size 33624 bytes.", "Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it."], 2)
             }
             EagerError::RetUnderflow => {
-                HaskellError::stderr(format!("{wspace}: user error (Can't do Return)\n"), 1)
+                HaskellError::stderr(wspace, "user error (Can't do Return)", 1)
             }
             EagerError::Io(err) => panic!("{err}"),
             EagerError::PrintcInvalid(n) => {
-                HaskellError::stderr(format!("{wspace}: Prelude.chr: bad argument: {}", n.show()), 1)
+                HaskellError::stderr(wspace, &format!("Prelude.chr: bad argument: {}", n.show()), 1)
             }
             EagerError::ReadEof => {
-                HaskellError::stderr(format!("{wspace}: <stdin>: hGetChar: end of file\n"), 1)
+                HaskellError::stderr(wspace, "<stdin>: hGetChar: end of file", 1)
             }
             EagerError::ReadInvalidUtf8 => {
-                HaskellError::stderr(format!("{wspace}: {filename}: hGetContents: invalid argument (invalid byte sequence)\n"), 1)
+                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (invalid byte sequence)", os_str_to_utf8_lossy_remove(filename)), 1)
             }
         }
     }
@@ -260,33 +263,133 @@ impl HaskellError {
         match self.out {
             OutKind::Stdout => {
                 let mut w = stdout().lock();
-                write!(w, "{}", self.msg).unwrap();
+                w.write_all(&self.msg).unwrap();
                 w.flush().unwrap();
             }
             OutKind::Stderr => {
                 let mut w = stderr().lock();
-                write!(w, "{}", self.msg).unwrap();
+                w.write_all(&self.msg).unwrap();
                 w.flush().unwrap();
             }
         }
         process::exit(self.code)
     }
 
+    pub fn current_exe() -> OsString {
+        // Haskell takes the last component after `/`, including when the last
+        // component is `..`.
+        // TODO: Determine how other path forms are handled.
+        env::current_exe()
+            .ok()
+            .and_then(|p| p.components().next_back().map(|c| c.as_os_str().to_owned()))
+            .unwrap_or_default()
+    }
+
     #[inline]
-    pub fn stdout(msg: String) -> Self {
+    fn stdout(msg: String) -> Self {
         HaskellError {
             out: OutKind::Stdout,
-            msg,
+            msg: msg.into_bytes(),
             code: 0,
         }
     }
 
-    #[inline]
-    pub fn stderr(msg: String, code: i32) -> Self {
+    fn stderr(wspace: &OsStr, msg: &str, code: i32) -> Self {
         HaskellError {
             out: OutKind::Stderr,
-            msg,
+            msg: Self::stderr_line(wspace, msg),
             code,
         }
     }
+
+    fn stderr_lines(wspace: &OsStr, msgs: &[&str], code: i32) -> Self {
+        let mut buf = Vec::new();
+        for msg in msgs {
+            buf.extend_from_slice(&Self::stderr_line(wspace, msg));
+        }
+        HaskellError {
+            out: OutKind::Stderr,
+            msg: buf,
+            code,
+        }
+    }
+
+    fn stderr_line(wspace: &OsStr, msg: &str) -> Vec<u8> {
+        let wspace = os_str_to_bytes(wspace);
+        let mut buf = Vec::with_capacity(wspace.len() + 2 + msg.len() + 1);
+        buf.extend_from_slice(&wspace);
+        buf.extend_from_slice(b": ");
+        buf.extend_from_slice(msg.as_bytes());
+        buf.push(b'\n');
+        buf
+    }
+}
+
+fn os_str_to_bytes(s: &OsStr) -> Cow<'_, [u8]> {
+    cfg_if! {
+        if #[cfg(unix)] {
+            use std::os::unix::ffi::OsStrExt;
+            s.as_bytes().into()
+        } else if #[cfg(target_os = "wasi")] {
+            use std::os::wasi::ffi::OsStrExt;
+            s.as_bytes().into()
+        } else {
+            s.to_string_lossy()
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn os_string_into_bytes(s: OsString) -> Vec<u8> {
+    // TODO: Replace with `OsStr::as_encoded_bytes`, once it's stabilized in
+    // Rust 1.74.
+    // https://github.com/rust-lang/rust/issues/111544
+    // https://doc.rust-lang.org/beta/std/ffi/struct.OsStr.html#method.as_encoded_bytes
+
+    cfg_if! {
+        if #[cfg(unix)] {
+            use std::os::unix::ffi::OsStringExt;
+            s.into_vec()
+        } else if #[cfg(target_os = "wasi")] {
+            use std::os::wasi::ffi::OsStringExt;
+            s.into_vec()
+        } else if #[cfg(windows)] {
+            s.into_string()
+                .map(|s| s.into_bytes())
+                .unwrap_or_else(|s| os_str_to_wtf8(&s))
+        } else {
+            s.into_string()
+                .unwrap_or_else(|s| s.to_string_lossy().into_owned())
+                .into_bytes()
+        }
+    }
+}
+
+#[cfg(windows)]
+fn os_str_to_wtf8(s: &OsStr) -> Vec<u8> {
+    use std::os::windows::ffi::OsStrExt;
+
+    // A specialization of `String::from_utf16` allowing for invalid
+    // sequences.
+    let mut b = Vec::with_capacity(s.len());
+    for ch in char::decode_utf16(s.encode_wide()) {
+        let ch = ch.unwrap_or_else(|err| {
+            // SAFETY: This deliberately produces an invalid char from
+            // an unpaired surrogate. However, it is only used to encode
+            // it to bytes and not kept as a char or in a str.
+            // `transmute` bypasses the debug assertion in
+            // `char::from_u32_unchecked`.
+            unsafe { mem::transmute(err.unpaired_surrogate() as u32) }
+        });
+        b.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
+    }
+    b
+}
+
+fn os_str_to_utf8_lossy_remove(s: &OsStr) -> String {
+    // TODO: This is incorrect when U+FFFD is in the input.
+    s.to_string_lossy()
+        .chars()
+        .filter(|&ch| ch != '\u{fffd}')
+        .collect()
 }

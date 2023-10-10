@@ -95,6 +95,7 @@ name = "lazy-wspace"
 version = "0.1.0"
 dependencies = [
  "bitvec",
+ "cfg-if",
  "hashbrown",
  "lazy-wspace-macros",
  "rug",

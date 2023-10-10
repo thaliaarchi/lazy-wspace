@@ -13,6 +13,7 @@ default-run = "compile"
 
 [dependencies]
 bitvec = "1.0"
+cfg-if = "1.0"
 hashbrown = { version = "0.14", features = ["raw"] }
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
 rug = { version = "1.22", features = ["integer"], default-features = false }

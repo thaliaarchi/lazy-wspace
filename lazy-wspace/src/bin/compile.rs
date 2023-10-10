@@ -1,9 +1,10 @@
+use std::env;
 use std::fs::File;
 use std::io::Read;
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
+use std::process;
 
 use lazy_wspace::ast::Parser;
-use lazy_wspace::error::Error;
 use lazy_wspace::ir::{Cfg, Graph};
 use wspace_syntax::ws::lex::StdLexer;
 
@@ -16,7 +17,8 @@ fn main() {
         .map(|p| p.to_string_lossy())
         .unwrap_or("wspace".into());
     if args.len() != 1 {
-        Error::Usage.to_haskell(&wspace, "").handle();
+        eprintln!("Usage: {wspace} <filename>");
+        process::exit(2);
     }
     let filename = args.next().unwrap();
 
