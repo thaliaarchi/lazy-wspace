@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [patch.crates-io]
-# Waiting on rust-phf/rust-phf#289
+# Waiting on https://github.com/rust-phf/rust-phf/pull/289
 phf = { git = "https://github.com/thaliaarchi/rust-phf" }
 
 [profile.release]

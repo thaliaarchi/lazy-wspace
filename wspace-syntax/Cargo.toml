@@ -3,6 +3,7 @@ name = "wspace-syntax"
 version = "0.1.0"
 authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
+rust-version = "1.70" # for Option::is_some_and
 description = "Parsing and syntax trees for the Whitespace programming language and its various syntaxes"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "MPL-2.0"
