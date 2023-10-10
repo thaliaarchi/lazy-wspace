@@ -211,6 +211,17 @@ impl MetaMatcher {
                 if let (&[s], &[t], &[l]) = (&*s, &*t, &*l) {
                     let matcher = ByteMatcher::new(s, t, l)?;
                     Ok(MetaMatcher::from_byte(matcher, encoding))
+                } else if let (Some(sc), Some(tc), Some(lc)) =
+                    (bytes_to_char(&s), bytes_to_char(&t), bytes_to_char(&l))
+                {
+                    if encoding.is_utf8() {
+                        let matcher = CharMatcher::new(sc, tc, lc)?;
+                        Ok(MetaMatcher::from_char(matcher, encoding))
+                    } else {
+                        // TODO: Make a char matcher for non-UTF-8 input.
+                        let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
+                        Ok(MetaMatcher::from_bytes(matcher, encoding))
+                    }
                 } else {
                     let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
                     Ok(MetaMatcher::from_bytes(matcher, encoding))
@@ -282,7 +293,7 @@ impl MetaMatcher {
         let (src_str, invalid_utf8) = match self.encoding {
             Encoding::Bytes => (None, None),
             Encoding::Utf8 => {
-                let src = simdutf8::basic::from_utf8(src)?;
+                let src = simdutf8::basic::from_utf8(src).map_err(|_| LexerError::InvalidUtf8)?;
                 (Some(src), None)
             }
             Encoding::LazyUtf8 => match simdutf8::compat::from_utf8(src) {
@@ -405,9 +416,21 @@ impl From<regex_automata::meta::BuildError> for MatcherError {
     }
 }
 
-impl From<simdutf8::basic::Utf8Error> for LexerError {
-    #[inline]
-    fn from(_err: simdutf8::basic::Utf8Error) -> Self {
-        LexerError::InvalidUtf8
+fn bytes_to_char(b: &[u8]) -> Option<char> {
+    if b.len().wrapping_sub(1) < 3 {
+        match bstr::decode_utf8(b) {
+            (Some(ch), len) if len == b.len() => return Some(ch),
+            _ => {}
+        }
     }
+    None
+}
+
+#[test]
+fn test_bytes_to_char() {
+    assert_eq!(Some('ẞ'), bytes_to_char("ẞ".as_bytes()));
+    assert_eq!(None, bytes_to_char("SÜẞ".as_bytes()));
+    assert_eq!(None, bytes_to_char(b"*\xff"));
+    assert_eq!(None, bytes_to_char(b"\xff"));
+    assert_eq!(None, bytes_to_char(b""));
 }
