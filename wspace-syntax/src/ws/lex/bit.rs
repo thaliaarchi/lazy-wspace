@@ -2,12 +2,14 @@
 
 use std::iter::FusedIterator;
 use std::mem;
+use std::str::FromStr;
 
 use bitvec::{
     order::{BitOrder, LocalBits, Lsb0, Msb0},
     slice::{BitSlice, Iter as BitIter},
     store::BitStore,
 };
+use thiserror::Error;
 
 use crate::ws::lex::{Lexer, Span};
 use crate::ws::Token;
@@ -28,14 +30,15 @@ pub enum DynBitLexer<'a, T: BitStore = u8> {
     Msb0(BitLexer<'a, Msb0, T>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum DynBitOrder {
     /// Corresponds to [`bitvec::order::Lsb0`].
+    #[default]
     Lsb0,
     /// Corresponds to [`bitvec::order::Msb0`].
     Msb0,
     /// Corresponds to [`bitvec::order::LocalBits`].
-    LocalBits,
+    Local,
 }
 
 impl<'a, O: BitOrder, T: BitStore> BitLexer<'a, O, T> {
@@ -98,7 +101,7 @@ impl<'a, T: BitStore> DynBitLexer<'a, T> {
         match order {
             DynBitOrder::Lsb0 => DynBitLexer::from(BitLexer::<Lsb0, T>::new(src)),
             DynBitOrder::Msb0 => DynBitLexer::from(BitLexer::<Msb0, T>::new(src)),
-            DynBitOrder::LocalBits => DynBitLexer::from(BitLexer::<LocalBits, T>::new(src)),
+            DynBitOrder::Local => DynBitLexer::from(BitLexer::<LocalBits, T>::new(src)),
         }
     }
 }
@@ -145,5 +148,22 @@ impl DynBitOrder {
     #[inline]
     pub fn lex<'a, T: BitStore>(&self, src: &'a [T]) -> DynBitLexer<'a, T> {
         DynBitLexer::new(src, *self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Error)]
+#[error("invalid bit order (allowed: lsb0, msb0, local)")]
+pub struct ParseBitOrderError;
+
+impl FromStr for DynBitOrder {
+    type Err = ParseBitOrderError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "lsb0" => Ok(DynBitOrder::Lsb0),
+            "msb0" => Ok(DynBitOrder::Msb0),
+            "local" => Ok(DynBitOrder::Local),
+            _ => Err(ParseBitOrderError),
+        }
     }
 }
