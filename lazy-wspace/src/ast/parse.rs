@@ -2,8 +2,8 @@ use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
-use wspace_syntax::ws::lex::{ExtLexer, Span};
-use wspace_syntax::ws::{ExtToken, Token};
+use wspace_syntax::source::Span;
+use wspace_syntax::ws::lex::{ExtLexer, ExtToken, Token};
 
 use crate::ast::{Inst, IntegerLit, LabelLit};
 use crate::error::ParseError;

@@ -11,8 +11,8 @@ use bitvec::{
 };
 use thiserror::Error;
 
-use crate::ws::lex::{Lexer, Span};
-use crate::ws::Token;
+use crate::source::Span;
+use crate::ws::lex::{Lexer, Token};
 
 #[derive(Clone, Debug)]
 pub struct BitLexer<'a, O = Lsb0, T = u8>

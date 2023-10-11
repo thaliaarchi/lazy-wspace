@@ -3,8 +3,8 @@
 use std::iter::FusedIterator;
 use std::str::Chars;
 
-use crate::ws::lex::{Lexer, MatcherError, Span};
-use crate::ws::Token;
+use crate::source::Span;
+use crate::ws::lex::{Lexer, MatcherError, Token};
 
 /// Builder for [`CharLexer`].
 #[derive(Clone, Copy, Debug)]

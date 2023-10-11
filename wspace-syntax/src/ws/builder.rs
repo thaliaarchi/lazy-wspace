@@ -1,7 +1,10 @@
 use bitvec::slice::BitSlice;
 use rug::Integer;
 
-use crate::ws::{Mapping, Token};
+use crate::ws::{
+    ast::{Inst, IntegerLit, LabelLit},
+    lex::Token,
+};
 
 pub trait FormatTokens {
     fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>);
@@ -86,6 +89,35 @@ impl TokenWriter for Vec<Token> {
     fn write_comment(&mut self, _comment: &[u8]) {}
 }
 
+pub struct Mapping {
+    pub s: Vec<u8>,
+    pub t: Vec<u8>,
+    pub l: Vec<u8>,
+}
+
+impl Mapping {
+    #[inline]
+    pub fn new(s: Vec<u8>, t: Vec<u8>, l: Vec<u8>) -> Self {
+        Mapping { s, t, l }
+    }
+
+    #[inline]
+    pub fn writer(&self) -> MappingWriter<'_> {
+        MappingWriter::new(self)
+    }
+}
+
+impl Default for Mapping {
+    #[inline]
+    fn default() -> Self {
+        Mapping {
+            s: b" ".to_vec(),
+            t: b"\t".to_vec(),
+            l: b"\n".to_vec(),
+        }
+    }
+}
+
 pub struct MappingWriter<'a> {
     buf: Vec<u8>,
     map: &'a Mapping,
@@ -116,5 +148,75 @@ impl TokenWriter for MappingWriter<'_> {
     fn write_comment(&mut self, comment: &[u8]) {
         // TODO: Handle conflicts with mapping
         self.buf.extend_from_slice(comment);
+    }
+}
+
+impl FormatTokens for Inst {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+        use Token::*;
+        let opcode: &[Token] = match self {
+            Inst::Push(_) => &[S, S],
+            Inst::Dup => &[S, L, S],
+            Inst::Copy(_) => &[S, T, S],
+            Inst::Swap => &[S, L, T],
+            Inst::Drop => &[S, L, L],
+            Inst::Slide(_) => &[S, T, L],
+            Inst::Add => &[T, S, S, S],
+            Inst::Sub => &[T, S, S, T],
+            Inst::Mul => &[T, S, S, L],
+            Inst::Div => &[T, S, T, S],
+            Inst::Mod => &[T, S, T, T],
+            Inst::Store => &[T, T, S],
+            Inst::Retrieve => &[T, T, T],
+            Inst::Label(_) => &[L, S, S],
+            Inst::Call(_) => &[L, S, T],
+            Inst::Jmp(_) => &[L, S, L],
+            Inst::Jz(_) => &[L, T, S],
+            Inst::Jn(_) => &[L, T, T],
+            Inst::Ret => &[L, T, L],
+            Inst::End => &[L, L, L],
+            Inst::Printc => &[T, L, S, S],
+            Inst::Printi => &[T, L, S, T],
+            Inst::Readc => &[T, L, T, S],
+            Inst::Readi => &[T, L, T, T],
+            Inst::DebugPrintStack => &[L, L, S, S, S],
+            Inst::DebugPrintHeap => &[L, L, S, S, T],
+            Inst::Trace => &[L, L, T],
+            Inst::Shuffle => &[S, T, T, S],
+            Inst::Invert => &[S, T, T],
+            Inst::ParseError(err) => todo!("format parse error: {err:?}"),
+        };
+        b.append(opcode);
+        match self {
+            Inst::Push(n) | Inst::Copy(n) | Inst::Slide(n) => {
+                n.fmt_tokens(b);
+            }
+            Inst::Label(l) | Inst::Call(l) | Inst::Jmp(l) | Inst::Jz(l) | Inst::Jn(l) => {
+                l.fmt_tokens(b);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl FormatTokens for IntegerLit {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+        match self {
+            IntegerLit::Pos(bits) => {
+                b.push(Token::S);
+                b.write_bits(bits);
+            }
+            IntegerLit::Neg(bits) => {
+                b.push(Token::T);
+                b.write_bits(bits);
+            }
+            IntegerLit::Empty => b.push(Token::L),
+        }
+    }
+}
+
+impl FormatTokens for LabelLit {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+        b.write_bits(&self.0);
     }
 }

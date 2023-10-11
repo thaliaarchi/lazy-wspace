@@ -4,8 +4,8 @@ use std::iter::FusedIterator;
 use std::slice::Iter;
 use std::str;
 
-use crate::ws::lex::{ExtLexer, Span};
-use crate::ws::{ExtToken, Token};
+use crate::source::Span;
+use crate::ws::lex::{ExtLexer, ExtToken, Token};
 
 /// Lexer for Whitespace tokens, matching the reference interpreter.
 #[derive(Clone, Debug)]

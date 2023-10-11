@@ -1,5 +1,4 @@
 use crate::hs;
-use crate::ws::MappingWriter;
 
 /// Whitespace token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -18,7 +17,7 @@ pub enum ExtToken {
     Token(Token),
     /// Invalid UTF-8 sequence.
     InvalidUtf8,
-    /// River crab alias for [`End`](crate::ws::Inst::End) from
+    /// River crab alias for [`End`](crate::ws::ast::Inst::End) from
     /// [GrassMudHorse](crate::ws::dialects::GrassMudHorseLexer).
     RiverCrab,
 }
@@ -39,34 +38,5 @@ impl From<Token> for ExtToken {
     #[inline]
     fn from(tok: Token) -> Self {
         ExtToken::Token(tok)
-    }
-}
-
-pub struct Mapping {
-    pub s: Vec<u8>,
-    pub t: Vec<u8>,
-    pub l: Vec<u8>,
-}
-
-impl Mapping {
-    #[inline]
-    pub fn new(s: Vec<u8>, t: Vec<u8>, l: Vec<u8>) -> Self {
-        Mapping { s, t, l }
-    }
-
-    #[inline]
-    pub fn writer(&self) -> MappingWriter<'_> {
-        MappingWriter::new(self)
-    }
-}
-
-impl Default for Mapping {
-    #[inline]
-    fn default() -> Self {
-        Mapping {
-            s: b" ".to_vec(),
-            t: b"\t".to_vec(),
-            l: b"\n".to_vec(),
-        }
     }
 }

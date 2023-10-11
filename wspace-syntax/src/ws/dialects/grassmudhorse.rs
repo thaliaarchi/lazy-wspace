@@ -1,8 +1,8 @@
 use std::iter::FusedIterator;
 use std::str::Chars;
 
-use crate::ws::lex::{ExtLexer, Span};
-use crate::ws::{ExtToken, Token};
+use crate::source::Span;
+use crate::ws::lex::{ExtLexer, ExtToken, Token};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GmhToken {

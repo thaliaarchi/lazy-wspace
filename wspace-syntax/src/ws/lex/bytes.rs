@@ -4,8 +4,8 @@ use std::iter::FusedIterator;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, FindIter, MatchKind};
 
-use crate::ws::lex::{Lexer, MatcherError, Span};
-use crate::ws::Token;
+use crate::source::Span;
+use crate::ws::lex::{Lexer, MatcherError, Token};
 
 /// Builder for [`BytesLexer`].
 #[derive(Clone, Debug)]

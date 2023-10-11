@@ -7,6 +7,7 @@ use regex::{Captures, Regex};
 use regex_syntax::hir::{Hir, HirKind};
 use thiserror::Error;
 
+use crate::source::Span;
 use crate::util::regex_string::{unescape_byte_string, unescape_string, EscapeError};
 use crate::ws::lex::{
     bit::{BitLexer, DynBitLexer, DynBitOrder},
@@ -14,9 +15,8 @@ use crate::ws::lex::{
     bytes::{BytesLexer, BytesMatcher},
     char::{CharLexer, CharMatcher},
     regex::{RegexLexer, RegexMatcher},
-    ExtLexer, Span,
+    ExtLexer, ExtToken, Token,
 };
-use crate::ws::{ExtToken, Token};
 
 /// Builder for [`MetaLexer`].
 #[derive(Clone, Debug)]

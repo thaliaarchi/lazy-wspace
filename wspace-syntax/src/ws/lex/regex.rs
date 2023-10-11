@@ -10,8 +10,8 @@ use regex_automata::{
 };
 use regex_syntax::hir::Hir;
 
-use crate::ws::lex::{Lexer, MatcherError, Span};
-use crate::ws::Token;
+use crate::source::Span;
+use crate::ws::lex::{Lexer, MatcherError, Token};
 
 /// Builder for [`RegexLexer`].
 #[derive(Clone, Debug)]

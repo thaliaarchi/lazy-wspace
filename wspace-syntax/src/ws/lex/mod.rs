@@ -5,10 +5,10 @@ pub mod char;
 mod lexer;
 mod meta;
 pub mod regex;
-mod span;
 mod std;
+mod token;
 
 pub use lexer::*;
 pub use meta::*;
-pub use span::*;
 pub use std::*;
+pub use token::*;

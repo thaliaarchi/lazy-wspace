@@ -3,8 +3,8 @@
 use std::iter::FusedIterator;
 use std::slice::Iter;
 
-use crate::ws::lex::{Lexer, MatcherError, Span};
-use crate::ws::Token;
+use crate::source::Span;
+use crate::ws::lex::{Lexer, MatcherError, Token};
 
 /// Builder for [`ByteLexer`].
 #[derive(Clone, Copy, Debug)]

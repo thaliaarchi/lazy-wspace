@@ -1,5 +1,4 @@
-use crate::ws::lex::regex::RegexMatcher;
-use crate::ws::Token;
+use crate::ws::lex::{regex::RegexMatcher, Token};
 
 pub fn gorispace_ja() -> RegexMatcher {
     RegexMatcher::new(
@@ -29,7 +28,7 @@ pub fn gorispace_en() -> RegexMatcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::ws::lex::Span;
+    use crate::source::Span;
 
     use super::*;
     use Token::*;

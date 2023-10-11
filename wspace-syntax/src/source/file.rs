@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::ops::{Index, Range};
 use std::path::{Path, PathBuf};
 
-use crate::ws::lex::Span;
+use crate::source::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FileSpan {

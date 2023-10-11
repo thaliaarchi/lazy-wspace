@@ -1,8 +1,8 @@
 use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 
-use crate::ws::lex::Span;
-use crate::ws::{ExtToken, Token};
+use crate::source::Span;
+use crate::ws::lex::{ExtToken, Token};
 
 /// Trait for token lexing.
 pub trait Lexer: Iterator<Item = (Token, Span)> {
