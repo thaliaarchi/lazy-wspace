@@ -25,9 +25,13 @@ impl<L: ExtLexer> Parser<L> {
     #[inline]
     fn next_inst(&mut self) -> Result<Option<Inst>, ParseError> {
         let first_tok = match self.next_token_inner() {
-            Some((maybe_tok, span)) => {
+            Some((res, span)) => {
                 self.curr.start = span.start;
-                maybe_tok?
+                match res {
+                    Ok(tok) => tok,
+                    Err(ParseError::UnexpectedRiverCrab) => return Ok(Some(Inst::End)),
+                    Err(err) => return Err(err),
+                }
             }
             None => return Ok(None),
         };
@@ -158,6 +162,7 @@ impl<L: ExtLexer> Iterator for Parser<L> {
 impl<L: ExtLexer + FusedIterator> FusedIterator for Parser<L> {}
 
 impl<L: ExtLexer + Clone> Clone for Parser<L> {
+    #[inline]
     fn clone(&self) -> Self {
         Parser {
             lex: self.lex.clone(),
