@@ -2,15 +2,31 @@ use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
-use wspace_syntax::source::Span;
-use wspace_syntax::ws::lex::{ExtLexer, ExtToken, Token};
+use thiserror::Error;
 
-use crate::ast::{Inst, IntegerLit, LabelLit};
-use crate::error::ParseError;
+use crate::source::Span;
+use crate::ws::ast::{Inst, IntegerLit, LabelLit};
+use crate::ws::lex::{ExtLexer, ExtToken, Token};
 
 pub struct Parser<L: ExtLexer> {
     lex: L,
     curr: Span,
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
+pub enum ParseError {
+    #[error("incomplete instruction opcode")]
+    IncompleteOpcode,
+    #[error("unrecognized instruction opcode")]
+    UnrecognizedOpcode,
+    #[error("unterminated integer")]
+    UnterminatedInteger,
+    #[error("unterminated label")]
+    UnterminatedLabel,
+    #[error("invalid UTF-8 sequence")]
+    InvalidUtf8,
+    #[error("unexpected river crab")]
+    UnexpectedRiverCrab,
 }
 
 impl<L: ExtLexer> Parser<L> {
@@ -136,7 +152,7 @@ impl<L: ExtLexer> Parser<L> {
     #[inline]
     fn parse_integer<F: FnOnce(IntegerLit) -> Inst>(&mut self, inst: F) -> Inst {
         match self.parse_arg(ParseError::UnterminatedInteger) {
-            Ok(bits) => inst(IntegerLit::from(bits)),
+            Ok(bits) => inst(IntegerLit::from(&*bits)),
             Err(err) => err.into(),
         }
     }

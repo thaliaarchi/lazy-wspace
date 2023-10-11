@@ -1,5 +1,7 @@
-mod error;
 mod inst;
+mod literals;
+mod parser;
 
-pub use error::*;
 pub use inst::*;
+pub use literals::*;
+pub use parser::*;

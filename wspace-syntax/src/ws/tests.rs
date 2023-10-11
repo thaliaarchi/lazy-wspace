@@ -71,19 +71,19 @@ fn scan_string() {
 
 #[test]
 fn build() {
-    let label_c = LabelLit(bitvec![0, 1, 0, 0, 0, 0, 1, 1]);
-    let label_e = LabelLit(bitvec![0, 1, 0, 0, 0, 1, 0, 1]);
+    let label_c = LabelLit::new(bitvec![0, 1, 0, 0, 0, 0, 1, 1]);
+    let label_e = LabelLit::new(bitvec![0, 1, 0, 0, 0, 1, 0, 1]);
     let prog = &[
-        Inst::Push(IntegerLit::Pos(bitvec![1])),
+        Inst::Push(IntegerLit::new(1)),
         Inst::Label(label_c.clone()),
         Inst::Dup,
         Inst::Printi,
-        Inst::Push(IntegerLit::Pos(bitvec![1, 0, 1, 0])),
+        Inst::Push(IntegerLit::new(10)),
         Inst::Printc,
-        Inst::Push(IntegerLit::Pos(bitvec![1])),
+        Inst::Push(IntegerLit::new(1)),
         Inst::Add,
         Inst::Dup,
-        Inst::Push(IntegerLit::Pos(bitvec![1, 0, 1, 1])),
+        Inst::Push(IntegerLit::new(11)),
         Inst::Sub,
         Inst::Jz(label_e.clone()),
         Inst::Jmp(label_c),

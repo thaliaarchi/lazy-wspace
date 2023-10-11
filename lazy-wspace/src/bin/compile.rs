@@ -4,9 +4,8 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process;
 
-use lazy_wspace::ast::Parser;
 use lazy_wspace::ir::{Cfg, Graph};
-use wspace_syntax::ws::lex::StdLexer;
+use wspace_syntax::ws::{ast::Parser, lex::StdLexer};
 
 fn main() {
     let mut args = env::args_os();

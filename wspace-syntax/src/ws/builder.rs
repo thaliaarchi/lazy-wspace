@@ -179,11 +179,6 @@ impl FormatTokens for Inst {
             Inst::Printi => &[T, L, S, T],
             Inst::Readc => &[T, L, T, S],
             Inst::Readi => &[T, L, T, T],
-            Inst::DebugPrintStack => &[L, L, S, S, S],
-            Inst::DebugPrintHeap => &[L, L, S, S, T],
-            Inst::Trace => &[L, L, T],
-            Inst::Shuffle => &[S, T, T, S],
-            Inst::Invert => &[S, T, T],
             Inst::ParseError(err) => todo!("format parse error: {err:?}"),
         };
         b.append(opcode);
@@ -201,22 +196,12 @@ impl FormatTokens for Inst {
 
 impl FormatTokens for IntegerLit {
     fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
-        match self {
-            IntegerLit::Pos(bits) => {
-                b.push(Token::S);
-                b.write_bits(bits);
-            }
-            IntegerLit::Neg(bits) => {
-                b.push(Token::T);
-                b.write_bits(bits);
-            }
-            IntegerLit::Empty => b.push(Token::L),
-        }
+        b.write_bits(&self.to_bits());
     }
 }
 
 impl FormatTokens for LabelLit {
     fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
-        b.write_bits(&self.0);
+        b.write_bits(self.bits());
     }
 }

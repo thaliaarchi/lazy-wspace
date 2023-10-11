@@ -3,10 +3,9 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read};
 
-use lazy_wspace::ast::Parser;
 use lazy_wspace::error::{Error, HaskellError};
 use lazy_wspace::vm::VM;
-use wspace_syntax::ws::lex::StdLexer;
+use wspace_syntax::ws::{ast::Parser, lex::StdLexer};
 
 fn main() {
     let args = env::args_os();

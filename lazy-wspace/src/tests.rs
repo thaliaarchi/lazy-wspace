@@ -1,20 +1,18 @@
-use std::fs::File;
-use std::io::Read;
+use std::fs;
 use std::path::Path;
 
 use bitvec::prelude::*;
-use wspace_syntax::ws::lex::{byte::ByteMatcher, Lexer};
+use wspace_syntax::ws::{
+    ast::{LabelLit, Parser},
+    lex::StdLexer,
+};
 
-use crate::ast::{LabelLit, Parser};
 use crate::error::{Error, ParseError};
 use crate::vm::VM;
 
 fn execute_file<P: AsRef<Path>>(path: P, mut stdin: &[u8]) -> (Result<(), Error>, Vec<u8>) {
-    let mut f = File::open(&path).unwrap();
-    let mut src = Vec::<u8>::new();
-    f.read_to_end(&mut src).unwrap();
-
-    let lex = ByteMatcher::default().lex(&src).into_extended();
+    let src = fs::read(&path).unwrap();
+    let lex = StdLexer::from(&*src);
     let prog = Parser::new(lex).map(|(inst, _)| inst).collect();
     let mut stdout = Vec::new();
     let mut vm = VM::new(prog, &mut stdin, &mut stdout);
@@ -65,8 +63,8 @@ fn execute_expected() {
     test!("parse/unterminated_jz.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
     test!("parse/unterminated_jn.ws", b"" => Err(ParseError::UnterminatedLabel.into()), b"");
 
-    test!("parse/undefined_label_call.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
-    test!("parse/undefined_label_jmp.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
-    test!("parse/undefined_label_jz.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
-    test!("parse/undefined_label_jn.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_call.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jmp.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jz.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])).into()), b"");
+    test!("parse/undefined_label_jn.ws", b"" => Err(ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])).into()), b"");
 }

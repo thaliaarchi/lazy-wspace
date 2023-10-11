@@ -1,20 +1,6 @@
 use rug::Integer;
 
-/// Parsed Whitespace assembly integer literal.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegerLit {
-    pub value: Integer,
-    pub sign: Sign,
-    pub leading_binary_zeros: usize,
-}
-
-/// Sign of an integer literal.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Sign {
-    Pos,
-    Neg,
-    Empty,
-}
+use crate::ws::ast::IntegerLit;
 
 /// Error from parsing an integer literal.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -36,25 +22,24 @@ impl IntegerLit {
     /// leading `0`s are forbidden for decimal integers, because it could not be
     /// encoded unambiguous in Whitespace and to avoid confusion with C-style
     /// octal syntax. Binary numbers may omit digits to be encoded in Whitespace
-    /// as the empty sequence. An integer can have a `-` or `+` sign.
+    /// as the empty sequence. An integer can have a `-` sign.
     ///
     /// # Grammar
     ///
     /// ```bnf
-    /// integer     ::= [-+]? (dec_integer | bin_integer | oct_integer | hex_integer)
+    /// integer     ::= "-"? (dec_integer | bin_integer | oct_integer | hex_integer)
     /// dec_integer ::= ([1-9] ("_"* [0-9])* | "0")
     /// bin_integer ::= "0" [bB] ("_"* [01])*
     /// oct_integer ::= "0" [oO] ("_"* [0-7])+
     /// hex_integer ::= "0" [xX] ("_"* [0-9 a-f A-F])+
     /// ```
-    pub fn parse<B: AsRef<[u8]>>(s: B) -> Result<Self, ParseIntegerError> {
+    pub fn parse_wsa<B: AsRef<[u8]>>(s: B) -> Result<Self, ParseIntegerError> {
         let s0 = s.as_ref();
         let len = s0.len();
 
-        let (sign, s) = match s0.split_first() {
-            Some((b'+', s)) => (Sign::Pos, s),
-            Some((b'-', s)) => (Sign::Neg, s),
-            _ => (Sign::Empty, s0),
+        let (is_negative, s) = match s0.split_first() {
+            Some((b'-', s)) => (true, s),
+            _ => (false, s0),
         };
 
         let (base, digits, leading_binary_zeros) = match s.split_first() {
@@ -104,13 +89,7 @@ impl IntegerLit {
                 }
 
                 // Zero
-                None => {
-                    return Ok(IntegerLit {
-                        value: Integer::ZERO,
-                        sign,
-                        leading_binary_zeros: 0,
-                    });
-                }
+                None => return Ok(IntegerLit::zero(is_negative, 0)),
             },
 
             Some((b'_', _)) => return Err(ParseIntegerError::LeadingUnderscore),
@@ -128,21 +107,20 @@ impl IntegerLit {
             return Err(ParseIntegerError::TrailingUnderscore);
         }
 
-        let mut value = Integer::new();
-        if !digits.is_empty() {
-            // SAFETY: Digits have been verified to be in range for the base.
-            unsafe {
-                value.assign_bytes_radix_unchecked(&digits, base, sign == Sign::Neg);
+        if digits.is_empty() {
+            if leading_binary_zeros == 0 && base != 2 {
+                return Err(ParseIntegerError::NoDigits);
+            } else {
+                return Ok(IntegerLit::zero(is_negative, leading_binary_zeros));
             }
-        } else if leading_binary_zeros == 0 && base != 2 {
-            return Err(ParseIntegerError::NoDigits);
         }
 
-        Ok(IntegerLit {
-            value,
-            sign,
-            leading_binary_zeros,
-        })
+        let mut value = Integer::new();
+        // SAFETY: Digits have been verified to be in range for the base.
+        unsafe {
+            value.assign_bytes_radix_unchecked(&digits, base, is_negative);
+        }
+        Ok(IntegerLit::new_leading(value, leading_binary_zeros))
     }
 }
 

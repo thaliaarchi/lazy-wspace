@@ -12,8 +12,8 @@ use rug::ops::{
 use rug::Integer;
 use strum::Display;
 use wspace_syntax::hs::ReadIntegerLit;
+use wspace_syntax::ws::ast::IntegerLit;
 
-use crate::ast::IntegerLit;
 use crate::error::{EagerError, Error, ValueError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +53,11 @@ impl FromStr for Value {
 }
 
 impl Value {
+    #[inline]
+    pub fn integer<T: Into<Integer>>(n: T) -> Self {
+        Value::Integer(Rc::new(n.into()))
+    }
+
     #[inline]
     pub fn zero() -> Self {
         Integer::ZERO.into()
@@ -182,17 +187,17 @@ fn rem_floor_rc(lhs: Rc<Integer>, rhs: Rc<Integer>) -> Integer {
 impl From<&IntegerLit> for Value {
     #[inline]
     fn from(n: &IntegerLit) -> Self {
-        match n {
-            IntegerLit::Integer(n) => Value::Integer(n.clone()),
-            IntegerLit::Empty => Value::Error(ValueError::EmptyLit),
+        match n.value() {
+            Some(n) => Value::Integer(Rc::new(n.clone())),
+            None => Value::Error(ValueError::EmptyLit),
         }
     }
 }
 
-impl<T: Into<Integer>> From<T> for Value {
+impl From<Integer> for Value {
     #[inline]
-    fn from(v: T) -> Self {
-        Value::Integer(Rc::new(v.into()))
+    fn from(n: Integer) -> Self {
+        Value::Integer(Rc::new(n))
     }
 }
 
@@ -237,12 +242,12 @@ mod tests {
 
     #[test]
     fn eval_update_refs() {
-        let x = ValueRef::from(1);
-        let y = ValueRef::from(2);
+        let x = ValueRef::from(Value::integer(1));
+        let y = ValueRef::from(Value::integer(2));
         let z = ValueRef::from(Value::Op(Op::Add, x, y));
         let z1 = z.clone().eval().unwrap();
         assert_eq!(Integer::from(3), *z1);
-        assert_eq!(ValueRef::from(3), z);
+        assert_eq!(ValueRef::from(Value::integer(3)), z);
     }
 
     #[test]

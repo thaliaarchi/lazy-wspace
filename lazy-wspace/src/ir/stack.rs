@@ -1,4 +1,5 @@
-use crate::ast::IntegerLit;
+use wspace_syntax::ws::ast::IntegerLit;
+
 use crate::error::{UnderflowError, ValueError};
 use crate::ir::instructions::{Inst, Opcode, Value};
 use crate::ir::{NodeRef, NodeTable};
@@ -104,9 +105,9 @@ impl AbstractStack {
     /// exist in the table. This corresponds to Whitespace `push`.
     #[inline]
     pub fn push_integer(&mut self, n: &IntegerLit, table: &mut NodeTable<'_>) -> Value {
-        let val = match n {
-            IntegerLit::Integer(n) => table.insert_mpz(n),
-            IntegerLit::Empty => table.insert_value(Inst::const_error(ValueError::EmptyLit)),
+        let val = match n.value() {
+            Some(n) => table.insert_mpz(n),
+            None => table.insert_value(Inst::const_error(ValueError::EmptyLit)),
         };
         self.push(val);
         val
@@ -448,15 +449,15 @@ impl LazySize {
 impl From<&IntegerLit> for LazySize {
     #[inline]
     fn from(n: &IntegerLit) -> Self {
-        match n {
-            IntegerLit::Integer(n) => {
+        match n.value() {
+            Some(n) => {
                 if let Some(n) = n.to_usize() {
                     LazySize::Finite(n)
                 } else {
                     LazySize::Overflow
                 }
             }
-            IntegerLit::Empty => LazySize::EmptyLit,
+            None => LazySize::EmptyLit,
         }
     }
 }

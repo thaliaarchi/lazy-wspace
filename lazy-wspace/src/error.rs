@@ -12,8 +12,7 @@ use cfg_if::cfg_if;
 use rug::Integer;
 use thiserror::Error;
 use wspace_syntax::hs::Show;
-
-use crate::ast::{Inst, LabelLit};
+use wspace_syntax::ws::ast::{self, Inst, LabelLit};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
@@ -37,6 +36,7 @@ pub enum ParseError {
     UnterminatedInteger,
     #[error("unterminated label")]
     UnterminatedLabel,
+    // TODO: Reference label by span.
     #[error("undefined label {0}")]
     UndefinedLabel(LabelLit),
     #[error("implicit end")]
@@ -106,6 +106,27 @@ pub enum OutKind {
     Stderr,
 }
 
+impl From<ast::ParseError> for Error {
+    #[inline]
+    fn from(err: ast::ParseError) -> Self {
+        Error::Parse(err.into())
+    }
+}
+
+impl From<ast::ParseError> for ParseError {
+    #[inline]
+    fn from(err: ast::ParseError) -> Self {
+        match err {
+            ast::ParseError::IncompleteOpcode => ParseError::IncompleteOpcode,
+            ast::ParseError::UnrecognizedOpcode => ParseError::UnrecognizedOpcode,
+            ast::ParseError::UnterminatedInteger => ParseError::UnterminatedInteger,
+            ast::ParseError::UnterminatedLabel => ParseError::UnterminatedLabel,
+            ast::ParseError::InvalidUtf8 => ParseError::InvalidUtf8,
+            ast::ParseError::UnexpectedRiverCrab => ParseError::UnexpectedRiverCrab,
+        }
+    }
+}
+
 impl From<io::Error> for Error {
     #[inline]
     fn from(err: io::Error) -> Self {
@@ -157,15 +178,26 @@ impl UnderflowError {
     #[inline]
     pub fn to_error(self, inst: &Inst) -> Error {
         match self {
-            UnderflowError::Normal => inst
-                .err()
-                .unwrap_or_else(|| EagerError::Underflow(inst.clone()).into()),
+            UnderflowError::Normal => {
+                Error::from_inst(inst).unwrap_or_else(|| EagerError::Underflow(inst.clone()).into())
+            }
             UnderflowError::SlideEmpty => ValueError::EmptyLit.into(),
         }
     }
 }
 
 impl Error {
+    #[inline]
+    pub fn from_inst(inst: &Inst) -> Option<Self> {
+        match inst {
+            Inst::Push(n) | Inst::Copy(n) | Inst::Slide(n) if n.is_empty() => {
+                Some(ValueError::EmptyLit.into())
+            }
+            Inst::ParseError(err) => Some((*err).into()),
+            _ => None,
+        }
+    }
+
     #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
@@ -225,8 +257,7 @@ impl ValueError {
             }
             ValueError::ReadiParse => {
                 HaskellError::stderr(wspace, "Prelude.read: no parse", 1)
-            },
-
+            }
         }
     }
 }

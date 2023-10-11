@@ -3,8 +3,8 @@ use std::fmt::{self, Display, Formatter};
 use std::ops::{Index, IndexMut};
 
 use bitvec::prelude::*;
+use wspace_syntax::ws::ast::{Inst as Ast, LabelLit};
 
-use crate::ast::{Inst as Ast, LabelLit};
 use crate::error::{Error, ParseError, UnderflowError};
 use crate::ir::instructions::{Cond, Inst, IoFormat, Opcode, Value};
 use crate::ir::{AbstractHeap, AbstractStack, Graph, LazySize, NodeRef, NodeTable};
