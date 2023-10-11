@@ -3,16 +3,10 @@ use std::str::from_utf8_unchecked;
 
 use memchr::memchr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Token<'a> {
-    pub kind: TokenKind,
-    pub text: &'a str,
-    pub start: usize,
-    pub end: usize,
-}
+use crate::source::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TokenKind {
+pub enum Token {
     Word,
     String,
     UnterminatedString,
@@ -50,17 +44,17 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
+    type Item = (Token, Span);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.offset;
-        let kind = match self.bump()? {
+        let tok = match self.bump()? {
             b' ' | b'\t' => {
                 self.eat_while(|b| b == b' ' || b == b'\t');
-                TokenKind::Space
+                Token::Space
             }
-            b'\n' => TokenKind::Lf,
+            b'\n' => Token::Lf,
             b'"' => self.string(),
             b';' => self.line_comment(),
             b'-' if self.peek() == b'-' => {
@@ -73,17 +67,11 @@ impl<'a> Iterator for Lexer<'a> {
             }
             b'-' if self.peek() == b'}' => {
                 self.bump();
-                TokenKind::UnopenedBlockComment
+                Token::UnopenedBlockComment
             }
             _ => self.word(),
         };
-        let text = unsafe { from_utf8_unchecked(&self.src[start..self.offset]) };
-        Some(Token {
-            kind,
-            text,
-            start,
-            end: self.offset,
-        })
+        Some((tok, Span::from(start..self.offset)))
     }
 }
 
@@ -91,7 +79,7 @@ impl FusedIterator for Lexer<'_> {}
 
 impl Lexer<'_> {
     #[inline]
-    fn word(&mut self) -> TokenKind {
+    fn word(&mut self) -> Token {
         loop {
             match self.peek() {
                 b' ' | b'\t' | b'\n' | b'"' | b';' => break,
@@ -100,31 +88,31 @@ impl Lexer<'_> {
                 _ => self.bump(),
             };
         }
-        TokenKind::Word
+        Token::Word
     }
 
     #[inline]
-    fn string(&mut self) -> TokenKind {
+    fn string(&mut self) -> Token {
         match memchr(b'"', &self.src[self.offset..]) {
             Some(i) => {
                 self.offset += i + 1;
-                TokenKind::String
+                Token::String
             }
             None => {
                 self.offset += memchr(b'\n', &self.src[self.offset..]).unwrap_or(self.src.len());
-                TokenKind::UnterminatedString
+                Token::UnterminatedString
             }
         }
     }
 
     #[inline]
-    fn line_comment(&mut self) -> TokenKind {
+    fn line_comment(&mut self) -> Token {
         self.eat_while(|b| b != b'\n');
-        TokenKind::LineComment
+        Token::LineComment
     }
 
     #[inline]
-    fn block_comment(&mut self) -> TokenKind {
+    fn block_comment(&mut self) -> Token {
         let mut depth = 1usize;
         while let Some(c) = self.bump() {
             match c {
@@ -136,13 +124,13 @@ impl Lexer<'_> {
                     self.bump();
                     depth -= 1;
                     if depth == 0 {
-                        return TokenKind::BlockComment;
+                        return Token::BlockComment;
                     }
                 }
                 _ => {}
             }
         }
-        TokenKind::UnclosedBlockComment
+        Token::UnclosedBlockComment
     }
 
     #[inline]

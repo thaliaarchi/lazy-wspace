@@ -1,15 +1,17 @@
 use std::iter::FusedIterator;
+use std::str;
 
 use thiserror::Error;
 
 use crate::source::{FileId, FileSpan};
-use crate::wsa::burghard::{Lexer, TokenKind};
+use crate::wsa::burghard::{Lexer, Token};
 use crate::wsa::{Word, WordFormat};
 
 /// Parser for lines of words in Burghard assembly.
 #[derive(Clone, Debug)]
 pub struct LineParser<'a> {
     lex: Lexer<'a>,
+    src: &'a str,
     has_error: bool,
     file: FileId,
 }
@@ -35,6 +37,7 @@ impl<'a> LineParser<'a> {
     pub fn new(file: FileId, src: &'a str) -> Self {
         LineParser {
             lex: Lexer::new(src),
+            src,
             has_error: false,
             file,
         }
@@ -46,11 +49,12 @@ impl<'a> LineParser<'a> {
         line.clear();
         let mut adjacent = None;
 
-        while let Some(tok) = self.lex.next() {
-            let span = FileSpan::new(self.file, tok.start, tok.end - tok.start);
+        while let Some((tok, span)) = self.lex.next() {
+            let text = &self.src[span.range()];
+            let span = span.with_file(self.file);
 
-            let word = match tok.kind {
-                TokenKind::Word => {
+            let word = match tok {
+                Token::Word => {
                     if let Some(adjacent_span) = adjacent {
                         if let Some(last) = line.last_mut() {
                             if matches!(last.format, WordFormat::Bare | WordFormat::Spliced) {
@@ -58,41 +62,41 @@ impl<'a> LineParser<'a> {
                                 // block comment and no surrounding spaces.
                                 self.warn(ParseError::ConcatenatedWords(adjacent_span, span));
                                 adjacent = Some(span);
-                                last.text += tok.text;
+                                last.text += text;
                                 last.format = WordFormat::Spliced;
                                 last.span = FileSpan::new(
                                     self.file,
                                     last.span.start(),
-                                    tok.end - last.span.start(),
+                                    span.end() - last.span.start(),
                                 );
                                 continue;
                             }
                         }
                     }
                     Word {
-                        text: tok.text.into(),
+                        text: text.into(),
                         format: WordFormat::Bare,
                         span,
                     }
                 }
-                TokenKind::String => Word {
-                    text: tok.text[1..tok.text.len() - 1].into(),
+                Token::String => Word {
+                    text: text[1..text.len() - 1].into(),
                     format: WordFormat::DoubleQuoted,
                     span,
                 },
-                TokenKind::UnterminatedString => {
+                Token::UnterminatedString => {
                     self.error(ParseError::UnterminatedString(span));
                     Word {
-                        text: tok.text[1..].into(),
+                        text: text[1..].into(),
                         format: WordFormat::DoubleQuoted,
                         span,
                     }
                 }
-                TokenKind::Space => {
+                Token::Space => {
                     adjacent = None;
                     continue;
                 }
-                TokenKind::Lf => {
+                Token::Lf => {
                     if line.len() != 0 {
                         break;
                     } else {
@@ -100,15 +104,15 @@ impl<'a> LineParser<'a> {
                     }
                 }
                 // The next token is LF or EOF.
-                TokenKind::LineComment => continue,
+                Token::LineComment => continue,
                 // Block comments are not treated as spaces and paste adjacent
                 // words together.
-                TokenKind::BlockComment => continue,
-                TokenKind::UnopenedBlockComment => {
+                Token::BlockComment => continue,
+                Token::UnopenedBlockComment => {
                     self.error(ParseError::UnopenedBlockComment(span));
                     continue;
                 }
-                TokenKind::UnclosedBlockComment => {
+                Token::UnclosedBlockComment => {
                     self.error(ParseError::UnclosedBlockComment(span));
                     continue;
                 }
