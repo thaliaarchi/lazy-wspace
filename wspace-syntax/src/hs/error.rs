@@ -33,6 +33,7 @@ pub enum Error {
     ///           - [`SomeException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L34-39)
     ///       - [`raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2611-2618)
     ///         ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exts.html#v:raiseIO-35-))
+    ///         - [`stg_raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L643-646)
     /// - [`instance Show IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L417-430)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
     ///   - [`show UserError`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L389)
@@ -66,6 +67,7 @@ pub enum Error {
     ///       - [`lazy`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/ghc-prim/GHC/Magic.hs#L64-86)
     ///   - [`raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2570-2585)
     ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exts.html#v:raise-35-))
+    ///     - [`stg_raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
     Error {
         /// The string passed to `error`.
         description: String,
