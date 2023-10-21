@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::hs;
+use crate::hs::Show;
 
 /// A representation of Haskell errors and exceptions.
 ///
@@ -138,7 +138,29 @@ pub enum Abort {
     DivZeroException,
 }
 
-impl hs::Show for Abort {
+impl Abort {
+    pub fn user_error<T: Into<String>>(description: T) -> Self {
+        Abort::UserError {
+            description: description.into(),
+        }
+    }
+
+    pub fn error<T: Into<String>>(description: T, call_stack: CallStack) -> Self {
+        Abort::ErrorCall {
+            description: description.into(),
+            call_stack,
+        }
+    }
+
+    pub fn error_without_stack_trace<T: Into<String>>(description: T) -> Self {
+        Abort::ErrorCall {
+            description: description.into(),
+            call_stack: CallStack::new(),
+        }
+    }
+}
+
+impl Show for Abort {
     fn show(&self) -> String {
         match self {
             // Models instance [`Show base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L417-430),
@@ -170,49 +192,47 @@ impl hs::Show for Abort {
 
 /// A partial call stack obtained by `HasCallStack`.
 ///
+/// The string is the name of the function that was called and the `SrcLoc` is
+/// the call-site. The list is ordered with the most recently called function
+/// last.
+///
 /// Models [`base:GHC.Stack.CallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L74-144)
 /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:CallStack)),
 /// but omits freezing.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CallStack {
-    /// The `String` is the name of the function that was called and the
-    /// `SrcLoc` is the call-site. The list is ordered with the most recently
-    /// called function last.
-    pub entries: Vec<(String, SrcLoc)>,
-}
+pub struct CallStack(pub Vec<(&'static str, SrcLoc)>);
 
 /// A single location in Haskell source code.
 ///
 /// Models [`base:GHC.Stack.SrcLoc`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L210-221)
-/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:SrcLoc)).
+/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:SrcLoc)),
+/// but it omits `srcLocEndLine` and `srcLocEndCol`, because they are unused in
+/// all of GHC, and represents `srcLocStartLine` and `srcLocStartCol` as `u64`
+/// to hold the range of `Int`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SrcLoc {
-    pub package: String,
-    pub module: String,
-    pub file: String,
-    pub start_line: i64,
-    pub start_col: i64,
-    pub end_line: i64,
-    pub end_col: i64,
+    pub package: &'static str,
+    pub module: &'static str,
+    pub file: &'static str,
+    pub line: u64,
+    pub col: u64,
 }
 
 impl CallStack {
     /// Models [base:GHC.Stack.emptyCallStack](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L192-197)
     /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#v:emptyCallStack)).
     pub fn new() -> Self {
-        CallStack {
-            entries: Vec::new(),
-        }
+        CallStack(Vec::new())
     }
 
     /// Models [base:GHC.Stack.pushCallStack](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L180-189)
     /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#v:pushCallStack)).
-    pub fn push(&mut self, func: String, loc: SrcLoc) {
-        self.entries.push((func, loc));
+    pub fn push(&mut self, func: &'static str, loc: SrcLoc) {
+        self.0.push((func, loc));
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.0.is_empty()
     }
 }
 
@@ -222,7 +242,7 @@ impl Display for CallStack {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if !self.is_empty() {
             f.write_str("CallStack (from HasCallStack):")?;
-            for (func, loc) in self.entries.iter().rev() {
+            for (func, loc) in self.0.iter().rev() {
                 write!(f, "\n  {func}, called at {loc}")?;
             }
         }
@@ -237,10 +257,21 @@ impl Display for SrcLoc {
         write!(
             f,
             "{}:{}:{} in {}:{}",
-            self.file, self.start_line, self.start_col, self.package, self.module,
+            self.file, self.line, self.col, self.package, self.module,
         )
     }
 }
+
+#[cfg(test)]
+macro_rules! SrcLoc(($file:literal : $line:literal : $col:literal in $package:literal : $module:literal) => {
+    SrcLoc {
+        package: $package,
+        module: $module,
+        file: $file,
+        line: $line,
+        col: $col,
+    }
+});
 
 /// ```haskell
 /// prettyCallStack
@@ -252,29 +283,7 @@ impl Display for SrcLoc {
 fn pretty_call_stack() {
     let pretty = "CallStack (from HasCallStack):\n  fn2, called at f2:5:6 in p2:m2\n  fn1, called at f1:1:2 in p1:m1";
     let mut stk = CallStack::new();
-    stk.push(
-        "fn1".to_owned(),
-        SrcLoc {
-            package: "p1".to_owned(),
-            module: "m1".to_owned(),
-            file: "f1".to_owned(),
-            start_line: 1,
-            start_col: 2,
-            end_line: 3,
-            end_col: 4,
-        },
-    );
-    stk.push(
-        "fn2".to_owned(),
-        SrcLoc {
-            package: "p2".to_owned(),
-            module: "m2".to_owned(),
-            file: "f2".to_owned(),
-            start_line: 5,
-            start_col: 6,
-            end_line: 7,
-            end_col: 8,
-        },
-    );
+    stk.push("fn1", SrcLoc!("f1":1:2 in "p1":"m1"));
+    stk.push("fn2", SrcLoc!("f2":5:6 in "p2":"m2"));
     assert_eq!(pretty, format!("{stk}"));
 }

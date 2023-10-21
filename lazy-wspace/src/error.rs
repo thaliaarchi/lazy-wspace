@@ -11,8 +11,27 @@ use std::rc::Rc;
 use cfg_if::cfg_if;
 use rug::Integer;
 use thiserror::Error;
-use wspace_syntax::hs::Show;
+use wspace_syntax::hs::{self, Show};
 use wspace_syntax::ws::ast::{self, Inst, LabelLit};
+
+macro_rules! SrcLoc(
+    ($file:literal : $line:literal : $col:literal in $package:tt : $module:expr) => {
+        hs::SrcLoc {
+            package: SrcLoc!(@stringify $package),
+            module: SrcLoc!(@stringify $module),
+            file: $file,
+            line: $line,
+            col: $col,
+        }
+    };
+    (@stringify $s:literal) => { $s };
+    (@stringify $($x:tt)+) => { concat!($(SrcLoc!(@to_string $x))+) };
+    (@to_string $s:literal) => { $s };
+    (@to_string $s:tt) => { stringify!($s) };
+);
+macro_rules! ListSrcLoc(($line:literal : $col:literal) => {
+    SrcLoc!("libraries/base/GHC/List.hs":$line:$col in base:GHC.List)
+});
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
@@ -240,23 +259,40 @@ impl ParseError {
 }
 
 impl ValueError {
-    #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &OsStr, _filename: &OsStr) -> HaskellError {
+        HaskellError::stderr(wspace, &self.to_abstract_haskell().show(), 1)
+    }
+
+    pub fn to_abstract_haskell(&self) -> hs::Abort {
         match self {
-            ValueError::EmptyLit => {
-                HaskellError::stderr(wspace, "Prelude.last: empty list", 1)
-            }
-            ValueError::CopyLarge | ValueError::RetrieveLarge => {
-                HaskellError::stderr(wspace, "Prelude.!!: index too large", 1)
-            }
-            ValueError::CopyNegative | ValueError::RetrieveNegative => {
-                HaskellError::stderr(wspace, "Prelude.!!: negative index", 1)
-            }
-            ValueError::DivModZero => {
-                HaskellError::stderr(wspace, "divide by zero", 1)
-            }
+            ValueError::EmptyLit => hs::Abort::error(
+                "Prelude.last: empty list",
+                hs::CallStack(vec![
+                    ("last", SrcLoc!("Input.hs":119:7 in main:Input)),
+                    ("lastError", ListSrcLoc!(191:29)),
+                    ("errorEmptyList", ListSrcLoc!(196:13)),
+                    ("error", ListSrcLoc!(1782:3)),
+                ]),
+            ),
+            ValueError::CopyLarge | ValueError::RetrieveLarge => hs::Abort::error(
+                "Prelude.!!: index too large",
+                hs::CallStack(vec![
+                    ("!!", SrcLoc!("VM.hs":63:33 in main:VM)),
+                    ("tooLarge", ListSrcLoc!(1490:50)),
+                    ("error", ListSrcLoc!(1480:14)),
+                ]),
+            ),
+            ValueError::CopyNegative | ValueError::RetrieveNegative => hs::Abort::error(
+                "Prelude.!!: negative index",
+                hs::CallStack(vec![
+                    ("!!", SrcLoc!("VM.hs":63:33 in main:VM)),
+                    ("negIndex", ListSrcLoc!(1487:17)),
+                    ("error", ListSrcLoc!(1483:12)),
+                ]),
+            ),
+            ValueError::DivModZero => hs::Abort::DivZeroException,
             ValueError::ReadiParse => {
-                HaskellError::stderr(wspace, "Prelude.read: no parse", 1)
+                hs::Abort::error_without_stack_trace("Prelude.read: no parse")
             }
         }
     }
