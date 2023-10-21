@@ -43,7 +43,7 @@ impl FromStr for Value {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
-            return Err(EagerError::ReadEof.into());
+            return Err(EagerError::ReadiEof.into());
         }
         match s.parse::<ReadIntegerLit>() {
             Ok(lit) => Ok(Value::Integer(Rc::new(lit.value))),

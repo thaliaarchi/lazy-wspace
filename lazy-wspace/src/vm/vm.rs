@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{self, Write};
 
 use utf8_chars::BufReadCharsExt;
 use wspace_syntax::ws::ast::{Inst, LabelLit};
@@ -187,13 +187,27 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             }
             Inst::Readc => {
                 let addr = pop!()?;
-                let ch = self.stdin.read_char()?.ok_or(EagerError::ReadEof)?;
+                let ch = self
+                    .stdin
+                    .read_char()
+                    .map_err(|err| match err.kind() {
+                        io::ErrorKind::InvalidData => EagerError::ReadcInvalidUtf8,
+                        io::ErrorKind::UnexpectedEof => EagerError::ReadcEof,
+                        _ => panic!("unrecognized IO error: {err}"),
+                    })?
+                    .ok_or(EagerError::ReadcEof)?;
                 self.heap.store(addr, Value::integer(ch as u32).into())?;
             }
             Inst::Readi => {
                 let addr = pop!()?;
                 let mut line = String::new();
-                self.stdin.read_line(&mut line)?;
+                self.stdin
+                    .read_line(&mut line)
+                    .map_err(|err| match err.kind() {
+                        io::ErrorKind::InvalidData => EagerError::ReadiInvalidUtf8,
+                        io::ErrorKind::UnexpectedEof => EagerError::ReadiEof,
+                        _ => panic!("unrecognized IO error: {err}"),
+                    })?;
                 let n: Value = line.parse()?;
                 self.heap.store(addr, n.into())?;
             }

@@ -2,9 +2,8 @@ use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
-use std::io::{self, stderr, stdout, ErrorKind, Write};
-use std::mem;
+use std::hash::Hash;
+use std::io::{stderr, stdout, Write};
 use std::process;
 use std::rc::Rc;
 
@@ -65,7 +64,7 @@ pub enum ValueError {
     ReadiParse,
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum EagerError {
     #[error("stack underflow: {0}")]
     Underflow(Inst),
@@ -75,14 +74,16 @@ pub enum EagerError {
     StoreNegative,
     #[error("call stack underflow")]
     RetUnderflow,
-    #[error("io error: {0}")]
-    Io(Rc<io::Error>),
     #[error("printc invalid codepoint")]
     PrintcInvalid(Rc<Integer>),
-    #[error("read at EOF")]
-    ReadEof,
-    #[error("read invalid UTF-8 sequence")]
-    ReadInvalidUtf8,
+    #[error("readc at EOF")]
+    ReadcEof,
+    #[error("readi at EOF")]
+    ReadiEof,
+    #[error("readc invalid UTF-8 sequence")]
+    ReadcInvalidUtf8,
+    #[error("readi invalid UTF-8 sequence")]
+    ReadiInvalidUtf8,
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
@@ -123,53 +124,6 @@ impl From<ast::ParseError> for ParseError {
             ast::ParseError::UnterminatedLabel => ParseError::UnterminatedLabel,
             ast::ParseError::InvalidUtf8 => ParseError::InvalidUtf8,
             ast::ParseError::UnexpectedRiverCrab => ParseError::UnexpectedRiverCrab,
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    #[inline]
-    fn from(err: io::Error) -> Self {
-        Error::Eager(err.into())
-    }
-}
-
-impl From<io::Error> for EagerError {
-    #[inline]
-    fn from(err: io::Error) -> Self {
-        match err.kind() {
-            ErrorKind::InvalidData => EagerError::ReadInvalidUtf8,
-            ErrorKind::UnexpectedEof => EagerError::ReadEof,
-            _ => EagerError::Io(Rc::new(err)),
-        }
-    }
-}
-
-impl PartialEq for EagerError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (EagerError::Underflow(inst1), EagerError::Underflow(inst2)) => inst1 == inst2,
-            (EagerError::Io(err1), EagerError::Io(err2)) => Rc::ptr_eq(err1, err2),
-            (EagerError::PrintcInvalid(c1), EagerError::PrintcInvalid(c2)) => c1 == c2,
-            _ => mem::discriminant(self) == mem::discriminant(other),
-        }
-    }
-}
-
-impl Eq for EagerError {}
-
-impl Hash for EagerError {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        mem::discriminant(self).hash(state);
-        match self {
-            EagerError::Underflow(inst) => inst.hash(state),
-            EagerError::StoreOverflow => {}
-            EagerError::StoreNegative => {}
-            EagerError::RetUnderflow => {}
-            EagerError::Io(err) => Rc::as_ptr(err).hash(state),
-            EagerError::PrintcInvalid(n) => n.hash(state),
-            EagerError::ReadEof => {}
-            EagerError::ReadInvalidUtf8 => {}
         }
     }
 }
@@ -216,23 +170,35 @@ impl ParseError {
     #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L103
             ParseError::IncompleteOpcode | ParseError::UnrecognizedOpcode => {
                 HaskellError::stderr(wspace, "Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input", 1)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L108-L109
             ParseError::UnterminatedInteger => {
                 HaskellError::stderr(wspace, "Input.hs:(108,5)-(109,51): Non-exhaustive patterns in function parseNum'\n", 1)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L114-L115
             ParseError::UnterminatedLabel => {
                 HaskellError::stderr(wspace, "Input.hs:(114,5)-(115,51): Non-exhaustive patterns in function parseStr'\n", 1)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L127
             ParseError::UndefinedLabel(l) => {
                 HaskellError::stderr(wspace, &format!("user error (Undefined label ({}))", l.to_haskell_string()), 1)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L51
             ParseError::ImplicitEnd => {
-                HaskellError::stderr(wspace, "Prelude.!!: index too large", 1)
+                let err = hs::Abort::error("Prelude.!!: index too large", hs::call_stack![
+                    "!!" at "VM.hs":51:19 in main:VM,
+                    tooLarge at "libraries/base/GHC/List.hs":1490:50 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1480:14 in base:"GHC.List",
+                ]);
+                HaskellError::stderr(wspace, &err.show(), 1)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L51
             ParseError::InvalidUtf8 => {
-                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (invalid byte sequence)", os_str_to_utf8_lossy_remove(filename)), 1)
+                // TODO: Print bad byte.
+                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (cannot decode byte sequence starting from ...)", os_str_to_utf8_lossy_remove(filename)), 1)
             }
             ParseError::UnexpectedRiverCrab => panic!("not an error in wspace"),
         }
@@ -246,6 +212,7 @@ impl ValueError {
 
     pub fn to_abstract_haskell(&self) -> hs::Abort {
         match self {
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L119
             ValueError::EmptyLit => hs::Abort::error(
                 "Prelude.last: empty list",
                 hs::call_stack![
@@ -255,7 +222,8 @@ impl ValueError {
                     error at "libraries/base/GHC/List.hs":1782:3 in base:"GHC.List",
                 ],
             ),
-            ValueError::CopyLarge | ValueError::RetrieveLarge => hs::Abort::error(
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L63
+            ValueError::CopyLarge => hs::Abort::error(
                 "Prelude.!!: index too large",
                 hs::call_stack![
                     "!!" at "VM.hs":63:33 in main:VM,
@@ -263,7 +231,8 @@ impl ValueError {
                     error at "libraries/base/GHC/List.hs":1480:14 in base:"GHC.List",
                 ],
             ),
-            ValueError::CopyNegative | ValueError::RetrieveNegative => hs::Abort::error(
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L63
+            ValueError::CopyNegative => hs::Abort::error(
                 "Prelude.!!: negative index",
                 hs::call_stack![
                     "!!" at "VM.hs":63:33 in main:VM,
@@ -271,7 +240,27 @@ impl ValueError {
                     error at "libraries/base/GHC/List.hs":1483:12 in base:"GHC.List",
                 ],
             ),
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L75-L76
             ValueError::DivModZero => hs::Abort::DivZeroException,
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L136
+            ValueError::RetrieveLarge => hs::Abort::error(
+                "Prelude.!!: index too large",
+                hs::call_stack![
+                    "!!" at "VM.hs":136:31 in main:VM,
+                    tooLarge at "libraries/base/GHC/List.hs":1490:50 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1480:14 in base:"GHC.List",
+                ],
+            ),
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L136
+            ValueError::RetrieveNegative => hs::Abort::error(
+                "Prelude.!!: negative index",
+                hs::call_stack![
+                    "!!" at "VM.hs":136:31 in main:VM,
+                    negIndex at "libraries/base/GHC/List.hs":1487:17 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1483:12 in base:"GHC.List",
+                ],
+            ),
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L87
             ValueError::ReadiParse => {
                 hs::Abort::error_without_stack_trace("Prelude.read: no parse")
             }
@@ -281,26 +270,40 @@ impl ValueError {
 
 impl EagerError {
     #[rustfmt::skip]
-    pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
+    pub fn to_haskell(&self, wspace: &OsStr, _filename: &OsStr) -> HaskellError {
         match self {
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L120
             EagerError::Underflow(inst) => {
                 HaskellError::stderr(wspace, &format!("user error (Can't do {})", inst.show()), 1)
             }
             EagerError::StoreOverflow | EagerError::StoreNegative => {
-                HaskellError::stderr_lines(wspace, &["Stack space overflow: current size 33624 bytes.", "Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it."], 2)
+                HaskellError::stderr_lines(wspace, &["Stack space overflow: current size 33616 bytes.", "Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it."], 2)
             }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L120
             EagerError::RetUnderflow => {
                 HaskellError::stderr(wspace, "user error (Can't do Return)", 1)
             }
-            EagerError::Io(err) => panic!("{err}"),
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78
             EagerError::PrintcInvalid(n) => {
                 HaskellError::stderr(wspace, &format!("Prelude.chr: bad argument: {}", n.show()), 1)
             }
-            EagerError::ReadEof => {
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L82
+            EagerError::ReadcEof => {
                 HaskellError::stderr(wspace, "<stdin>: hGetChar: end of file", 1)
             }
-            EagerError::ReadInvalidUtf8 => {
-                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (invalid byte sequence)", os_str_to_utf8_lossy_remove(filename)), 1)
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L86
+            EagerError::ReadiEof => {
+                HaskellError::stderr(wspace, "<stdin>: hGetLine: end of file", 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L82
+            EagerError::ReadcInvalidUtf8 => {
+                // TODO: Print bad byte.
+                HaskellError::stderr(wspace, "<stdin>: hGetChar: invalid argument (cannot decode byte sequence starting from ...)", 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L86
+            EagerError::ReadiInvalidUtf8 => {
+                // TODO: Print bad byte.
+                HaskellError::stderr(wspace, "<stdin>: hGetLine: invalid argument (cannot decode byte sequence starting from ...)", 1)
             }
         }
     }
