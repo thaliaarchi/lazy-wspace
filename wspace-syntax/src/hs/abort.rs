@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use crate::hs;
 
 /// A representation of Haskell errors and exceptions.
@@ -13,7 +15,7 @@ use crate::hs;
 /// are caught, so they act functionally the same, aborting the program, and are
 /// combined in this type.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Error {
+pub enum Abort {
     /// A user-created exception from the `IO` monad.
     ///
     /// Specifically, it is an `IOError` constructed with the `fail` method of
@@ -32,28 +34,25 @@ pub enum Error {
     ///           ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#v:userError))
     ///           - [`base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L326-339)
     ///             ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#t:IOException))
-    ///         - `toException` in class [`base:GHC.Exception.Type.Exception`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L45-144)
-    ///           ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:Exception))
-    ///           - instance [`Exception base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L342)
-    ///           - [`base:GHC.Exception.Type.SomeException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L34-39)
-    ///             ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:SomeException))
+    ///         - instance [`Exception base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L342)
     ///       - [`ghc-prim:GHC.Prim.raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2611-2618)
     ///         ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim.html#v:raiseIO-35-))
     ///         - [`stg_raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L643-646)
     /// - instance [`Show base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L417-430)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
-    ///   - [`show base:GHC.IO.Exception.UserError`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L389)
+    ///   - instance [`Show base:GHC.IO.Exception.IOErrorType`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L389)
     UserError {
         /// The string passed to `fail`.
         description: String,
     },
 
-    /// A call to `error`, which stops execution and displays an error message.
+    /// A call to `error` or `errorWithoutStackTrace`, which stops execution and
+    /// displays an error message.
     ///
     /// # GHC definitions
     ///
     /// - [`base:GHC.Err.error`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Err.hs#L33-40)
-    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Prelude.html#v:error))
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Err.html#v:error))
     ///   - [`base:GHC.Stack.HasCallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L64-72)
     ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:HasCallStack),
     ///     [guide](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/callstack.html))
@@ -73,11 +72,13 @@ pub enum Error {
     ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:prettyCallStackLines))
     ///       - [`base:GHC.Stack.getCallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L146-155)
     ///         ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#v:getCallStack))
+    ///       - [`base:GHC.Exception.prettySrcLoc`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L95-105)
+    ///         ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:prettySrcLoc))
     ///     - [`base:GHC.Exception.showCCSStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L88-90)
     ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:showCCSStack))
-    ///     - [`base:GHC.Exception.ErrorCallWithLocation`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L54-56)
+    ///     - [`base:GHC.Exception.ErrorCallWithLocation`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L54-63)
     ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#v:ErrorCallWithLocation))
-    ///     - `toException` in class [`base:GHC.Exception.Type.Exception`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L45-144)
+    ///     - instance [`Exception base:GHC.Exception.ErrorCall`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L68)
     ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:Exception))
     ///     - [`base:GHC.IO.unsafeDupablePerformIO`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Unsafe.hs#L129-145)
     ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO.html#v:unsafeDupablePerformIO))
@@ -88,11 +89,22 @@ pub enum Error {
     ///   - [`ghc-prim:GHC.Prim.raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2570-2585)
     ///     ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim.html#v:raise-35-))
     ///     - [`stg_raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
-    Error {
-        /// The string passed to `error`.
+    /// - [`base:GHC.Err.errorWithoutStackTrace`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Err.hs#L42-47)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Err.html#v:errorWithoutStackTrace))
+    ///   - [`base:GHC.Exception.errorCallException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L76-77)
+    ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:errorCallException))
+    ///     - [`base:GHC.Exception.ErrorCall`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L54-63)
+    ///       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:ErrorCall))
+    ///   - `ghc-prim:GHC.Prim.raise#` (see above)
+    /// - instance [`Show base:GHC.Exception.ErrorCall`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L71-74)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
+    ErrorCall {
+        /// The string passed to `error` or `errorWithoutStackTrace`.
         description: String,
-        /// The location stored in `ErrorCallWithLocation`.
-        location: String,
+        /// The call stack from `base:GHC.Stack.getCallStack` at the call to
+        /// `error`. When raising from `errorWithoutStackTrace`, the call stack
+        /// is empty.
+        call_stack: CallStack,
     },
 
     /// A divide by zero exception raised by operations on `Integer` or
@@ -117,53 +129,62 @@ pub enum Error {
     ///               - [`stg_raiseDivZero#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L649-652)
     ///                 - [`base:GHC.Exception.Type.divZeroException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L168)
     ///                   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:divZeroException))
-    ///                   - `toException` in class [`base:GHC.Exception.Type.Exception`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L45-144)
+    ///                   - instance [`Exception base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L174)
     ///                     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:Exception))
-    ///                     - instance [`Exception base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L174)
-    ///                     - `DivideByZero` in data [`base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L155-165)
-    ///                       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#t:ArithException))
-    ///                     - [`base:GHC.Exception.Type.SomeException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L34-39)
-    ///                       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:SomeException))
-    DivZero,
+    ///                   - [`base:GHC.Exception.Type.DivideByZero`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L155-165)
+    ///                     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:DivideByZero))
+    /// - instance [`Show base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L181)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
+    DivZeroException,
 }
 
-impl hs::Show for Error {
+impl hs::Show for Abort {
     fn show(&self) -> String {
         match self {
-            Error::UserError { description } => {
+            // Models instance [`Show base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L417-430),
+            // specialized for exceptions created by `userError`.
+            Abort::UserError { description } => {
                 if description.is_empty() {
-                    "user error".to_string()
+                    "user error".to_owned()
                 } else {
                     format!("user error ({description})")
                 }
             }
-            Error::Error {
-                description: _,
-                location: _,
-            } => todo!(),
-            Error::DivZero => "divide by zero".to_owned(),
+            // Models instance [`Show base:GHC.Exception.ErrorCall`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L71-74).
+            Abort::ErrorCall {
+                description,
+                call_stack,
+            } => {
+                if call_stack.is_empty() {
+                    description.clone()
+                } else {
+                    format!("{description}\n{call_stack}")
+                }
+            }
+            // Models instance [`Show base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L181),
+            // specialized for exceptions created by `divZeroException`.
+            Abort::DivZeroException => "divide by zero".to_owned(),
         }
     }
 }
 
 /// A partial call stack obtained by `HasCallStack`.
 ///
-/// Represents [`GHC.Stack.CallStack`](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:CallStack)
-/// ([source](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L74-144)).
+/// Models [`base:GHC.Stack.CallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L74-144)
+/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:CallStack)),
+/// but omits freezing.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallStack {
     /// The `String` is the name of the function that was called and the
     /// `SrcLoc` is the call-site. The list is ordered with the most recently
     /// called function last.
     pub entries: Vec<(String, SrcLoc)>,
-    /// A frozen call stack cannot be pushed to.
-    pub frozen: bool,
 }
 
 /// A single location in Haskell source code.
 ///
-/// Represents [`GHC.Stack.SrcLoc`](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:SrcLoc)
-/// ([source](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L210-221)).
+/// Models [`base:GHC.Stack.SrcLoc`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L210-221)
+/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#t:SrcLoc)).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SrcLoc {
     pub package: String,
@@ -173,4 +194,87 @@ pub struct SrcLoc {
     pub start_col: i64,
     pub end_line: i64,
     pub end_col: i64,
+}
+
+impl CallStack {
+    /// Models [base:GHC.Stack.emptyCallStack](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L192-197)
+    /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#v:emptyCallStack)).
+    pub fn new() -> Self {
+        CallStack {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Models [base:GHC.Stack.pushCallStack](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Stack/Types.hs#L180-189)
+    /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Stack.html#v:pushCallStack)).
+    pub fn push(&mut self, func: String, loc: SrcLoc) {
+        self.entries.push((func, loc));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// Models [`base:GHC.Exception.prettyCallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L107-119)
+/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:prettyCallStack)).
+impl Display for CallStack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if !self.is_empty() {
+            f.write_str("CallStack (from HasCallStack):")?;
+            for (func, loc) in self.entries.iter().rev() {
+                write!(f, "\n  {func}, called at {loc}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Models [`base:GHC.Exception.prettySrcLoc`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L95-105)
+/// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:prettySrcLoc)).
+impl Display for SrcLoc {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}:{}:{} in {}:{}",
+            self.file, self.start_line, self.start_col, self.package, self.module,
+        )
+    }
+}
+
+/// ```haskell
+/// prettyCallStack
+///     (pushCallStack ("fn2", (SrcLoc "p2" "m2" "f2" 5 6 7 8))
+///     (pushCallStack ("fn1", (SrcLoc "p1" "m1" "f1" 1 2 3 4))
+///      emptyCallStack))
+/// ```
+#[test]
+fn pretty_call_stack() {
+    let pretty = "CallStack (from HasCallStack):\n  fn2, called at f2:5:6 in p2:m2\n  fn1, called at f1:1:2 in p1:m1";
+    let mut stk = CallStack::new();
+    stk.push(
+        "fn1".to_owned(),
+        SrcLoc {
+            package: "p1".to_owned(),
+            module: "m1".to_owned(),
+            file: "f1".to_owned(),
+            start_line: 1,
+            start_col: 2,
+            end_line: 3,
+            end_col: 4,
+        },
+    );
+    stk.push(
+        "fn2".to_owned(),
+        SrcLoc {
+            package: "p2".to_owned(),
+            module: "m2".to_owned(),
+            file: "f2".to_owned(),
+            start_line: 5,
+            start_col: 6,
+            end_line: 7,
+            end_col: 8,
+        },
+    );
+    assert_eq!(pretty, format!("{stk}"));
 }

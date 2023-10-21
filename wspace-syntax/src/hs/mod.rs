@@ -1,7 +1,7 @@
-mod error;
+mod abort;
 mod integer;
 mod show;
 
-pub use error::*;
+pub use abort::*;
 pub use integer::*;
 pub use show::*;
