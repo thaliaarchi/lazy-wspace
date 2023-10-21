@@ -262,28 +262,39 @@ impl Display for SrcLoc {
     }
 }
 
-#[cfg(test)]
-macro_rules! SrcLoc(($file:literal : $line:literal : $col:literal in $package:literal : $module:literal) => {
-    SrcLoc {
-        package: $package,
-        module: $module,
-        file: $file,
-        line: $line,
-        col: $col,
-    }
-});
+#[macro_export]
+macro_rules! hs_call_stack[
+    ($($callee:tt at $file:literal : $line:literal : $col:literal in $package:tt : $module:tt),* $(,)?) => {
+        $crate::hs::CallStack(::std::vec![
+            $((
+                $crate::hs::call_stack!(@to_string $callee),
+                $crate::hs::SrcLoc {
+                    package: $crate::hs::call_stack!(@to_string $package),
+                    module: $crate::hs::call_stack!(@to_string $module),
+                    file: $file,
+                    line: $line,
+                    col: $col,
+                },
+            )),*
+        ])
+    };
+    (@to_string $id:ident) => { stringify!($id) };
+    (@to_string $s:literal) => { $s };
+];
+pub use hs_call_stack as call_stack;
 
 /// ```haskell
 /// prettyCallStack
-///     (pushCallStack ("fn2", (SrcLoc "p2" "m2" "f2" 5 6 7 8))
-///     (pushCallStack ("fn1", (SrcLoc "p1" "m1" "f1" 1 2 3 4))
+///     (pushCallStack ("func2", (SrcLoc "package2" "module2" "file2" 5 6 7 8))
+///     (pushCallStack ("func1", (SrcLoc "package1" "module1" "file1" 1 2 3 4))
 ///      emptyCallStack))
 /// ```
 #[test]
 fn pretty_call_stack() {
-    let pretty = "CallStack (from HasCallStack):\n  fn2, called at f2:5:6 in p2:m2\n  fn1, called at f1:1:2 in p1:m1";
-    let mut stk = CallStack::new();
-    stk.push("fn1", SrcLoc!("f1":1:2 in "p1":"m1"));
-    stk.push("fn2", SrcLoc!("f2":5:6 in "p2":"m2"));
+    let pretty = "CallStack (from HasCallStack):\n  func2, called at file2:5:6 in package2:module2\n  func1, called at file1:1:2 in package1:module1";
+    let stk = call_stack![
+        "func1" at "file1":1:2 in "package1":"module1",
+        "func2" at "file2":5:6 in "package2":"module2",
+    ];
     assert_eq!(pretty, format!("{stk}"));
 }

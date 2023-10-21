@@ -14,25 +14,6 @@ use thiserror::Error;
 use wspace_syntax::hs::{self, Show};
 use wspace_syntax::ws::ast::{self, Inst, LabelLit};
 
-macro_rules! SrcLoc(
-    ($file:literal : $line:literal : $col:literal in $package:tt : $module:expr) => {
-        hs::SrcLoc {
-            package: SrcLoc!(@stringify $package),
-            module: SrcLoc!(@stringify $module),
-            file: $file,
-            line: $line,
-            col: $col,
-        }
-    };
-    (@stringify $s:literal) => { $s };
-    (@stringify $($x:tt)+) => { concat!($(SrcLoc!(@to_string $x))+) };
-    (@to_string $s:literal) => { $s };
-    (@to_string $s:tt) => { stringify!($s) };
-);
-macro_rules! ListSrcLoc(($line:literal : $col:literal) => {
-    SrcLoc!("libraries/base/GHC/List.hs":$line:$col in base:GHC.List)
-});
-
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
     #[error("incorrect usage")]
@@ -267,28 +248,28 @@ impl ValueError {
         match self {
             ValueError::EmptyLit => hs::Abort::error(
                 "Prelude.last: empty list",
-                hs::CallStack(vec![
-                    ("last", SrcLoc!("Input.hs":119:7 in main:Input)),
-                    ("lastError", ListSrcLoc!(191:29)),
-                    ("errorEmptyList", ListSrcLoc!(196:13)),
-                    ("error", ListSrcLoc!(1782:3)),
-                ]),
+                hs::call_stack![
+                    last at "Input.hs":119:7 in main:Input,
+                    lastError at "libraries/base/GHC/List.hs":191:29 in base:"GHC.List",
+                    errorEmptyList at "libraries/base/GHC/List.hs":196:13 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1782:3 in base:"GHC.List",
+                ],
             ),
             ValueError::CopyLarge | ValueError::RetrieveLarge => hs::Abort::error(
                 "Prelude.!!: index too large",
-                hs::CallStack(vec![
-                    ("!!", SrcLoc!("VM.hs":63:33 in main:VM)),
-                    ("tooLarge", ListSrcLoc!(1490:50)),
-                    ("error", ListSrcLoc!(1480:14)),
-                ]),
+                hs::call_stack![
+                    "!!" at "VM.hs":63:33 in main:VM,
+                    tooLarge at "libraries/base/GHC/List.hs":1490:50 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1480:14 in base:"GHC.List",
+                ],
             ),
             ValueError::CopyNegative | ValueError::RetrieveNegative => hs::Abort::error(
                 "Prelude.!!: negative index",
-                hs::CallStack(vec![
-                    ("!!", SrcLoc!("VM.hs":63:33 in main:VM)),
-                    ("negIndex", ListSrcLoc!(1487:17)),
-                    ("error", ListSrcLoc!(1483:12)),
-                ]),
+                hs::call_stack![
+                    "!!" at "VM.hs":63:33 in main:VM,
+                    negIndex at "libraries/base/GHC/List.hs":1487:17 in base:"GHC.List",
+                    error at "libraries/base/GHC/List.hs":1483:12 in base:"GHC.List",
+                ],
             ),
             ValueError::DivModZero => hs::Abort::DivZeroException,
             ValueError::ReadiParse => {
