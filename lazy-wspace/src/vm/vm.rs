@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::{self, Write};
 
 use utf8_chars::BufReadCharsExt;
@@ -95,6 +96,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                         if n.cmp0() == Ordering::Less {
                             ValueError::CopyNegative.into()
                         } else {
+                            // TODO: Make wrapping.
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             let i = self.stack.len().wrapping_sub(n.wrapping_add(1));
                             match self.stack.get(i) {
@@ -120,6 +122,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                     Some(n) => {
                         // Negative values slide nothing.
                         if n.cmp0() == Ordering::Greater {
+                            // TODO: Make wrapping.
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             self.stack.truncate(self.stack.len().saturating_sub(n));
                         }
@@ -177,43 +180,57 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                     .to_u32()
                     .and_then(char::from_u32)
                     .ok_or(EagerError::PrintcInvalid(n))?;
-                write!(self.stdout, "{ch}").unwrap();
-                self.stdout.flush().unwrap();
+                self.print(ch);
             }
             Inst::Printi => {
                 let n = pop!()?.eval()?;
-                write!(self.stdout, "{n}").unwrap();
-                self.stdout.flush().unwrap();
+                self.print(n);
             }
             Inst::Readc => {
                 let addr = pop!()?;
-                let ch = self
-                    .stdin
-                    .read_char()
-                    .map_err(|err| match err.kind() {
-                        io::ErrorKind::InvalidData => EagerError::ReadcInvalidUtf8,
-                        io::ErrorKind::UnexpectedEof => EagerError::ReadcEof,
-                        _ => panic!("unrecognized IO error: {err}"),
-                    })?
-                    .ok_or(EagerError::ReadcEof)?;
+                let ch = match self.stdin.read_char() {
+                    Ok(Some(ch)) => Ok(ch),
+                    Ok(None) => Err(EagerError::ReadcEof),
+                    Err(err) => match err.kind() {
+                        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
+                            Err(EagerError::ReadcInvalidUtf8)
+                        }
+                        _ => panic!("unhandled IO error: {err}"),
+                    },
+                }?;
                 self.heap.store(addr, Value::integer(ch as u32).into())?;
             }
             Inst::Readi => {
                 let addr = pop!()?;
                 let mut line = String::new();
-                self.stdin
-                    .read_line(&mut line)
-                    .map_err(|err| match err.kind() {
-                        io::ErrorKind::InvalidData => EagerError::ReadiInvalidUtf8,
-                        io::ErrorKind::UnexpectedEof => EagerError::ReadiEof,
-                        _ => panic!("unrecognized IO error: {err}"),
-                    })?;
+                match self.stdin.read_line(&mut line) {
+                    Ok(0) => Err(EagerError::ReadiEof),
+                    Ok(_) => Ok(()),
+                    Err(err) => match err.kind() {
+                        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
+                            Err(EagerError::ReadiInvalidUtf8)
+                        }
+                        _ => panic!("unhandled IO error: {err}"),
+                    },
+                }?;
                 let n: Value = line.parse()?;
                 self.heap.store(addr, n.into())?;
             }
             Inst::ParseError(err) => return Err((*err).into()),
         }
         Ok(())
+    }
+
+    fn print<T: Display>(&mut self, v: T) {
+        if let Err(err) = write!(self.stdout, "{v}").and_then(|_| self.stdout.flush()) {
+            match err.kind() {
+                // wspace appears to suppress SIGPIPE.
+                io::ErrorKind::BrokenPipe => {
+                    self.pc = self.prog.len();
+                }
+                _ => panic!("unhandled IO error: {err}"),
+            }
+        }
     }
 }
 
