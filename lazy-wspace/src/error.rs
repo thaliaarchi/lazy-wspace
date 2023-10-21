@@ -15,14 +15,26 @@ use wspace_syntax::ws::ast::{self, Inst, LabelLit};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum Error {
-    #[error("incorrect usage")]
-    Usage,
+    #[error(transparent)]
+    Usage(#[from] UsageError),
     #[error(transparent)]
     Parse(#[from] ParseError),
     #[error(transparent)]
     Value(#[from] ValueError),
     #[error(transparent)]
     Eager(#[from] EagerError),
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
+pub enum UsageError {
+    #[error("incorrect usage")]
+    ArgumentCount,
+    #[error("no such file or directory")]
+    NotFound,
+    #[error("source file is a directory")]
+    IsADirectory,
+    #[error("permission denied")]
+    PermissionDenied,
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
@@ -152,16 +164,40 @@ impl Error {
         }
     }
 
-    #[rustfmt::skip]
     pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
         match self {
-            Error::Usage => {
-                // Does not use binary name
-                HaskellError::stdout("wspace 0.3 (c) 2003 Edwin Brady\n-------------------------------\nUsage: wspace [file]\n".to_owned())
-            }
+            Error::Usage(err) => err.to_haskell(wspace, filename),
             Error::Parse(err) => err.to_haskell(wspace, filename),
             Error::Value(err) => err.to_haskell(wspace, filename),
             Error::Eager(err) => err.to_haskell(wspace, filename),
+        }
+    }
+}
+
+impl UsageError {
+    #[rustfmt::skip]
+    pub fn to_haskell(&self, wspace: &OsStr, filename: &OsStr) -> HaskellError {
+        match self {
+            // https://github.com/wspace/whitespace-haskell/blob/master/main.hs#L35
+            UsageError::ArgumentCount => {
+                // Does not use binary name
+                HaskellError::stdout("wspace 0.3 (c) 2003 Edwin Brady\n-------------------------------\nUsage: wspace [file]\n".to_owned())
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L51
+            UsageError::NotFound => {
+                let filename = os_str_to_utf8_lossy_remove(filename);
+                HaskellError::stderr(wspace, &format!("{filename}: openFile: does not exist (No such file or directory)"), 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L51
+            UsageError::IsADirectory => {
+                let filename = os_str_to_utf8_lossy_remove(filename);
+                HaskellError::stderr(wspace, &format!("{filename}: openFile: inappropriate type (is a directory)"), 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L51
+            UsageError::PermissionDenied => {
+                let filename = os_str_to_utf8_lossy_remove(filename);
+                HaskellError::stderr(wspace, &format!("{filename}: openFile: permission denied (Permission denied)"), 1)
+            }
         }
     }
 }
@@ -197,8 +233,9 @@ impl ParseError {
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L51
             ParseError::InvalidUtf8 => {
+                let filename = os_str_to_utf8_lossy_remove(filename);
                 // TODO: Print bad byte.
-                HaskellError::stderr(wspace, &format!("{}: hGetContents: invalid argument (cannot decode byte sequence starting from ...)", os_str_to_utf8_lossy_remove(filename)), 1)
+                HaskellError::stderr(wspace, &format!("{filename}: hGetContents: invalid argument (cannot decode byte sequence starting from ...)"), 1)
             }
             ParseError::UnexpectedRiverCrab => panic!("not an error in wspace"),
         }

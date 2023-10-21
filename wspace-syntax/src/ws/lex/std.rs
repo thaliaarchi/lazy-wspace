@@ -1,4 +1,4 @@
-//! Lexing for Whitespace tokens matching the reference interpreter.
+//! Lexing for Whitespace tokens, matching the reference interpreter.
 
 use std::iter::FusedIterator;
 use std::slice::Iter;
@@ -23,6 +23,20 @@ impl<'a> StdLexer<'a> {
             len: src.len(),
             invalid_utf8: invalid_utf8.map(|len| len as u8),
         }
+    }
+
+    #[inline]
+    pub fn from_utf8_lazy(src: &'a [u8]) -> Self {
+        let (src, invalid_utf8) = match simdutf8::compat::from_utf8(src) {
+            Ok(src) => (src, None),
+            Err(err) => {
+                let error_len = err.error_len().unwrap_or(src.len() - err.valid_up_to());
+                // SAFETY: Guaranteed by API invariants.
+                let src = unsafe { str::from_utf8_unchecked(&src[..err.valid_up_to()]) };
+                (src, Some(error_len))
+            }
+        };
+        StdLexer::new(src, invalid_utf8)
     }
 }
 
@@ -53,7 +67,8 @@ impl Iterator for StdLexer<'_> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, Some(self.iter.len()))
+        let has_invalid = self.invalid_utf8.is_some() as usize;
+        (0, Some(self.iter.len() + has_invalid))
     }
 }
 
@@ -62,16 +77,7 @@ impl FusedIterator for StdLexer<'_> {}
 impl<'a> From<&'a [u8]> for StdLexer<'a> {
     #[inline]
     fn from(src: &'a [u8]) -> Self {
-        let (src, invalid_utf8) = match simdutf8::compat::from_utf8(src) {
-            Ok(src) => (src, None),
-            Err(err) => {
-                let error_len = err.error_len().unwrap_or(src.len() - err.valid_up_to());
-                // SAFETY: Guaranteed by API invariants.
-                let src = unsafe { str::from_utf8_unchecked(&src[..err.valid_up_to()]) };
-                (src, Some(error_len))
-            }
-        };
-        StdLexer::new(src, invalid_utf8)
+        StdLexer::from_utf8_lazy(src)
     }
 }
 
