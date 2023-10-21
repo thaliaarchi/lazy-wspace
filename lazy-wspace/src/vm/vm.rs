@@ -180,11 +180,11 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                     .to_u32()
                     .and_then(char::from_u32)
                     .ok_or(EagerError::PrintcInvalid(n))?;
-                self.print(ch);
+                self.print(ch)?;
             }
             Inst::Printi => {
                 let n = pop!()?.eval()?;
-                self.print(n);
+                self.print(n)?;
             }
             Inst::Readc => {
                 let addr = pop!()?;
@@ -221,16 +221,22 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
         Ok(())
     }
 
-    fn print<T: Display>(&mut self, v: T) {
-        if let Err(err) = write!(self.stdout, "{v}").and_then(|_| self.stdout.flush()) {
-            match err.kind() {
-                // wspace appears to suppress SIGPIPE.
-                io::ErrorKind::BrokenPipe => {
-                    self.pc = self.prog.len();
-                }
-                _ => panic!("unhandled IO error: {err}"),
-            }
-        }
+    fn print<T: Display>(&mut self, v: T) -> Result<(), Error> {
+        // TODO: Use buffer size of 8192.
+        write!(self.stdout, "{v}").map_err(|err| match err.kind() {
+            io::ErrorKind::BrokenPipe => EagerError::BrokenPipe,
+            // The stdout buffer is always empty before printing, so permission
+            // denied can only be encountered when printi fills the buffer in a
+            // single write.
+            io::ErrorKind::PermissionDenied => EagerError::PrintPermissionDenied,
+            _ => panic!("unhandled IO error: {err}"),
+        })?;
+        self.stdout.flush().map_err(|err| match err.kind() {
+            io::ErrorKind::BrokenPipe => EagerError::BrokenPipe,
+            io::ErrorKind::PermissionDenied => EagerError::FlushPermissionDenied,
+            _ => panic!("unhandled IO error: {err}"),
+        })?;
+        Ok(())
     }
 }
 

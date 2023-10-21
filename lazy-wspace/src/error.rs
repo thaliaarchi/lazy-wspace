@@ -86,15 +86,21 @@ pub enum EagerError {
     StoreNegative,
     #[error("call stack underflow")]
     RetUnderflow,
-    #[error("printc invalid codepoint")]
+    #[error("printc: invalid codepoint")]
     PrintcInvalid(Rc<Integer>),
-    #[error("readc at EOF")]
+    #[error("print: operation not permitted")]
+    PrintPermissionDenied,
+    #[error("flush: operation not permitted")]
+    FlushPermissionDenied,
+    #[error("broken pipe")]
+    BrokenPipe,
+    #[error("readc: EOF")]
     ReadcEof,
-    #[error("readi at EOF")]
+    #[error("readi: EOF")]
     ReadiEof,
-    #[error("readc invalid UTF-8 sequence")]
+    #[error("readc: invalid UTF-8 sequence")]
     ReadcInvalidUtf8,
-    #[error("readi invalid UTF-8 sequence")]
+    #[error("readi: invalid UTF-8 sequence")]
     ReadiInvalidUtf8,
 }
 
@@ -322,7 +328,25 @@ impl EagerError {
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78
             EagerError::PrintcInvalid(n) => {
+                // TODO: Surrogates are different from too large.
                 HaskellError::stderr(wspace, &format!("Prelude.chr: bad argument: {}", n.show()), 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L91
+            EagerError::PrintPermissionDenied => {
+                // TODO: Test if putChar triggers this.
+                HaskellError::stderr(wspace, "<stdout>: commitBuffer: permission denied (Operation not permitted)", 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L79
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L92
+            EagerError::FlushPermissionDenied => {
+                // TODO: Test with read-only file.
+                HaskellError::stderr(wspace, "<stdout>: hFlush: permission denied (Operation not permitted)", 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78-L79
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L91-L92
+            EagerError::BrokenPipe => {
+                // wspace appears to suppress SIGPIPE.
+                HaskellError::stdout(String::new())
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L82
             EagerError::ReadcEof => {
@@ -348,16 +372,18 @@ impl EagerError {
 
 impl HaskellError {
     pub fn handle(&self) -> ! {
-        match self.out {
-            OutKind::Stdout => {
-                let mut w = stdout().lock();
-                w.write_all(&self.msg).unwrap();
-                w.flush().unwrap();
-            }
-            OutKind::Stderr => {
-                let mut w = stderr().lock();
-                w.write_all(&self.msg).unwrap();
-                w.flush().unwrap();
+        if !self.msg.is_empty() {
+            match self.out {
+                OutKind::Stdout => {
+                    let mut w = stdout().lock();
+                    w.write_all(&self.msg).unwrap();
+                    w.flush().unwrap();
+                }
+                OutKind::Stderr => {
+                    let mut w = stderr().lock();
+                    w.write_all(&self.msg).unwrap();
+                    w.flush().unwrap();
+                }
             }
         }
         process::exit(self.code)
