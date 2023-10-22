@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 
 use utf8_chars::BufReadCharsExt;
 use wspace_syntax::ws::ast::{Inst, LabelLit};
@@ -9,8 +9,8 @@ use wspace_syntax::ws::ast::{Inst, LabelLit};
 use crate::error::{EagerError, Error, ParseError, UnderflowError, ValueError};
 use crate::vm::{Op, Value, ValueRef};
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct VM<'a, I, O: ?Sized> {
+#[derive(Debug)]
+pub struct VM<'a, I: BufReadCharsExt, O: Write + ?Sized> {
     prog: Vec<Inst>,
     stack: Vec<ValueRef>,
     heap: Heap,
@@ -18,7 +18,7 @@ pub struct VM<'a, I, O: ?Sized> {
     call_stack: Vec<usize>,
     labels: HashMap<LabelLit, usize>,
     stdin: I,
-    stdout: &'a mut O,
+    stdout: BufWriter<&'a mut O>,
     on_underflow: UnderflowError,
 }
 
@@ -45,7 +45,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
             call_stack: Vec::new(),
             labels,
             stdin,
-            stdout,
+            stdout: BufWriter::with_capacity(8192, stdout),
             on_underflow: UnderflowError::Normal,
         }
     }
@@ -222,7 +222,6 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
     }
 
     fn print<T: Display>(&mut self, v: T) -> Result<(), Error> {
-        // TODO: Use buffer size of 8192.
         write!(self.stdout, "{v}").map_err(|err| match err.kind() {
             io::ErrorKind::BrokenPipe => EagerError::BrokenPipe,
             // The stdout buffer is always empty before printing, so permission
@@ -306,8 +305,9 @@ mod tests {
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[ValueRef::from(ValueError::EmptyLit)], vm.stack());
-        assert_eq!(Vec::<u8>::new(), stdout);
+        assert_eq!(vm.stack(), &[ValueRef::from(ValueError::EmptyLit)]);
+        drop(vm);
+        assert_eq!(stdout, Vec::<u8>::new());
     }
 
     #[test]
@@ -317,8 +317,9 @@ mod tests {
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[ValueRef::from(ValueError::CopyNegative)], vm.stack());
-        assert_eq!(Vec::<u8>::new(), stdout);
+        assert_eq!(vm.stack(), &[ValueRef::from(ValueError::CopyNegative)]);
+        drop(vm);
+        assert_eq!(stdout, Vec::<u8>::new());
     }
 
     #[test]
@@ -328,8 +329,9 @@ mod tests {
         let mut stdout = Vec::<u8>::new();
         let mut vm = VM::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
-        assert_eq!(&[ValueRef::from(ValueError::CopyLarge)], vm.stack());
-        assert_eq!(Vec::<u8>::new(), stdout);
+        assert_eq!(vm.stack(), &[ValueRef::from(ValueError::CopyLarge)]);
+        drop(vm);
+        assert_eq!(stdout, Vec::<u8>::new());
     }
 
     #[test]
@@ -346,8 +348,9 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(ValueError::EmptyLit.into()), vm.step());
-        assert_eq!(Vec::<u8>::new(), stdout);
+        assert_eq!(vm.step(), Err(ValueError::EmptyLit.into()));
+        drop(vm);
+        assert_eq!(stdout, Vec::<u8>::new());
     }
 
     #[test]
@@ -364,7 +367,8 @@ mod tests {
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
-        assert_eq!(Err(EagerError::Underflow(Inst::Drop).into()), vm.step());
-        assert_eq!(Vec::<u8>::new(), stdout);
+        assert_eq!(vm.step(), Err(EagerError::Underflow(Inst::Drop).into()));
+        drop(vm);
+        assert_eq!(stdout, Vec::<u8>::new());
     }
 }
