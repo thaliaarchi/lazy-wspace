@@ -97,9 +97,22 @@ impl IntegerLit {
 
 impl Display for IntegerLit {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.value() {
-            Some(n) => write!(f, "{n}"),
-            None => write!(f, "<empty>"),
+        match self.sign {
+            Sign::Pos => {}
+            Sign::Neg => f.write_str("-")?,
+            Sign::Empty => return f.write_str("<empty>"),
+        }
+        if self.leading_zeros == 0 {
+            write!(f, "{}", self.value.as_abs())
+        } else {
+            f.write_str("0b")?;
+            for _ in 0..self.leading_zeros {
+                f.write_str("0")?;
+            }
+            if !self.value.is_zero() {
+                write!(f, "{:b}", self.value.as_abs())?;
+            }
+            Ok(())
         }
     }
 }
