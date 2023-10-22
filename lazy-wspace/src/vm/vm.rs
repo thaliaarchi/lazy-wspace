@@ -20,6 +20,7 @@ pub struct Vm<'a, I: BufReadCharsExt, O: Write + ?Sized> {
     stdin: I,
     stdout: BufWriter<&'a mut O>,
     on_underflow: UnderflowError,
+    exited: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -47,6 +48,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             stdin,
             stdout: BufWriter::with_capacity(8192, stdout),
             on_underflow: UnderflowError::Normal,
+            exited: false,
         }
     }
 
@@ -58,6 +60,9 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
     pub fn execute(&mut self) -> Result<(), Error> {
         while self.pc < self.prog.len() {
             self.step()?;
+        }
+        if !self.exited {
+            return Err(ParseError::ImplicitEnd.into());
         }
         Ok(())
     }
@@ -173,7 +178,10 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             Inst::Ret => {
                 self.pc = self.call_stack.pop().ok_or(EagerError::RetUnderflow)?;
             }
-            Inst::End => self.pc = self.prog.len(),
+            Inst::End => {
+                self.pc = self.prog.len();
+                self.exited = true;
+            }
             Inst::Printc => {
                 let n = pop!()?.eval()?;
                 let ch = n

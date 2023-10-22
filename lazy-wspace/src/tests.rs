@@ -184,4 +184,10 @@ mod parse {
         test("parse/invalid_utf8/unpaired_high_surrogate.ws", b"", ParseError::InvalidUtf8, b".");
         test("parse/invalid_utf8/unpaired_low_surrogate.ws", b"", ParseError::InvalidUtf8, b".");
     }
+
+    #[test]
+    fn implicit_end() {
+        test("parse/empty_file.ws", b"", ParseError::ImplicitEnd, b"");
+        test("parse/implicit_end.ws", b"", ParseError::ImplicitEnd, b".");
+    }
 }
