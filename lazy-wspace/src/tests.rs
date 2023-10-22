@@ -8,7 +8,7 @@ use wspace_syntax::ws::{
 };
 
 use crate::error::{EagerError, Error, ParseError};
-use crate::vm::VM;
+use crate::vm::Vm;
 
 fn parse<P: AsRef<Path>>(path: P) -> Vec<Inst> {
     let full_path = Path::new("../tests").join(path);
@@ -33,7 +33,7 @@ fn test<P: AsRef<Path>, I: AsRef<[u8]>, R: Into<TestResult>, O: AsRef<[u8]>>(
 
     let prog = parse(path);
     let mut actual_stdout = Vec::new();
-    let mut vm = VM::new(prog, &mut stdin, &mut actual_stdout);
+    let mut vm = Vm::new(prog, &mut stdin, &mut actual_stdout);
     let actual_res = vm.execute();
 
     assert_eq!(actual_res, res, "{path:?}");
@@ -76,11 +76,11 @@ mod io {
         let mut stdout = ReadOnly;
 
         let prog = parse("io/buffer_size/printi_8191_bytes.ws");
-        let res = VM::new(prog, &mut stdin, &mut stdout).execute();
+        let res = Vm::new(prog, &mut stdin, &mut stdout).execute();
         assert_eq!(res, Err(EagerError::FlushPermissionDenied.into()));
 
         let prog = parse("io/buffer_size/printi_8192_bytes.ws");
-        let res = VM::new(prog, &mut stdin, &mut stdout).execute();
+        let res = Vm::new(prog, &mut stdin, &mut stdout).execute();
         assert_eq!(res, Err(EagerError::PrintPermissionDenied.into()));
     }
 }

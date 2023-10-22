@@ -10,7 +10,7 @@ use crate::error::{EagerError, Error, ParseError, UnderflowError, ValueError};
 use crate::vm::{Op, Value, ValueRef};
 
 #[derive(Debug)]
-pub struct VM<'a, I: BufReadCharsExt, O: Write + ?Sized> {
+pub struct Vm<'a, I: BufReadCharsExt, O: Write + ?Sized> {
     prog: Vec<Inst>,
     stack: Vec<ValueRef>,
     heap: Heap,
@@ -28,7 +28,7 @@ pub struct Heap {
     len: u32,
 }
 
-impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
+impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
     #[inline]
     pub fn new(prog: Vec<Inst>, stdin: I, stdout: &'a mut O) -> Self {
         let mut labels = HashMap::new();
@@ -37,7 +37,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> VM<'a, I, O> {
                 labels.entry(l.clone()).or_insert(pc);
             }
         }
-        VM {
+        Vm {
             prog,
             stack: Vec::new(),
             heap: Heap::new(),
@@ -303,7 +303,7 @@ mod tests {
         let prog = vec![Inst::Copy(IntegerLit::empty())];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
-        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+        let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(vm.stack(), &[ValueRef::from(ValueError::EmptyLit)]);
         drop(vm);
@@ -315,7 +315,7 @@ mod tests {
         let prog = vec![Inst::Copy(IntegerLit::new(-1))];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
-        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+        let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(vm.stack(), &[ValueRef::from(ValueError::CopyNegative)]);
         drop(vm);
@@ -327,7 +327,7 @@ mod tests {
         let prog = vec![Inst::Copy(IntegerLit::new(1))];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
-        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+        let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         assert_eq!(vm.stack(), &[ValueRef::from(ValueError::CopyLarge)]);
         drop(vm);
@@ -344,7 +344,7 @@ mod tests {
         ];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
-        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+        let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();
@@ -363,7 +363,7 @@ mod tests {
         ];
         let mut stdin = &b""[..];
         let mut stdout = Vec::<u8>::new();
-        let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+        let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
         vm.step().unwrap();
         vm.step().unwrap();
         vm.step().unwrap();

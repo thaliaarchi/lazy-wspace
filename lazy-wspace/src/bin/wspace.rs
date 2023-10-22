@@ -4,7 +4,7 @@ use std::io::{self, Read};
 use std::path::PathBuf;
 
 use lazy_wspace::error::{Error, HaskellError, UsageError};
-use lazy_wspace::vm::VM;
+use lazy_wspace::vm::Vm;
 use wspace_syntax::ws::{ast::Parser, lex::StdLexer};
 
 fn main() {
@@ -39,6 +39,6 @@ fn try_main() -> Result<(), (Error, PathBuf)> {
 
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
-    let mut vm = VM::new(prog, &mut stdin, &mut stdout);
+    let mut vm = Vm::new(prog, &mut stdin, &mut stdout);
     vm.execute().map_err(|err| (err, filename))
 }
