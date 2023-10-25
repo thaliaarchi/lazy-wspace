@@ -41,7 +41,6 @@ fn test<P: AsRef<Path>, I: AsRef<[u8]>, R: Into<TestResult>, O: AsRef<[u8]>>(
     assert_eq!(actual_stdout, stdout, "{path:?}");
 }
 
-#[allow(dead_code)]
 enum TestResult {
     Success,
     Error(Error),
@@ -165,8 +164,10 @@ mod parse {
     fn undefined_label() {
         test("parse/undefined_label/call.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
         test("parse/undefined_label/jmp.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
-        test("parse/undefined_label/jz.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
-        test("parse/undefined_label/jn.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
+        test("parse/undefined_label/jz_true.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
+        test("parse/undefined_label/jz_false.ws", b"", TestResult::Success, b"");
+        test("parse/undefined_label/jn_true.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
+        test("parse/undefined_label/jn_false.ws", b"", TestResult::Success, b"");
     }
 
     #[test]
