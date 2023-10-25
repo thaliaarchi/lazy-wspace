@@ -214,7 +214,10 @@ impl ParseError {
         match self {
             // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L103
             ParseError::IncompleteOpcode | ParseError::UnrecognizedOpcode => {
-                HaskellError::stderr(wspace, "Unrecognised input\nCallStack (from HasCallStack):\n  error, called at Input.hs:103:11 in main:Input", 1)
+                let err = hs::Abort::error("Unrecognised input", hs::call_stack![
+                    error at "Input.hs":103:11 in main:Input,
+                ]);
+                HaskellError::stderr(wspace, &err.show(), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L108-L109
             ParseError::UnterminatedInteger => {
@@ -226,7 +229,8 @@ impl ParseError {
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L127
             ParseError::UndefinedLabel(l) => {
-                HaskellError::stderr(wspace, &format!("user error (Undefined label ({}))", l.to_haskell_string()), 1)
+                let err = hs::Abort::user_error(format!("Undefined label ({})", l.to_haskell_string()));
+                HaskellError::stderr(wspace, &err.show(), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L51
             ParseError::ImplicitEnd => {
@@ -317,14 +321,16 @@ impl EagerError {
         match self {
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L120
             EagerError::Underflow(inst) => {
-                HaskellError::stderr(wspace, &format!("user error (Can't do {})", inst.show()), 1)
+                let err = hs::Abort::user_error(format!("Can't do {}", inst.show()));
+                HaskellError::stderr(wspace, &err.show(), 1)
             }
             EagerError::StoreOverflow | EagerError::StoreNegative => {
                 HaskellError::stderr_lines(wspace, &["Stack space overflow: current size 33616 bytes.", "Relink with -rtsopts and use `+RTS -Ksize -RTS' to increase it."], 2)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L120
             EagerError::RetUnderflow => {
-                HaskellError::stderr(wspace, "user error (Can't do Return)", 1)
+                let err = hs::Abort::user_error("Can't do Return");
+                HaskellError::stderr(wspace, &err.show(), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78
             EagerError::PrintcInvalid(n) => {
@@ -333,7 +339,6 @@ impl EagerError {
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L91
             EagerError::PrintPermissionDenied => {
-                // TODO: Test if putChar triggers this.
                 HaskellError::stderr(wspace, "<stdout>: commitBuffer: permission denied (Operation not permitted)", 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L79
