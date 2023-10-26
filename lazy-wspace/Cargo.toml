@@ -3,7 +3,7 @@ name = "lazy-wspace"
 version = "0.1.0"
 authors = ["Thalia Archibald <thalia@archibald.dev>"]
 edition = "2021"
-rust-version = "1.70" # for Option::is_some_and
+rust-version = "1.74" # for OsStr::as_encoded_bytes
 description = "Optimizing Whitespace compiler and interpreter with lazy semantics"
 repository = "https://github.com/thaliaarchi/lazy-wspace"
 license = "MPL-2.0"
@@ -13,7 +13,6 @@ default-run = "compile"
 
 [dependencies]
 bitvec = "1.0"
-cfg-if = "1.0"
 hashbrown = { version = "0.14", features = ["raw"] }
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
 rug = { version = "1.22", features = ["integer"], default-features = false }

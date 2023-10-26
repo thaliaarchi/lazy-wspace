@@ -6,8 +6,8 @@ use std::hash::Hash;
 use std::io::{stderr, stdout, Write};
 use std::process;
 use std::rc::Rc;
+use std::str;
 
-use cfg_if::cfg_if;
 use rug::Integer;
 use thiserror::Error;
 use wspace_syntax::hs::{self, Show};
@@ -448,7 +448,7 @@ impl HaskellError {
     }
 
     fn stderr_line(wspace: &OsStr, msg: &str) -> Vec<u8> {
-        let wspace = os_str_to_bytes(wspace);
+        let wspace = wspace.as_encoded_bytes();
         let mut buf = Vec::with_capacity(wspace.len() + 2 + msg.len() + 1);
         buf.extend_from_slice(&wspace);
         buf.extend_from_slice(b": ");
@@ -458,71 +458,30 @@ impl HaskellError {
     }
 }
 
-fn os_str_to_bytes(s: &OsStr) -> Cow<'_, [u8]> {
-    cfg_if! {
-        if #[cfg(unix)] {
-            use std::os::unix::ffi::OsStrExt;
-            s.as_bytes().into()
-        } else if #[cfg(target_os = "wasi")] {
-            use std::os::wasi::ffi::OsStrExt;
-            s.as_bytes().into()
-        } else {
-            s.to_string_lossy()
+/// Removes sequences of invalid UTF-8 from the `OsStr` to produce valid UTF-8.
+///
+/// This is like `OsStr::to_string_lossy`, except it removes invalid sequences,
+/// instead of replacing them with U+FFFD.
+fn os_str_to_utf8_lossy_remove(s: &OsStr) -> Cow<'_, str> {
+    let mut s = s.as_encoded_bytes();
+    match simdutf8::compat::from_utf8(s) {
+        Ok(s) => s.into(),
+        Err(mut err) => {
+            let mut cleaned = String::with_capacity(s.len());
+            loop {
+                cleaned += unsafe { str::from_utf8_unchecked(&s[..err.valid_up_to()]) };
+                if let Some(error_len) = err.error_len() {
+                    s = &s[err.valid_up_to() + error_len..];
+                    match simdutf8::compat::from_utf8(s) {
+                        Ok(s) => cleaned += s,
+                        Err(err1) => {
+                            err = err1;
+                            continue;
+                        }
+                    }
+                }
+                break cleaned.into();
+            }
         }
     }
-}
-
-#[allow(dead_code)]
-fn os_string_into_bytes(s: OsString) -> Vec<u8> {
-    // TODO: Replace with `OsStr::as_encoded_bytes`, once it's stabilized in
-    // Rust 1.74.
-    // https://github.com/rust-lang/rust/issues/111544
-    // https://doc.rust-lang.org/beta/std/ffi/struct.OsStr.html#method.as_encoded_bytes
-
-    cfg_if! {
-        if #[cfg(unix)] {
-            use std::os::unix::ffi::OsStringExt;
-            s.into_vec()
-        } else if #[cfg(target_os = "wasi")] {
-            use std::os::wasi::ffi::OsStringExt;
-            s.into_vec()
-        } else if #[cfg(windows)] {
-            s.into_string()
-                .map(|s| s.into_bytes())
-                .unwrap_or_else(|s| os_str_to_wtf8(&s))
-        } else {
-            s.into_string()
-                .unwrap_or_else(|s| s.to_string_lossy().into_owned())
-                .into_bytes()
-        }
-    }
-}
-
-#[cfg(windows)]
-fn os_str_to_wtf8(s: &OsStr) -> Vec<u8> {
-    use std::os::windows::ffi::OsStrExt;
-
-    // A specialization of `String::from_utf16` allowing for invalid
-    // sequences.
-    let mut b = Vec::with_capacity(s.len());
-    for ch in char::decode_utf16(s.encode_wide()) {
-        let ch = ch.unwrap_or_else(|err| {
-            // SAFETY: This deliberately produces an invalid char from
-            // an unpaired surrogate. However, it is only used to encode
-            // it to bytes and not kept as a char or in a str.
-            // `transmute` bypasses the debug assertion in
-            // `char::from_u32_unchecked`.
-            unsafe { mem::transmute(err.unpaired_surrogate() as u32) }
-        });
-        b.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
-    }
-    b
-}
-
-fn os_str_to_utf8_lossy_remove(s: &OsStr) -> String {
-    // TODO: This is incorrect when U+FFFD is in the input.
-    s.to_string_lossy()
-        .chars()
-        .filter(|&ch| ch != '\u{fffd}')
-        .collect()
 }
