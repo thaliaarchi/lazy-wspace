@@ -233,6 +233,8 @@ impl ParseError {
                 HaskellError::stderr(wspace, &err.show(), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L51
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1490
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1479-1480
             ParseError::ImplicitEnd => {
                 let err = hs::Abort::error("Prelude.!!: index too large", hs::call_stack![
                     "!!" at "VM.hs":51:19 in main:VM,
@@ -260,6 +262,8 @@ impl ValueError {
     pub fn to_abstract_haskell(&self) -> hs::Abort {
         match self {
             // https://github.com/wspace/whitespace-haskell/blob/master/Input.hs#L119
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L191-196
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1780-1782
             ValueError::EmptyLit => hs::Abort::error(
                 "Prelude.last: empty list",
                 hs::call_stack![
@@ -270,6 +274,8 @@ impl ValueError {
                 ],
             ),
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L63
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1490
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1479-1480
             ValueError::CopyLarge => hs::Abort::error(
                 "Prelude.!!: index too large",
                 hs::call_stack![
@@ -279,6 +285,8 @@ impl ValueError {
                 ],
             ),
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L63
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1487
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1482-1483
             ValueError::CopyNegative => hs::Abort::error(
                 "Prelude.!!: negative index",
                 hs::call_stack![
@@ -290,6 +298,8 @@ impl ValueError {
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L75-L76
             ValueError::DivModZero => hs::Abort::DivZeroException,
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L136
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1490
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1479-1480
             ValueError::RetrieveLarge => hs::Abort::error(
                 "Prelude.!!: index too large",
                 hs::call_stack![
@@ -299,6 +309,8 @@ impl ValueError {
                 ],
             ),
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L136
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1487
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/List.hs#L1482-1483
             ValueError::RetrieveNegative => hs::Abort::error(
                 "Prelude.!!: negative index",
                 hs::call_stack![
@@ -308,6 +320,8 @@ impl ValueError {
                 ],
             ),
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L87
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/Text/Read.hs#L113
+            // https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/Text/Read.hs#L79
             ValueError::ReadiParse => {
                 hs::Abort::error_without_stack_trace("Prelude.read: no parse")
             }
