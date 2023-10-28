@@ -4,6 +4,7 @@
 
 pub mod burghard;
 pub mod compat;
+pub mod whitelips;
 
 mod ast;
 mod dialect;
