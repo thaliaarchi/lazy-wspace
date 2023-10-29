@@ -136,6 +136,75 @@ pub enum Abort {
     /// - instance [`Show base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L181)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
     DivZeroException,
+
+    /// A runtime event triggered on stack overflow. Only the default RTS hook
+    /// is supported.
+    ///
+    /// # GHC definitions
+    ///
+    /// The typechecker wraps the user's `Main.main` in
+    /// `base:GHC.TopHandler.runMainIO`, to install exception and interrupt
+    /// handlers, and flush stdout and stderr before exiting.
+    /// `rts_evalStableIOMain` runs a wrapped `Main.main` in client RTS code.
+    ///
+    /// - [`base:GHC.TopHandler.runMainIO`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L78-99)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-TopHandler.html#v:runMainIO))
+    ///   - [`base:GHC.TopHandler.install_interrupt_handler`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L101)
+    ///   - [`base:GHC.TopHandler.topHandler`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L168-169)
+    ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-TopHandler.html#v:topHandler))
+    ///     - [`base:GHC.TopHandler.real_handler`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L175-206)
+    ///       - [`base:GHC.Conc.reportStackOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Conc/Sync.hs#L945-948)
+    ///         ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Conc.html#v:reportStackOverflow))
+    ///         - [`reportStackOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsUtils.c#L182-190)
+    ///           ([header](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/Rts.h#L293))
+    ///           - [`RtsConfig.stackOverflowHook`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/RtsAPI.h#L108-109)
+    ///             - [`StackOverflowHook`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/hooks/StackOverflow.c)
+    ///               ([docs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/runtime_control.html#runtime-events))
+    /// - [compiler:GHC.Tc.Module.tcRnModuleTcRnM](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Tc/Module.hs#L240-369)
+    ///   ([docs](https://hackage.haskell.org/package/ghc-9.8.1/docs/GHC-Tc-Module.html#v:tcRnModuleTcRnM))
+    ///   - [`compiler:GHC.Tc.Module.tcRnSrcDecls`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Tc/Module.hs#L455-556)
+    ///     - [`compiler:GHC.Tc.Module.checkMain`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Tc/Module.hs#L1774-1820)
+    ///       - [`compiler:GHC.Tc.Module.generateMainBinding`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Tc/Module.hs#L1829-1869)
+    ///         - `base:GHC.TopHandler.runMainIO` (see above)
+    /// - [`rts_evalStableIOMain`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsAPI.c#L496-523)
+    ///   ([header](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/RtsAPI.h#L517-519))
+    ///   - [`base:GHC.TopHandler.runMainIO_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L69)
+    ///     - `base:GHC.TopHandler.runMainIO` (see above)
+    StackOverflow { stack_size: u64 },
+
+    /// A runtime event triggered on heap overflow. Only the default RTS hook is
+    /// supported.
+    ///
+    /// The `request_size` parameter is unused in `OutOfHeapHook`, so is omitted
+    /// here.
+    ///
+    /// # GHC definitions
+    ///
+    /// This hook is installed just like `StackOverflowHook`. See
+    /// [`Abort::StackOverflow`] for the rest of the trace.
+    ///
+    /// - `base:GHC.TopHandler.real_handler` (see [`Abort::StackOverflow`])
+    ///   - [`base:GHC.Conc.reportHeapOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Conc/Sync.hs#L960-961)
+    ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Conc.html#v:reportHeapOverflow))
+    ///     - [`reportHeapOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsUtils.c#L192-198)
+    ///       ([header](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/Rts.h#L294))
+    ///       - [`RtsConfig.outOfHeapHook`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/RtsAPI.h#L111-112)
+    ///         - [`OutOfHeapHook`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/hooks/OutOfHeap.c)
+    ///           ([docs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/runtime_control.html#runtime-events))
+    OutOfHeap { heap_size: u64 },
+
+    /// A runtime event triggered on a failed `malloc`. Only the default RTS
+    /// hook is supported.
+    ///
+    /// # GHC definitions
+    ///
+    /// - [`stgMallocBytes`, `stgReallocBytes`, `stgCallocBytes`,
+    ///   `stgMallocAlignedBytes`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsUtils.c#L53-176)
+    ///   ([header](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsUtils.h#L13-44))
+    ///   - [`RtsConfig.mallocFailHook`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/RtsAPI.h#L114-115)
+    ///     - [`MallocFail`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/hooks/MallocFail.c)
+    ///       ([docs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/runtime_control.html#runtime-events))
+    MallocFail { request_size: u64, msg: Vec<u8> },
 }
 
 impl Abort {
@@ -186,6 +255,13 @@ impl Show for Abort {
             // Models instance [`Show base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L181),
             // specialized for exceptions created by `divZeroException`.
             Abort::DivZeroException => "divide by zero".to_owned(),
+            // TODO
+            Abort::StackOverflow { stack_size: _ }
+            | Abort::OutOfHeap { heap_size: _ }
+            | Abort::MallocFail {
+                request_size: _,
+                msg: _,
+            } => todo!(),
         }
     }
 }
