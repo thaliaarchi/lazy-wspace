@@ -37,7 +37,8 @@ pub enum Abort {
     ///         - instance [`Exception base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L342)
     ///       - [`ghc-prim:GHC.Prim.raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2611-2618)
     ///         ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim.html#v:raiseIO-35-))
-    ///         - [`stg_raiseIO#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L643-646)
+    ///         - [`stg_raiseIOzh`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L643-646)
+    ///           - [`stg_raisezh`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
     /// - instance [`Show base:GHC.IO.Exception.IOException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L417-430)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
     ///   - instance [`Show base:GHC.IO.Exception.IOErrorType`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L389)
@@ -88,7 +89,7 @@ pub enum Abort {
     ///         ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Magic.html#v:lazy))
     ///   - [`ghc-prim:GHC.Prim.raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2570-2585)
     ///     ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim.html#v:raise-35-))
-    ///     - [`stg_raise#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
+    ///     - [`stg_raisezh`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
     /// - [`base:GHC.Err.errorWithoutStackTrace`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Err.hs#L42-47)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Err.html#v:errorWithoutStackTrace))
     ///   - [`base:GHC.Exception.errorCallException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L76-77)
@@ -126,13 +127,15 @@ pub enum Abort {
     ///             ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim-Exception.html#v:raiseDivZero))
     ///             - [`ghc-prim:GHC.Prim.raiseDivZero#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/compiler/GHC/Builtin/primops.txt.pp#L2603-2609)
     ///               ([docs](https://hackage.haskell.org/package/ghc-prim-0.11.0/docs/GHC-Prim.html#v:raiseDivZero-35-))
-    ///               - [`stg_raiseDivZero#`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L649-652)
-    ///                 - [`base:GHC.Exception.Type.divZeroException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L168)
-    ///                   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:divZeroException))
-    ///                   - instance [`Exception base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L174)
-    ///                     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:Exception))
-    ///                   - [`base:GHC.Exception.Type.DivideByZero`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L155-165)
-    ///                     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:DivideByZero))
+    ///               - [`stg_raiseDivZerozh`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L649-652)
+    ///                 - [`base_GHCziExceptionziType_divZZeroException_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L55)
+    ///                   - [`base:GHC.Exception.Type.divZeroException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L168)
+    ///                     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:divZeroException))
+    ///                     - instance [`Exception base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L174)
+    ///                       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Exception.html#t:Exception))
+    ///                     - [`base:GHC.Exception.Type.DivideByZero`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L155-165)
+    ///                       ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception-Type.html#v:DivideByZero))
+    ///                 - [`stg_raisezh`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Exception.cmm#L451-641)
     /// - instance [`Show base:GHC.Exception.Type.ArithException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception/Type.hs#L181)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/Text-Show.html#t:Show))
     DivZeroException,
@@ -147,6 +150,11 @@ pub enum Abort {
     /// handlers, and flush stdout and stderr before exiting.
     /// `rts_evalStableIOMain` runs a wrapped `Main.main` in client RTS code.
     ///
+    /// - [`base:GHC.IO.Exception.StackOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L199-204)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#v:StackOverflow))
+    /// - instance [`Show base:GHC.IO.Exception.AsyncException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L260)
+    /// - [`base_GHCziIOziException_stackOverflow_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L43)
+    ///   - [`base:GHC.IO.Exception.stackOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L255)
     /// - [`base:GHC.TopHandler.runMainIO`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L78-99)
     ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-TopHandler.html#v:runMainIO))
     ///   - [`base:GHC.TopHandler.install_interrupt_handler`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/TopHandler.hs#L101)
@@ -168,7 +176,7 @@ pub enum Abort {
     ///         - `base:GHC.TopHandler.runMainIO` (see above)
     /// - [`rts_evalStableIOMain`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/RtsAPI.c#L496-523)
     ///   ([header](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/include/RtsAPI.h#L517-519))
-    ///   - [`base:GHC.TopHandler.runMainIO_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L69)
+    ///   - [`base_GHCziTopHandler_runMainIO_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L69)
     ///     - `base:GHC.TopHandler.runMainIO` (see above)
     StackOverflow { stack_size: u64 },
 
@@ -183,6 +191,11 @@ pub enum Abort {
     /// This hook is installed just like `StackOverflowHook`. See
     /// [`Abort::StackOverflow`] for the rest of the trace.
     ///
+    /// - [`base:GHC.IO.Exception.HeapOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L205-219)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#v:HeapOverflow))
+    /// - instance [`Show base:GHC.IO.Exception.AsyncException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L261)
+    /// - [`base_GHCziIOziException_heapOverflow_closure`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/Prelude.h#L44)
+    ///   - [`base:GHC.IO.Exception.heapOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L256)
     /// - `base:GHC.TopHandler.real_handler` (see [`Abort::StackOverflow`])
     ///   - [`base:GHC.Conc.reportHeapOverflow`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Conc/Sync.hs#L960-961)
     ///     ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Conc.html#v:reportHeapOverflow))
@@ -205,6 +218,20 @@ pub enum Abort {
     ///     - [`MallocFail`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/rts/hooks/MallocFail.c)
     ///       ([docs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/runtime_control.html#runtime-events))
     MallocFail { request_size: u64, msg: Vec<u8> },
+
+    /// # GHC definitions
+    ///
+    /// - [`base:GHC.IO.Exception.ThreadKilled`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L220-224)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#v:ThreadKilled))
+    /// - instance [`Show base:GHC.IO.Exception.AsyncException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L262)
+    ThreadKilled,
+
+    /// # GHC definitions
+    ///
+    /// - [`base:GHC.IO.Exception.UserInterrupt`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L225-228)
+    ///   ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-IO-Exception.html#v:UserInterrupt))
+    /// - instance [`Show base:GHC.IO.Exception.AsyncException`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Exception.hs#L263)
+    UserInterrupt,
 }
 
 impl Abort {
@@ -261,7 +288,9 @@ impl Show for Abort {
             | Abort::MallocFail {
                 request_size: _,
                 msg: _,
-            } => todo!(),
+            }
+            | Abort::ThreadKilled
+            | Abort::UserInterrupt => todo!(),
         }
     }
 }
