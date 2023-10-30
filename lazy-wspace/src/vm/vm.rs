@@ -70,6 +70,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
         self.pc += 1;
 
         macro_rules! arith(($op:expr) => ({
+            self.stack.force(2)?;
             let y = self.stack.pop(inst)?;
             let x = self.stack.pop(inst)?;
             self.stack.push(Value::Op($op, x, y).into());
@@ -86,24 +87,29 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
                 self.stack.push(n.into());
             }
             Inst::Dup => {
+                self.stack.force(1)?;
                 let top = self.stack.pop(inst)?;
                 self.stack.push(top.clone());
                 self.stack.push(top);
             }
             Inst::Copy(n) => {
+                self.stack.force(1)?;
                 let x = self.stack.copy(n);
                 self.stack.push(x);
             }
             Inst::Swap => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?;
                 let m = self.stack.pop(inst)?;
                 self.stack.push(n);
                 self.stack.push(m);
             }
             Inst::Drop => {
+                self.stack.force(2)?;
                 self.stack.pop(inst)?;
             }
             Inst::Slide(n) => {
+                self.stack.force(1)?;
                 let top = self.stack.pop(inst)?;
                 self.stack.drop_lazy(n)?;
                 self.stack.push(top);
@@ -114,41 +120,54 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             Inst::Div => arith!(Op::Div),
             Inst::Mod => arith!(Op::Mod),
             Inst::Store => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?;
                 let addr = self.stack.pop(inst)?;
                 self.heap.store(addr, n)?;
             }
             Inst::Retrieve => {
+                self.stack.force(2)?;
                 let addr = self.stack.pop(inst)?;
                 let n = self.heap.retrieve(addr);
                 self.stack.push(n);
             }
-            Inst::Label(_) => {}
+            Inst::Label(_) => {
+                self.stack.force(2)?;
+            }
             Inst::Call(l) => {
+                self.stack.force(2)?;
                 self.call_stack.push(self.pc);
                 jump!(l);
             }
-            Inst::Jmp(l) => jump!(l),
+            Inst::Jmp(l) => {
+                self.stack.force(2)?;
+                jump!(l);
+            }
             Inst::Jz(l) => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?.eval()?;
                 if n.is_zero() {
                     jump!(l);
                 }
             }
             Inst::Jn(l) => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?.eval()?;
                 if n.is_negative() {
                     jump!(l);
                 }
             }
             Inst::Ret => {
+                self.stack.force(2)?;
                 self.pc = self.call_stack.pop().ok_or(EagerError::RetUnderflow)?;
             }
             Inst::End => {
+                self.stack.force(2)?;
                 self.pc = self.prog.len();
                 self.exited = true;
             }
             Inst::Printc => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?.eval()?;
                 let ch = n
                     .to_u32()
@@ -157,10 +176,12 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
                 self.print(ch)?;
             }
             Inst::Printi => {
+                self.stack.force(2)?;
                 let n = self.stack.pop(inst)?.eval()?;
                 self.print(n)?;
             }
             Inst::Readc => {
+                self.stack.force(2)?;
                 let addr = self.stack.pop(inst)?;
                 let ch = match self.stdin.read_char() {
                     Ok(Some(ch)) => Ok(ch),
@@ -175,6 +196,7 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
                 self.heap.store(addr, Value::integer(ch as u32).into())?;
             }
             Inst::Readi => {
+                self.stack.force(2)?;
                 let addr = self.stack.pop(inst)?;
                 let mut line = String::new();
                 match self.stdin.read_line(&mut line) {

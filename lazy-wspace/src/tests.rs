@@ -7,7 +7,7 @@ use wspace_syntax::ws::{
     lex::StdLexer,
 };
 
-use crate::error::{EagerError, Error, ParseError};
+use crate::error::{EagerError, Error, ParseError, ValueError};
 use crate::vm::Vm;
 
 fn parse<P: AsRef<Path>>(path: P) -> Vec<Inst> {
@@ -81,6 +81,54 @@ mod io {
         let prog = parse("io/buffer_size/printi_8192_bytes.ws");
         let res = Vm::new(prog, &mut stdin, &mut stdout).execute();
         assert_eq!(res, Err(EagerError::PrintPermissionDenied.into()));
+    }
+}
+
+mod lazy {
+    use super::*;
+
+    #[test]
+    fn arith() {
+        const LHS_FIRST: ValueError = ValueError::CopyLarge;
+        const RHS_FIRST: ValueError = ValueError::RetrieveNegative;
+        test("lazy/arith/add.ws", b"", RHS_FIRST, b".");
+        test("lazy/arith/sub.ws", b"", RHS_FIRST, b".");
+        test("lazy/arith/mul.ws", b"", LHS_FIRST, b".");
+        test("lazy/arith/div.ws", b"", RHS_FIRST, b".");
+        test("lazy/arith/mod.ws", b"", RHS_FIRST, b".");
+        test("lazy/arith/div_0.ws", b"", ValueError::DivModZero, b".");
+        test("lazy/arith/mod_0.ws", b"", ValueError::DivModZero, b".");
+    }
+
+    #[test]
+    fn slide_empty() {
+        const NO_FORCE: ParseError = ParseError::ImplicitEnd;
+        const FORCE: ValueError = ValueError::EmptyLit;
+        test("lazy/slide_empty/then_push.ws", b"", NO_FORCE, b"");
+        test("lazy/slide_empty/then_dup.ws", b"", NO_FORCE, b"");
+        test("lazy/slide_empty/then_copy.ws", b"", NO_FORCE, b"");
+        test("lazy/slide_empty/then_swap.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_drop.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_slide.ws", b"", NO_FORCE, b"");
+        test("lazy/slide_empty/then_add.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_sub.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_mul.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_div.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_mod.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_store.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_retrieve.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_label.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_call.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_jmp.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_jz.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_jn.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_ret.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_end.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_printc.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_printi.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_readc.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_readi.ws", b"", FORCE, b"");
+        test("lazy/slide_empty/then_eof.ws", b"", NO_FORCE, b"");
     }
 }
 

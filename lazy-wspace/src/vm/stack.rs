@@ -78,4 +78,16 @@ impl Stack {
         }
         Ok(())
     }
+
+    /// Forces evaluation of the stack up to a depth of `len`. If a `slide` with
+    /// a signless argument (i.e., a parse error) was called within that depth,
+    /// its error is emitted. This corresponds to pattern matching on the stack.
+    #[inline]
+    pub fn force(&mut self, len: usize) -> Result<(), Error> {
+        if len > self.len() && self.on_underflow == UnderflowError::SlideEmpty {
+            Err(ValueError::EmptyLit.into())
+        } else {
+            Ok(())
+        }
+    }
 }
