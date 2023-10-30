@@ -3,7 +3,7 @@ use std::path::Path;
 
 use bitvec::prelude::*;
 use wspace_syntax::ws::{
-    ast::{Inst, LabelLit, Parser},
+    ast::{Inst, Parser},
     lex::StdLexer,
 };
 
@@ -100,35 +100,132 @@ mod lazy {
         test("lazy/arith/mod_0.ws", b"", ValueError::DivModZero, b".");
     }
 
-    #[test]
-    fn slide_empty() {
+    mod slide_empty {
+        use super::*;
+
         const NO_FORCE: ParseError = ParseError::ImplicitEnd;
         const FORCE: ValueError = ValueError::EmptyLit;
-        test("lazy/slide_empty/then_push.ws", b"", NO_FORCE, b"");
-        test("lazy/slide_empty/then_dup.ws", b"", NO_FORCE, b"");
-        test("lazy/slide_empty/then_copy.ws", b"", NO_FORCE, b"");
-        test("lazy/slide_empty/then_swap.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_drop.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_slide.ws", b"", NO_FORCE, b"");
-        test("lazy/slide_empty/then_add.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_sub.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_mul.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_div.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_mod.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_store.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_retrieve.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_label.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_call.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_jmp.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_jz.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_jn.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_ret.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_end.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_printc.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_printi.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_readc.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_readi.ws", b"", FORCE, b"");
-        test("lazy/slide_empty/then_eof.ws", b"", NO_FORCE, b"");
+
+        /// Tests each instruction, when the stack has the value
+        /// `drop (last []) []` in the reference interpreter. The combination of
+        /// `push 2` and `store` transforms the stack from
+        /// `1 : drop (last []) []` to `drop (last []) []`, without forcing the
+        /// error. Only `push` does not for evaluation of the error from slide,
+        /// because it appears before the first pattern match on the stack in
+        /// `doInstr`.
+        ///
+        /// ```wsa
+        ///     push 1
+        ///     slide <empty>
+        ///     push 2
+        ///     store
+        ///     OP
+        /// ```
+        #[test]
+        fn size0() {
+            test("lazy/slide_empty/size0/push.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size0/dup.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/copy.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/swap.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/drop.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/slide.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/add.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/sub.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/mul.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/div.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/mod.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/store.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/retrieve.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/label.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/call.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/jmp.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/jz.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/jn.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/ret.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/end.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/printc.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/printi.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/readc.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size0/readi.ws", b"", FORCE, b"");
+        }
+
+        /// Tests each instruction, when the stack has the value
+        /// `1 : drop (last []) []` in the reference interpreter. Instructions
+        /// matched after the `Swap` case in `doInstr` force evaluation of the
+        /// error from slide.
+        ///
+        /// ```wsa
+        ///     push 1
+        ///     slide <empty>
+        ///     OP
+        /// ````
+        #[test]
+        fn size1() {
+            test("lazy/slide_empty/size1/push.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size1/dup.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size1/copy.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size1/swap.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/drop.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/slide.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size1/add.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/sub.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/mul.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/div.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/mod.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/store.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/retrieve.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/label.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/call.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/jmp.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/jz.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/jn.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/ret.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/end.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/printc.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/printi.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/readc.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/readi.ws", b"", FORCE, b"");
+            test("lazy/slide_empty/size1/eof.ws", b"", NO_FORCE, b"");
+        }
+
+        /// Tests each instruction, when the stack has the value
+        /// `2 : 1 : drop (last []) []` in the reference interpreter. No
+        /// instructions force evaluation of the error from slide.
+        ///
+        /// ```wsa
+        ///     push 1
+        ///     slide <empty>
+        ///     push 2
+        ///     OP
+        /// ````
+        #[rustfmt::skip]
+        #[test]
+        fn size2() {
+            test("lazy/slide_empty/size2/push.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/dup.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/copy.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/swap.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/drop.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/slide.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/add.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/sub.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/mul.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/div.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/mod.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/store.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/retrieve.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/label.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
+            test("lazy/slide_empty/size2/jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
+            test("lazy/slide_empty/size2/jz.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/jn.ws", b"", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/ret.ws", b"", EagerError::RetUnderflow, b"");
+            test("lazy/slide_empty/size2/end.ws", b"", TestResult::Success, b"");
+            test("lazy/slide_empty/size2/printc.ws", b"", NO_FORCE, b"\x02");
+            test("lazy/slide_empty/size2/printi.ws", b"", NO_FORCE, b"2");
+            test("lazy/slide_empty/size2/readc.ws", b".", NO_FORCE, b"");
+            test("lazy/slide_empty/size2/readi.ws", b"42", NO_FORCE, b"");
+        }
     }
 }
 
@@ -210,11 +307,11 @@ mod parse {
 
     #[test]
     fn undefined_label() {
-        test("parse/undefined_label/call.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
-        test("parse/undefined_label/jmp.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
-        test("parse/undefined_label/jz_true.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
+        test("parse/undefined_label/call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
+        test("parse/undefined_label/jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
+        test("parse/undefined_label/jz_true.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
         test("parse/undefined_label/jz_false.ws", b"", TestResult::Success, b"");
-        test("parse/undefined_label/jn_true.ws", b"", ParseError::UndefinedLabel(LabelLit::new(bitvec![1, 0])), b"");
+        test("parse/undefined_label/jn_true.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
         test("parse/undefined_label/jn_false.ws", b"", TestResult::Success, b"");
     }
 
