@@ -104,8 +104,9 @@ pub enum EagerError {
     ReadiInvalidUtf8,
 }
 
-#[derive(Clone, Copy, Debug, Error, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Error, PartialEq, Eq, Hash)]
 pub enum UnderflowError {
+    #[default]
     #[error("stack underflow")]
     Normal,
     #[error("slide with empty literal")]
