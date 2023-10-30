@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
 use bitvec::prelude::*;
@@ -270,7 +269,7 @@ fn signed_bits_from_integer(
     leading_zeros: usize,
 ) -> BitVec<usize, Lsb0> {
     let mut bits;
-    if value.cmp0() == Ordering::Equal {
+    if value.is_negative() {
         if leading_zeros == 0 && sign == Sign::Empty {
             bits = BitVec::new();
         } else {

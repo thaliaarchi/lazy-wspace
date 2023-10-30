@@ -77,7 +77,7 @@ impl<'g> NodeTable<'g> {
             fn hash<H: Hasher>(&self, state: &mut H) {
                 let inst = Inst::UnaryImmZ {
                     opcode: Opcode::ConstZ,
-                    // SAFETY: THe value is not read.
+                    // SAFETY: The value is not read.
                     imm: unsafe { Box::from_raw(NonNull::dangling().as_mut()) },
                 };
                 mem::discriminant(&inst).hash(state);

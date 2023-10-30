@@ -1,5 +1,4 @@
 use std::cell::{Ref, RefCell, RefMut};
-use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::rc::Rc;
@@ -83,7 +82,7 @@ impl Value {
             }
             Op::Div => {
                 let rhs = rhs.eval()?;
-                if rhs.cmp0() == Ordering::Equal {
+                if rhs.is_zero() {
                     return Err(ValueError::DivModZero);
                 }
                 let lhs = lhs.eval()?;
@@ -91,7 +90,7 @@ impl Value {
             }
             Op::Mod => {
                 let rhs = rhs.eval()?;
-                if rhs.cmp0() == Ordering::Equal {
+                if rhs.is_zero() {
                     return Err(ValueError::DivModZero);
                 }
                 let lhs = lhs.eval()?;

@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{self, BufWriter, Write};
@@ -98,10 +97,10 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             Inst::Copy(n) => {
                 let x = match n.value() {
                     Some(n) => {
-                        if n.cmp0() == Ordering::Less {
+                        if n.is_negative() {
                             ValueError::CopyNegative.into()
                         } else {
-                            // TODO: Make wrapping.
+                            // TODO: Make index wrap like Haskell `Int`.
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             let i = self.stack.len().wrapping_sub(n.wrapping_add(1));
                             match self.stack.get(i) {
@@ -126,8 +125,8 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
                 match n.value() {
                     Some(n) => {
                         // Negative values slide nothing.
-                        if n.cmp0() == Ordering::Greater {
-                            // TODO: Make wrapping.
+                        if n.is_positive() {
+                            // TODO: Make index wrap like Haskell `Int`.
                             let n = n.to_usize().unwrap_or(usize::MAX);
                             self.stack.truncate(self.stack.len().saturating_sub(n));
                         }
@@ -165,13 +164,13 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             Inst::Jmp(l) => jump!(l),
             Inst::Jz(l) => {
                 let n = pop!()?.eval()?;
-                if n.cmp0() == Ordering::Equal {
+                if n.is_zero() {
                     jump!(l);
                 }
             }
             Inst::Jn(l) => {
                 let n = pop!()?.eval()?;
-                if n.cmp0() == Ordering::Less {
+                if n.is_negative() {
                     jump!(l);
                 }
             }
@@ -268,7 +267,7 @@ impl Heap {
     /// addresses up to 2^32, but does not have the linear performance issues.
     pub fn store(&mut self, addr: ValueRef, n: ValueRef) -> Result<(), Error> {
         let addr = addr.eval()?;
-        if addr.cmp0() == Ordering::Less {
+        if addr.is_negative() {
             return Err(EagerError::StoreNegative.into());
         }
         if let Some(addr) = addr.to_u32() {
@@ -284,7 +283,7 @@ impl Heap {
             Ok(n) => n,
             Err(err) => return err.into(),
         };
-        if addr.cmp0() == Ordering::Less {
+        if addr.is_negative() {
             return ValueError::RetrieveNegative.into();
         }
         if let Some(addr) = addr.to_u32() {

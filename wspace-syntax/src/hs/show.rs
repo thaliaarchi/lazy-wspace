@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use rug::Integer;
 
 /// A representation of the [`Show`](https://hackage.haskell.org/package/base-4.18.1.0/docs/GHC-Show.html)
@@ -15,7 +13,7 @@ pub trait Show {
 // TODO: It is only wrapped in parentheses when used as an argument.
 impl Show for Integer {
     fn show(&self) -> String {
-        if self.cmp0() == Ordering::Less {
+        if self.is_negative() {
             format!("({self})")
         } else {
             self.to_string()

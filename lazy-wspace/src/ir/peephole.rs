@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer as Mpz};
 
@@ -128,9 +126,9 @@ impl NodeTable<'_> {
                     add!(..) => Ok((lhs + rhs).complete()),
                     sub!(..) => Ok((lhs - rhs).complete()),
                     mul!(..) => Ok((lhs * rhs).complete()),
-                    div!(..) if rhs.cmp0() == Ordering::Equal => Err(ValueError::DivModZero),
+                    div!(..) if rhs.is_zero() => Err(ValueError::DivModZero),
                     div!(..) => Ok(lhs.div_floor(rhs).complete()),
-                    mod_!(..) if rhs.cmp0() == Ordering::Equal => Err(ValueError::DivModZero),
+                    mod_!(..) if rhs.is_zero() => Err(ValueError::DivModZero),
                     mod_!(..) => Ok(lhs.rem_floor(rhs).complete()),
                     and!(..) => Ok((lhs & rhs).complete()),
                     or!(..) => Ok((lhs | rhs).complete()),
@@ -173,17 +171,17 @@ impl NodeTable<'_> {
             (xor!(..), constz!(_), _) => Insert(Inst::xor(rhs, lhs)),
 
             // Identities
-            (add!(..) | sub!(..), _, constz!(rhs)) if rhs.cmp0() == Ordering::Equal => Use(*lhs),
+            (add!(..) | sub!(..), _, constz!(rhs)) if rhs.is_zero() => Use(*lhs),
             (mul!(..) | div!(..), _, constz!(rhs)) if **rhs == 1 => Use(*lhs),
             (and!(..) | or!(..), _, _) if lhs == rhs => Use(*lhs),
 
             // Division by 0
-            (div!(..) | mod_!(..), _, constz!(rhs)) if rhs.cmp0() == Ordering::Equal => {
+            (div!(..) | mod_!(..), _, constz!(rhs)) if rhs.is_zero() => {
                 Insert(Inst::const_error(ValueError::DivModZero))
             }
 
             // Negation
-            (sub!(..), constz!(lhs), _) if lhs.cmp0() == Ordering::Equal => Insert(Inst::neg(rhs)),
+            (sub!(..), constz!(lhs), _) if lhs.is_zero() => Insert(Inst::neg(rhs)),
             (add!(..), _, neg!(rhs)) => Insert(Inst::sub(lhs, *rhs)),
             (sub!(..), _, neg!(rhs)) => Insert(Inst::add(lhs, *rhs)),
 
@@ -447,9 +445,7 @@ impl NodeTable<'_> {
             }
             (add!(..), and!(x1, m1), and!(x2, m2)) if x1 == x2 => {
                 match (&*self[*m1], &*self[*m2]) {
-                    (constz!(m), constz!(n))
-                        if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
-                    {
+                    (constz!(m), constz!(n)) if (&**m & &**n).complete().is_zero() => {
                         Insert(Inst::and(*x1, self.insert_value(Inst::constz(&**m | &**n))))
                     }
                     _ => New,
@@ -516,9 +512,7 @@ impl NodeTable<'_> {
             },
             (add!(..), pop_count!(a), pop_count!(b)) => match (&*self[*a], &*self[*b]) {
                 (and!(x1, m), and!(x2, n)) if x1 == x2 => match (&*self[*m], &*self[*n]) {
-                    (constz!(m), constz!(n))
-                        if (&**m & &**n).complete().cmp0() == Ordering::Equal =>
-                    {
+                    (constz!(m), constz!(n)) if (&**m & &**n).complete().is_zero() => {
                         let x = *x1;
                         let mn = self.insert_value(Inst::constz(&**m | &**n));
                         Insert(Inst::pop_count(Value::new(
