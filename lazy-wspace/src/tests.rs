@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use bitvec::prelude::*;
 use wspace_syntax::ws::{
-    ast::{Inst, Parser},
+    ast::{Inst, IntegerLit, Parser},
     lex::StdLexer,
 };
 
@@ -65,6 +65,7 @@ enum TestResult {
     Success,
     Error(Error),
 }
+use TestResult::Success;
 
 impl<T: Into<Error>> From<T> for TestResult {
     fn from(err: T) -> Self {
@@ -88,7 +89,7 @@ mod bounds {
         g.test("copy_2^63-1.ws", b"", ValueError::CopyLarge, b"");
         g.test("copy_2^63.ws", b"", ValueError::CopyNegative, b"");
         g.test("copy_2^64-1.ws", b"", ValueError::CopyNegative, b"");
-        g.test("copy_2^64.ws", b"", TestResult::Success, b"42");
+        g.test("copy_2^64.ws", b"", Success, b"42");
     }
 
     #[test]
@@ -103,9 +104,9 @@ mod bounds {
         g.test("slide_2^32-1.ws", b"", err.clone(), b"");
         g.test("slide_2^32.ws", b"", err.clone(), b"");
         g.test("slide_2^63-1.ws", b"", err.clone(), b"");
-        g.test("slide_2^63.ws", b"", TestResult::Success, b"1");
-        g.test("slide_2^64-1.ws", b"", TestResult::Success, b"1");
-        g.test("slide_2^64.ws", b"", TestResult::Success, b"1");
+        g.test("slide_2^63.ws", b"", Success, b"1");
+        g.test("slide_2^64-1.ws", b"", Success, b"1");
+        g.test("slide_2^64.ws", b"", Success, b"1");
     }
 }
 
@@ -162,12 +163,7 @@ mod io {
             EagerError::PrintcInvalidRange(Rc::new((-1).into())),
             b"",
         );
-        g.test(
-            "printc_maximum.ws",
-            b"",
-            TestResult::Success,
-            "\u{10FFFF}".as_bytes(),
-        );
+        g.test("printc_maximum.ws", b"", Success, "\u{10FFFF}".as_bytes());
         g.test(
             "printc_too_large.ws",
             b"",
@@ -294,9 +290,9 @@ mod lazy {
         ///     push 2
         ///     OP
         /// ````
-        #[rustfmt::skip]
         #[test]
         fn size2() {
+            let lbl = ParseError::UndefinedLabel(bitvec![1, 1].into());
             let g = TestGroup::new("lazy/slide_empty/size2");
             g.test("push.ws", b"", NO_FORCE, b"");
             g.test("dup.ws", b"", NO_FORCE, b"");
@@ -312,17 +308,28 @@ mod lazy {
             g.test("store.ws", b"", NO_FORCE, b"");
             g.test("retrieve.ws", b"", NO_FORCE, b"");
             g.test("label.ws", b"", NO_FORCE, b"");
-            g.test("call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
-            g.test("jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
+            g.test("call.ws", b"", lbl.clone(), b"");
+            g.test("jmp.ws", b"", lbl.clone(), b"");
             g.test("jz.ws", b"", NO_FORCE, b"");
             g.test("jn.ws", b"", NO_FORCE, b"");
             g.test("ret.ws", b"", EagerError::RetUnderflow, b"");
-            g.test("end.ws", b"", TestResult::Success, b"");
+            g.test("end.ws", b"", Success, b"");
             g.test("printc.ws", b"", NO_FORCE, b"\x02");
             g.test("printi.ws", b"", NO_FORCE, b"2");
             g.test("readc.ws", b".", NO_FORCE, b"");
             g.test("readi.ws", b"42", NO_FORCE, b"");
         }
+    }
+
+    #[test]
+    fn other() {
+        use ValueError::*;
+        let g = TestGroup::new("lazy");
+        g.test("copy_empty.ws", b"", EmptyLit, b".");
+        g.test("copy_negative.ws", b"", CopyNegative, b".");
+        g.test("copy_too_large.ws", b"", CopyLarge, b".");
+        g.test("retrieve_negative.ws", b"", RetrieveNegative, b".");
+        g.test("retrieve_too_large.ws", b"", RetrieveLarge, b".");
     }
 }
 
@@ -411,27 +418,27 @@ mod parse {
         g.test("call.ws", b"", err.clone(), b"");
         g.test("jmp.ws", b"", err.clone(), b"");
         g.test("jz_true.ws", b"", err.clone(), b"");
-        g.test("jz_false.ws", b"", TestResult::Success, b"");
+        g.test("jz_false.ws", b"", Success, b"");
         g.test("jn_true.ws", b"", err.clone(), b"");
-        g.test("jn_false.ws", b"", TestResult::Success, b"");
+        g.test("jn_false.ws", b"", Success, b"");
     }
 
     #[test]
     fn invalid_utf8() {
-        const BAD: ParseError = ParseError::InvalidUtf8;
+        use ParseError::InvalidUtf8;
         let g = TestGroup::new("parse/invalid_utf8");
-        g.test("bad_byte_1.ws", b"", BAD, b".");
-        g.test("bad_byte_2.ws", b"", BAD, b".");
-        g.test("bad_byte_3.ws", b"", BAD, b".");
-        g.test("bad_byte_4.ws", b"", BAD, b".");
-        g.test("incomplete_2.ws", b"", BAD, b".");
-        g.test("incomplete_3.ws", b"", BAD, b".");
-        g.test("incomplete_4.ws", b"", BAD, b".");
-        g.test("overlong.ws", b"", BAD, b".");
-        g.test("too_large.ws", b"", BAD, b".");
-        g.test("unexpected_continuation.ws", b"", BAD, b".");
-        g.test("unpaired_high_surrogate.ws", b"", BAD, b".");
-        g.test("unpaired_low_surrogate.ws", b"", BAD, b".");
+        g.test("bad_byte_1.ws", b"", InvalidUtf8, b".");
+        g.test("bad_byte_2.ws", b"", InvalidUtf8, b".");
+        g.test("bad_byte_3.ws", b"", InvalidUtf8, b".");
+        g.test("bad_byte_4.ws", b"", InvalidUtf8, b".");
+        g.test("incomplete_2.ws", b"", InvalidUtf8, b".");
+        g.test("incomplete_3.ws", b"", InvalidUtf8, b".");
+        g.test("incomplete_4.ws", b"", InvalidUtf8, b".");
+        g.test("overlong.ws", b"", InvalidUtf8, b".");
+        g.test("too_large.ws", b"", InvalidUtf8, b".");
+        g.test("unexpected_continuation.ws", b"", InvalidUtf8, b".");
+        g.test("unpaired_high_surrogate.ws", b"", InvalidUtf8, b".");
+        g.test("unpaired_low_surrogate.ws", b"", InvalidUtf8, b".");
     }
 
     #[test]
@@ -440,4 +447,67 @@ mod parse {
         g.test("empty_file.ws", b"", ParseError::ImplicitEnd, b"");
         g.test("implicit_end.ws", b"", ParseError::ImplicitEnd, b".");
     }
+}
+
+#[test]
+fn underflow() {
+    let g = TestGroup::new("underflow");
+    g.test("dup.ws", b"", EagerError::Underflow(Inst::Dup), b"");
+    g.test("swap.ws", b"", EagerError::Underflow(Inst::Swap), b"");
+    g.test("swap_lhs.ws", b"", EagerError::Underflow(Inst::Swap), b"");
+    g.test("drop.ws", b"", EagerError::Underflow(Inst::Drop), b"");
+    g.test(
+        "slide.ws",
+        b"",
+        EagerError::Underflow(Inst::Slide(IntegerLit::new(1))),
+        b"",
+    );
+    g.test("slide_empty.ws", b"", ValueError::EmptyLit, b"");
+    g.test(
+        "slide_zero.ws",
+        b"",
+        EagerError::Underflow(Inst::Slide(IntegerLit::new(0))),
+        b"",
+    );
+    g.test(
+        "slide_negative.ws",
+        b"",
+        EagerError::Underflow(Inst::Slide(IntegerLit::new(-1))),
+        b"",
+    );
+    g.test("add.ws", b"", EagerError::Underflow(Inst::Add), b"");
+    g.test("add_lhs.ws", b"", EagerError::Underflow(Inst::Add), b"");
+    g.test("sub.ws", b"", EagerError::Underflow(Inst::Sub), b"");
+    g.test("sub_lhs.ws", b"", EagerError::Underflow(Inst::Sub), b"");
+    g.test("mul.ws", b"", EagerError::Underflow(Inst::Mul), b"");
+    g.test("mul_lhs.ws", b"", EagerError::Underflow(Inst::Mul), b"");
+    g.test("div.ws", b"", EagerError::Underflow(Inst::Div), b"");
+    g.test("div_lhs.ws", b"", EagerError::Underflow(Inst::Div), b"");
+    g.test("mod.ws", b"", EagerError::Underflow(Inst::Mod), b"");
+    g.test("mod_lhs.ws", b"", EagerError::Underflow(Inst::Mod), b"");
+    g.test("store.ws", b"", EagerError::Underflow(Inst::Store), b"");
+    g.test("store_lhs.ws", b"", EagerError::Underflow(Inst::Store), b"");
+    g.test(
+        "retrieve.ws",
+        b"",
+        EagerError::Underflow(Inst::Retrieve),
+        b"",
+    );
+    g.test(
+        "jz.ws",
+        b"",
+        EagerError::Underflow(Inst::Jz(bitvec![1, 0].into())),
+        b"",
+    );
+    g.test(
+        "jn.ws",
+        b"",
+        EagerError::Underflow(Inst::Jn(bitvec![1, 0].into())),
+        b"",
+    );
+    g.test("ret.ws", b"", EagerError::RetUnderflow, b"");
+    g.test("printc.ws", b"", EagerError::Underflow(Inst::Printc), b"");
+    g.test("printi.ws", b"", EagerError::Underflow(Inst::Printi), b"");
+    g.test("readc.ws", b"", EagerError::Underflow(Inst::Readc), b"");
+    g.test("readi.ws", b"", EagerError::Underflow(Inst::Readi), b"");
 }
