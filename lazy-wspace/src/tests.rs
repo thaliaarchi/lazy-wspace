@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use bitvec::prelude::*;
 use wspace_syntax::ws::{
@@ -15,6 +15,26 @@ fn parse<P: AsRef<Path>>(path: P) -> Vec<Inst> {
     let src = fs::read(&full_path).unwrap_or_else(|err| panic!("read {full_path:?}: {err}"));
     let lex = StdLexer::from(&*src);
     Parser::new(lex).map(|(inst, _)| inst).collect()
+}
+
+struct TestGroup {
+    dir: PathBuf,
+}
+
+impl TestGroup {
+    fn new<P: Into<PathBuf>>(dir: P) -> Self {
+        TestGroup { dir: dir.into() }
+    }
+
+    fn test<P: AsRef<Path>, I: AsRef<[u8]>, R: Into<TestResult>, O: AsRef<[u8]>>(
+        &self,
+        path: P,
+        stdin: I,
+        res: R,
+        stdout: O,
+    ) {
+        test(self.dir.join(path.as_ref()), stdin, res, stdout);
+    }
 }
 
 fn test<P: AsRef<Path>, I: AsRef<[u8]>, R: Into<TestResult>, O: AsRef<[u8]>>(
@@ -49,6 +69,43 @@ enum TestResult {
 impl<T: Into<Error>> From<T> for TestResult {
     fn from(err: T) -> Self {
         TestResult::Error(err.into())
+    }
+}
+
+mod bounds {
+    use super::*;
+
+    #[test]
+    fn copy() {
+        // Valid for 64-bit.
+        let g = TestGroup::new("bounds/copy");
+        g.test("copy_2^29-1.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^29.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^31-1.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^31.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^32-1.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^32.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^63-1.ws", b"", ValueError::CopyLarge, b"");
+        g.test("copy_2^63.ws", b"", ValueError::CopyNegative, b"");
+        g.test("copy_2^64-1.ws", b"", ValueError::CopyNegative, b"");
+        g.test("copy_2^64.ws", b"", TestResult::Success, b"42");
+    }
+
+    #[test]
+    fn slide() {
+        // Valid for 64-bit.
+        let err = EagerError::Underflow(Inst::Printi);
+        let g = TestGroup::new("bounds/slide");
+        g.test("slide_2^29-1.ws", b"", err.clone(), b"");
+        g.test("slide_2^29.ws", b"", err.clone(), b"");
+        g.test("slide_2^31-1.ws", b"", err.clone(), b"");
+        g.test("slide_2^31.ws", b"", err.clone(), b"");
+        g.test("slide_2^32-1.ws", b"", err.clone(), b"");
+        g.test("slide_2^32.ws", b"", err.clone(), b"");
+        g.test("slide_2^63-1.ws", b"", err.clone(), b"");
+        g.test("slide_2^63.ws", b"", TestResult::Success, b"1");
+        g.test("slide_2^64-1.ws", b"", TestResult::Success, b"1");
+        g.test("slide_2^64.ws", b"", TestResult::Success, b"1");
     }
 }
 
@@ -91,13 +148,14 @@ mod lazy {
     fn arith() {
         const LHS_FIRST: ValueError = ValueError::CopyLarge;
         const RHS_FIRST: ValueError = ValueError::RetrieveNegative;
-        test("lazy/arith/add.ws", b"", RHS_FIRST, b".");
-        test("lazy/arith/sub.ws", b"", RHS_FIRST, b".");
-        test("lazy/arith/mul.ws", b"", LHS_FIRST, b".");
-        test("lazy/arith/div.ws", b"", RHS_FIRST, b".");
-        test("lazy/arith/mod.ws", b"", RHS_FIRST, b".");
-        test("lazy/arith/div_0.ws", b"", ValueError::DivModZero, b".");
-        test("lazy/arith/mod_0.ws", b"", ValueError::DivModZero, b".");
+        let g = TestGroup::new("lazy/arith");
+        g.test("add.ws", b"", RHS_FIRST, b".");
+        g.test("sub.ws", b"", RHS_FIRST, b".");
+        g.test("mul.ws", b"", LHS_FIRST, b".");
+        g.test("div.ws", b"", RHS_FIRST, b".");
+        g.test("mod.ws", b"", RHS_FIRST, b".");
+        g.test("div_0.ws", b"", ValueError::DivModZero, b".");
+        g.test("mod_0.ws", b"", ValueError::DivModZero, b".");
     }
 
     mod slide_empty {
@@ -123,30 +181,31 @@ mod lazy {
         /// ```
         #[test]
         fn size0() {
-            test("lazy/slide_empty/size0/push.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size0/dup.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/copy.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/swap.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/drop.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/slide.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/add.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/sub.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/mul.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/div.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/mod.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/store.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/retrieve.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/label.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/call.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/jmp.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/jz.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/jn.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/ret.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/end.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/printc.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/printi.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/readc.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size0/readi.ws", b"", FORCE, b"");
+            let g = TestGroup::new("lazy/slide_empty/size0");
+            g.test("push.ws", b"", NO_FORCE, b"");
+            g.test("dup.ws", b"", FORCE, b"");
+            g.test("copy.ws", b"", FORCE, b"");
+            g.test("swap.ws", b"", FORCE, b"");
+            g.test("drop.ws", b"", FORCE, b"");
+            g.test("slide.ws", b"", FORCE, b"");
+            g.test("add.ws", b"", FORCE, b"");
+            g.test("sub.ws", b"", FORCE, b"");
+            g.test("mul.ws", b"", FORCE, b"");
+            g.test("div.ws", b"", FORCE, b"");
+            g.test("mod.ws", b"", FORCE, b"");
+            g.test("store.ws", b"", FORCE, b"");
+            g.test("retrieve.ws", b"", FORCE, b"");
+            g.test("label.ws", b"", FORCE, b"");
+            g.test("call.ws", b"", FORCE, b"");
+            g.test("jmp.ws", b"", FORCE, b"");
+            g.test("jz.ws", b"", FORCE, b"");
+            g.test("jn.ws", b"", FORCE, b"");
+            g.test("ret.ws", b"", FORCE, b"");
+            g.test("end.ws", b"", FORCE, b"");
+            g.test("printc.ws", b"", FORCE, b"");
+            g.test("printi.ws", b"", FORCE, b"");
+            g.test("readc.ws", b"", FORCE, b"");
+            g.test("readi.ws", b"", FORCE, b"");
         }
 
         /// Tests each instruction, when the stack has the value
@@ -161,31 +220,32 @@ mod lazy {
         /// ````
         #[test]
         fn size1() {
-            test("lazy/slide_empty/size1/push.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size1/dup.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size1/copy.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size1/swap.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/drop.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/slide.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size1/add.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/sub.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/mul.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/div.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/mod.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/store.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/retrieve.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/label.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/call.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/jmp.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/jz.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/jn.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/ret.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/end.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/printc.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/printi.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/readc.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/readi.ws", b"", FORCE, b"");
-            test("lazy/slide_empty/size1/eof.ws", b"", NO_FORCE, b"");
+            let g = TestGroup::new("lazy/slide_empty/size1");
+            g.test("push.ws", b"", NO_FORCE, b"");
+            g.test("dup.ws", b"", NO_FORCE, b"");
+            g.test("copy.ws", b"", NO_FORCE, b"");
+            g.test("swap.ws", b"", FORCE, b"");
+            g.test("drop.ws", b"", FORCE, b"");
+            g.test("slide.ws", b"", NO_FORCE, b"");
+            g.test("add.ws", b"", FORCE, b"");
+            g.test("sub.ws", b"", FORCE, b"");
+            g.test("mul.ws", b"", FORCE, b"");
+            g.test("div.ws", b"", FORCE, b"");
+            g.test("mod.ws", b"", FORCE, b"");
+            g.test("store.ws", b"", FORCE, b"");
+            g.test("retrieve.ws", b"", FORCE, b"");
+            g.test("label.ws", b"", FORCE, b"");
+            g.test("call.ws", b"", FORCE, b"");
+            g.test("jmp.ws", b"", FORCE, b"");
+            g.test("jz.ws", b"", FORCE, b"");
+            g.test("jn.ws", b"", FORCE, b"");
+            g.test("ret.ws", b"", FORCE, b"");
+            g.test("end.ws", b"", FORCE, b"");
+            g.test("printc.ws", b"", FORCE, b"");
+            g.test("printi.ws", b"", FORCE, b"");
+            g.test("readc.ws", b"", FORCE, b"");
+            g.test("readi.ws", b"", FORCE, b"");
+            g.test("eof.ws", b"", NO_FORCE, b"");
         }
 
         /// Tests each instruction, when the stack has the value
@@ -201,139 +261,147 @@ mod lazy {
         #[rustfmt::skip]
         #[test]
         fn size2() {
-            test("lazy/slide_empty/size2/push.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/dup.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/copy.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/swap.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/drop.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/slide.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/add.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/sub.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/mul.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/div.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/mod.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/store.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/retrieve.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/label.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
-            test("lazy/slide_empty/size2/jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
-            test("lazy/slide_empty/size2/jz.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/jn.ws", b"", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/ret.ws", b"", EagerError::RetUnderflow, b"");
-            test("lazy/slide_empty/size2/end.ws", b"", TestResult::Success, b"");
-            test("lazy/slide_empty/size2/printc.ws", b"", NO_FORCE, b"\x02");
-            test("lazy/slide_empty/size2/printi.ws", b"", NO_FORCE, b"2");
-            test("lazy/slide_empty/size2/readc.ws", b".", NO_FORCE, b"");
-            test("lazy/slide_empty/size2/readi.ws", b"42", NO_FORCE, b"");
+            let g = TestGroup::new("lazy/slide_empty/size2");
+            g.test("push.ws", b"", NO_FORCE, b"");
+            g.test("dup.ws", b"", NO_FORCE, b"");
+            g.test("copy.ws", b"", NO_FORCE, b"");
+            g.test("swap.ws", b"", NO_FORCE, b"");
+            g.test("drop.ws", b"", NO_FORCE, b"");
+            g.test("slide.ws", b"", NO_FORCE, b"");
+            g.test("add.ws", b"", NO_FORCE, b"");
+            g.test("sub.ws", b"", NO_FORCE, b"");
+            g.test("mul.ws", b"", NO_FORCE, b"");
+            g.test("div.ws", b"", NO_FORCE, b"");
+            g.test("mod.ws", b"", NO_FORCE, b"");
+            g.test("store.ws", b"", NO_FORCE, b"");
+            g.test("retrieve.ws", b"", NO_FORCE, b"");
+            g.test("label.ws", b"", NO_FORCE, b"");
+            g.test("call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
+            g.test("jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 1].into()), b"");
+            g.test("jz.ws", b"", NO_FORCE, b"");
+            g.test("jn.ws", b"", NO_FORCE, b"");
+            g.test("ret.ws", b"", EagerError::RetUnderflow, b"");
+            g.test("end.ws", b"", TestResult::Success, b"");
+            g.test("printc.ws", b"", NO_FORCE, b"\x02");
+            g.test("printi.ws", b"", NO_FORCE, b"2");
+            g.test("readc.ws", b".", NO_FORCE, b"");
+            g.test("readi.ws", b"42", NO_FORCE, b"");
         }
     }
 }
 
-#[rustfmt::skip]
 mod parse {
     use super::*;
 
     #[test]
     fn incomplete_opcode() {
-        test("parse/incomplete_opcode/s.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/st.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/sl.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/t.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/ts.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tss.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tst.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tt.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tl.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tls.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/tlt.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/l.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/ll.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/ls.ws", b"", ParseError::IncompleteOpcode, b"");
-        test("parse/incomplete_opcode/lt.ws", b"", ParseError::IncompleteOpcode, b"");
+        let g = TestGroup::new("parse/incomplete_opcode");
+        g.test("s.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("st.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("sl.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("t.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("ts.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tss.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tst.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tt.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tl.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tls.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("tlt.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("l.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("ll.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("ls.ws", b"", ParseError::IncompleteOpcode, b"");
+        g.test("lt.ws", b"", ParseError::IncompleteOpcode, b"");
     }
 
     #[test]
     fn unrecognized_opcode() {
-        test("parse/unrecognized_opcode/lls.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/llt.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/stt.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/tll.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/tlsl.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/tltl.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/tsl.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/tstl.ws", b"", ParseError::UnrecognizedOpcode, b"");
-        test("parse/unrecognized_opcode/ttl.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        let g = TestGroup::new("parse/unrecognized_opcode");
+        g.test("lls.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("llt.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("stt.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("tll.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("tlsl.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("tltl.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("tsl.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("tstl.ws", b"", ParseError::UnrecognizedOpcode, b"");
+        g.test("ttl.ws", b"", ParseError::UnrecognizedOpcode, b"");
     }
 
     #[test]
     fn unterminated_arg() {
-        test("parse/unterminated_arg/push_empty.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_+.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_-.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_-0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/push_-1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_empty.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_+.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_-.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_-0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/copy_-1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_empty.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_+.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_-.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_-0.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/slide_-1.ws", b"", ParseError::UnterminatedInteger, b"");
-        test("parse/unterminated_arg/label_empty.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/label_0.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/label_1.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/call_empty.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/call_0.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/call_1.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jmp_empty.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jmp_0.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jmp_1.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jz_0.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jz_1.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jz_empty.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jn_empty.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jn_0.ws", b"", ParseError::UnterminatedLabel, b"");
-        test("parse/unterminated_arg/jn_1.ws", b"", ParseError::UnterminatedLabel, b"");
+        let g = TestGroup::new("parse/unterminated_arg");
+        g.test("push_empty.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_+.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_-.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_-0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("push_-1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_empty.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_+.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_-.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_-0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("copy_-1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_empty.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_+.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_-.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_-0.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("slide_-1.ws", b"", ParseError::UnterminatedInteger, b"");
+        g.test("label_empty.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("label_0.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("label_1.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("call_empty.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("call_0.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("call_1.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jmp_empty.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jmp_0.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jmp_1.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jz_0.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jz_1.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jz_empty.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jn_empty.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jn_0.ws", b"", ParseError::UnterminatedLabel, b"");
+        g.test("jn_1.ws", b"", ParseError::UnterminatedLabel, b"");
     }
 
     #[test]
     fn undefined_label() {
-        test("parse/undefined_label/call.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
-        test("parse/undefined_label/jmp.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
-        test("parse/undefined_label/jz_true.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
-        test("parse/undefined_label/jz_false.ws", b"", TestResult::Success, b"");
-        test("parse/undefined_label/jn_true.ws", b"", ParseError::UndefinedLabel(bitvec![1, 0].into()), b"");
-        test("parse/undefined_label/jn_false.ws", b"", TestResult::Success, b"");
+        let err = ParseError::UndefinedLabel(bitvec![1, 0].into());
+        let g = TestGroup::new("parse/undefined_label");
+        g.test("call.ws", b"", err.clone(), b"");
+        g.test("jmp.ws", b"", err.clone(), b"");
+        g.test("jz_true.ws", b"", err.clone(), b"");
+        g.test("jz_false.ws", b"", TestResult::Success, b"");
+        g.test("jn_true.ws", b"", err.clone(), b"");
+        g.test("jn_false.ws", b"", TestResult::Success, b"");
     }
 
     #[test]
     fn invalid_utf8() {
-        test("parse/invalid_utf8/bad_byte_1.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/bad_byte_2.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/bad_byte_3.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/bad_byte_4.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/incomplete_2.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/incomplete_3.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/incomplete_4.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/overlong.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/too_large.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/unexpected_continuation.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/unpaired_high_surrogate.ws", b"", ParseError::InvalidUtf8, b".");
-        test("parse/invalid_utf8/unpaired_low_surrogate.ws", b"", ParseError::InvalidUtf8, b".");
+        const BAD: ParseError = ParseError::InvalidUtf8;
+        let g = TestGroup::new("parse/invalid_utf8");
+        g.test("bad_byte_1.ws", b"", BAD, b".");
+        g.test("bad_byte_2.ws", b"", BAD, b".");
+        g.test("bad_byte_3.ws", b"", BAD, b".");
+        g.test("bad_byte_4.ws", b"", BAD, b".");
+        g.test("incomplete_2.ws", b"", BAD, b".");
+        g.test("incomplete_3.ws", b"", BAD, b".");
+        g.test("incomplete_4.ws", b"", BAD, b".");
+        g.test("overlong.ws", b"", BAD, b".");
+        g.test("too_large.ws", b"", BAD, b".");
+        g.test("unexpected_continuation.ws", b"", BAD, b".");
+        g.test("unpaired_high_surrogate.ws", b"", BAD, b".");
+        g.test("unpaired_low_surrogate.ws", b"", BAD, b".");
     }
 
     #[test]
     fn implicit_end() {
-        test("parse/empty_file.ws", b"", ParseError::ImplicitEnd, b"");
-        test("parse/implicit_end.ws", b"", ParseError::ImplicitEnd, b".");
+        let g = TestGroup::new("parse");
+        g.test("empty_file.ws", b"", ParseError::ImplicitEnd, b"");
+        g.test("implicit_end.ws", b"", ParseError::ImplicitEnd, b".");
     }
 }

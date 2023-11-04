@@ -43,9 +43,11 @@ impl Stack {
         match n.value() {
             Some(n) if n.is_negative() => ValueError::CopyNegative.into(),
             Some(n) => {
-                // TODO: Make index wrap like Haskell `Int`.
-                let n = n.to_usize().unwrap_or(usize::MAX);
-                let i = self.len().wrapping_sub(n.wrapping_add(1));
+                let n = n.to_isize_wrapping();
+                if n < 0 {
+                    return ValueError::CopyNegative.into();
+                }
+                let i = self.len().wrapping_sub((n as usize).wrapping_add(1));
                 match self.values.get(i) {
                     Some(v) => v.clone(),
                     None => match self.on_underflow {
@@ -62,10 +64,10 @@ impl Stack {
         match n.value() {
             Some(n) => {
                 // Negative values slide nothing.
-                if n.is_positive() {
-                    // TODO: Make index wrap like Haskell `Int`.
-                    let n = n.to_usize().unwrap_or(usize::MAX);
-                    self.values.truncate(self.values.len().saturating_sub(n));
+                let n = n.to_isize_wrapping();
+                if n > 0 {
+                    self.values
+                        .truncate(self.values.len().saturating_sub(n as usize));
                 }
             }
             None => {
