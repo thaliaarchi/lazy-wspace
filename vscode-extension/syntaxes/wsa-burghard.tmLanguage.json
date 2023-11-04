@@ -1,0 +1,185 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Whitespace assembly (Burghard)",
+  "scopeName": "source.wsa.burghard",
+  "patterns": [
+    {
+      "name": "string.quoted.double.wsa.burghard",
+      "match": "\"[^\"]*\""
+    },
+    {
+      "name": "constant.numeric.integer.wsa.burghard",
+      "match": "-?(?:[0-9]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+)"
+    },
+    {
+      "name": "variable.wsa.burghard",
+      "match": "\\b_[^\\s]\\b"
+    },
+    {
+      "name": "comment.line.semi.wsa.burghard",
+      "match": ";[^\n]*"
+    },
+    {
+      "name": "comment.line.dash-dash.wsa.burghard",
+      "match": "--[^\n]*"
+    },
+    {
+      "name": "comment.block.brace-dash.wsa.burghard",
+      "begin": "{-",
+      "end": "-}"
+    },
+    {
+      "name": "keyword.control.directive.option.wsa.burghard",
+      "match": "\\boption\\b"
+    },
+    {
+      "name": "keyword.control.directive.ifoption.wsa.burghard",
+      "match": "\\bifoption\\b"
+    },
+    {
+      "name": "keyword.control.directive.elseifoption.wsa.burghard",
+      "match": "\\belseifoption\\b"
+    },
+    {
+      "name": "keyword.control.directive.elseoption.wsa.burghard",
+      "match": "\\belseoption\\b"
+    },
+    {
+      "name": "keyword.control.directive.endoption.wsa.burghard",
+      "match": "\\bendoption\\b"
+    },
+    {
+      "name": "entity.name.function.push.wsa.burghard",
+      "match": "\\bpush\\b"
+    },
+    {
+      "name": "entity.name.function.pushs.wsa.burghard",
+      "match": "\\bpushs\\b"
+    },
+    {
+      "name": "entity.name.function.doub.wsa.burghard",
+      "match": "\\bdoub\\b"
+    },
+    {
+      "name": "entity.name.function.swap.wsa.burghard",
+      "match": "\\bswap\\b"
+    },
+    {
+      "name": "entity.name.function.pop.wsa.burghard",
+      "match": "\\bpop\\b"
+    },
+    {
+      "name": "entity.name.function.add.wsa.burghard",
+      "match": "\\badd\\b"
+    },
+    {
+      "name": "entity.name.function.sub.wsa.burghard",
+      "match": "\\bsub\\b"
+    },
+    {
+      "name": "entity.name.function.mul.wsa.burghard",
+      "match": "\\bmul\\b"
+    },
+    {
+      "name": "entity.name.function.div.wsa.burghard",
+      "match": "\\bdiv\\b"
+    },
+    {
+      "name": "entity.name.function.mod.wsa.burghard",
+      "match": "\\bmod\\b"
+    },
+    {
+      "name": "entity.name.function.store.wsa.burghard",
+      "match": "\\bstore\\b"
+    },
+    {
+      "name": "entity.name.function.retrive.wsa.burghard",
+      "match": "\\bretrive\\b"
+    },
+    {
+      "name": "entity.name.function.label.wsa.burghard",
+      "match": "\\blabel\\b"
+    },
+    {
+      "name": "keyword.control.call.wsa.burghard",
+      "match": "\\bcall\\b"
+    },
+    {
+      "name": "keyword.control.jump.wsa.burghard",
+      "match": "\\bjump\\b"
+    },
+    {
+      "name": "keyword.control.jumpz.wsa.burghard",
+      "match": "\\bjumpz\\b"
+    },
+    {
+      "name": "keyword.control.jumpn.wsa.burghard",
+      "match": "\\bjumpn\\b"
+    },
+    {
+      "name": "keyword.control.jumpp.wsa.burghard",
+      "match": "\\bjumpp\\b"
+    },
+    {
+      "name": "keyword.control.jumpnz.wsa.burghard",
+      "match": "\\bjumpnz\\b"
+    },
+    {
+      "name": "keyword.control.jumppz.wsa.burghard",
+      "match": "\\bjumppz\\b"
+    },
+    {
+      "name": "keyword.control.jumpnp.wsa.burghard",
+      "match": "\\bjumpnp\\b"
+    },
+    {
+      "name": "keyword.control.jumppn.wsa.burghard",
+      "match": "\\bjumppn\\b"
+    },
+    {
+      "name": "keyword.control.ret.wsa.burghard",
+      "match": "\\bret\\b"
+    },
+    {
+      "name": "keyword.control.exit.wsa.burghard",
+      "match": "\\bexit\\b"
+    },
+    {
+      "name": "entity.name.function.outc.wsa.burghard",
+      "match": "\\boutc\\b"
+    },
+    {
+      "name": "entity.name.function.outn.wsa.burghard",
+      "match": "\\boutn\\b"
+    },
+    {
+      "name": "entity.name.function.inc.wsa.burghard",
+      "match": "\\binc\\b"
+    },
+    {
+      "name": "entity.name.function.inn.wsa.burghard",
+      "match": "\\binn\\b"
+    },
+    {
+      "name": "entity.name.function.debug_printstack.wsa.burghard",
+      "match": "\\bdebug_printstack\\b"
+    },
+    {
+      "name": "entity.name.function.debug_printheap.wsa.burghard",
+      "match": "\\bdebug_printheap\\b"
+    },
+    {
+      "name": "entity.name.function.test.wsa.burghard",
+      "match": "\\btest\\b"
+    },
+    {
+      "name": "entity.name.function.valueinteger.wsa.burghard",
+      "match": "\\bvalueinteger\\b"
+    },
+    {
+      "name": "entity.name.function.valuestring.wsa.burghard",
+      "match": "\\bvaluestring\\b"
+    }
+  ],
+  "fileTypes": ["wsa"]
+}

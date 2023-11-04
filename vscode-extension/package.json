@@ -30,7 +30,7 @@
     "eslint": "^8.53.0",
     "typescript": "^5.2.2"
   },
-  "main": "./out/extension.js",
+  "main": "out/extension.js",
   "activationEvents": [],
   "contributes": {
     "languages": [
@@ -38,7 +38,25 @@
         "id": "whitespace",
         "extensions": [".ws"],
         "aliases": ["Whitespace", "ws"],
-        "configuration": "./language-configuration.json"
+        "configuration": "syntaxes/whitespace.language-configuration.json"
+      },
+      {
+        "id": "wsa-burghard",
+        "extensions": [".wsa"],
+        "aliases": ["Whitespace assembly (Burghard)", "wsa"],
+        "filenames": ["wsinterws.wsa"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "whitespace",
+        "scopeName": "source.ws",
+        "path": "syntaxes/whitespace.tmLanguage.json"
+      },
+      {
+        "language": "wsa-burghard",
+        "scopeName": "source.wsa.burghard",
+        "path": "syntaxes/wsa-burghard.tmLanguage.json"
       }
     ],
     "configurationDefaults": {
