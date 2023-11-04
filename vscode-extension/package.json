@@ -1,0 +1,66 @@
+{
+  "name": "whitespace",
+  "displayName": "Whitespace programming language",
+  "description": "Whitespace programming language",
+  "version": "0.1.0",
+  "publisher": "thaliaarchi",
+  "repository": {
+    "url": "https://github.com/thaliaarchi/lazy-wspace",
+    "type": "git"
+  },
+  "license": "MPL-2.0",
+  "keywords": ["whitespace"],
+  "categories": ["Programming Languages"],
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "scripts": {
+    "package": "vsce package",
+    "vscode:prepublish": "yarn run compile",
+    "compile": "tsc --project .",
+    "watch": "tsc --project . -watch",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "@types/vscode": "^1.84.0",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "eslint": "^8.53.0",
+    "typescript": "^5.2.2"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "whitespace",
+        "extensions": [".ws"],
+        "aliases": ["Whitespace", "ws"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[whitespace]": {
+        "diffEditor.ignoreTrimWhitespace": false,
+        "editor.autoIndent": "none",
+        "editor.detectIndentation": false,
+        "editor.guides.highlightActiveIndentation": false,
+        "editor.guides.indentation": false,
+        "editor.insertSpaces": false,
+        "editor.renderFinalNewline": "on",
+        "editor.renderWhitespace": "all",
+        "editor.stickyTabStops": false,
+        "editor.tabCompletion": "off",
+        "editor.tabSize": 1,
+        "editor.trimAutoWhitespace": false,
+        "editor.useTabStops": false,
+        "editor.wrappingIndent": "none",
+        "files.insertFinalNewline": false,
+        "files.trimFinalNewlines": false,
+        "files.trimTrailingWhitespace": false
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "target": "ES2022",
+    "outDir": "out",
+    "lib": ["ES2022"],
+    "rootDir": "src",
+
+    "alwaysStrict": true,
+    "checkJs": true,
+    "incremental": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedParameters": true,
+    "removeComments": true,
+    "sourceMap": true,
+    "strict": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true
+  }
+}

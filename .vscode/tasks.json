@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Watch Extension",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "type": "npm",
+      "script": "watch",
+      "path": "vscode-extension/",
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent",
+        "revealProblems": "onProblem"
+      },
+      "problemMatcher": {
+        "base": "$tsc-watch",
+        "fileLocation": ["relative", "${workspaceFolder}/vscode-extension/"]
+      }
+    },
+    {
+      "label": "Build Extension",
+      "group": "build",
+      "type": "npm",
+      "script": "compile",
+      "path": "vscode-extension/",
+      "presentation": {
+        "panel": "shared",
+        "reveal": "silent",
+        "revealProblems": "onProblem"
+      },
+      "problemMatcher": {
+        "base": "$tsc",
+        "fileLocation": ["relative", "${workspaceFolder}/vscode-extension/"]
+      }
+    }
+  ]
+}
