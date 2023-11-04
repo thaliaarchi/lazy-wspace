@@ -111,6 +111,7 @@ mod bounds {
 
 mod io {
     use std::io::{self, Write};
+    use std::rc::Rc;
 
     use super::*;
 
@@ -138,6 +139,41 @@ mod io {
         let prog = parse("io/buffer_size/printi_8192_bytes.ws");
         let res = Vm::new(prog, &mut stdin, &mut stdout).execute();
         assert_eq!(res, Err(EagerError::PrintPermissionDenied.into()));
+    }
+
+    #[test]
+    fn utf8() {
+        let g = TestGroup::new("io/utf8");
+        g.test(
+            "printc_low_surrogate.ws",
+            b"",
+            EagerError::PrintcSurrogate(0xDFFF),
+            b"",
+        );
+        g.test(
+            "printc_high_surrogate.ws",
+            b"",
+            EagerError::PrintcSurrogate(0xD800),
+            b"",
+        );
+        g.test(
+            "printc_negative.ws",
+            b"",
+            EagerError::PrintcInvalidRange(Rc::new((-1).into())),
+            b"",
+        );
+        g.test(
+            "printc_maximum.ws",
+            b"",
+            TestResult::Success,
+            "\u{10FFFF}".as_bytes(),
+        );
+        g.test(
+            "printc_too_large.ws",
+            b"",
+            EagerError::PrintcInvalidRange(Rc::new(0x110000.into())),
+            b"",
+        );
     }
 }
 

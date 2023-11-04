@@ -169,10 +169,12 @@ impl<'a, I: BufReadCharsExt, O: Write + ?Sized> Vm<'a, I, O> {
             Inst::Printc => {
                 self.stack.force(2)?;
                 let n = self.stack.pop(inst)?.eval()?;
-                let ch = n
-                    .to_u32()
-                    .and_then(char::from_u32)
-                    .ok_or(EagerError::PrintcInvalid(n))?;
+                let ch = n.to_u32().and_then(char::from_u32).ok_or_else(|| {
+                    n.to_u32()
+                        .filter(|ch| (0xD800..=0xDFFF).contains(ch))
+                        .map(EagerError::PrintcSurrogate)
+                        .unwrap_or(EagerError::PrintcInvalidRange(n))
+                })?;
                 self.print(ch)?;
             }
             Inst::Printi => {

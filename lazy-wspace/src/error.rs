@@ -87,7 +87,9 @@ pub enum EagerError {
     #[error("call stack underflow")]
     RetUnderflow,
     #[error("printc: invalid codepoint")]
-    PrintcInvalid(Rc<Integer>),
+    PrintcInvalidRange(Rc<Integer>),
+    #[error("printc: surrogate half")]
+    PrintcSurrogate(u32),
     #[error("print: operation not permitted")]
     PrintPermissionDenied,
     #[error("flush: operation not permitted")]
@@ -348,9 +350,13 @@ impl EagerError {
                 HaskellError::stderr(wspace, &err.show(), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78
-            EagerError::PrintcInvalid(n) => {
-                // TODO: Surrogates are different from too large.
+            EagerError::PrintcInvalidRange(n) => {
                 HaskellError::stderr(wspace, &format!("Prelude.chr: bad argument: {}", n.show()), 1)
+            }
+            // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L78
+            // TODO: https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Encoding/Failure.hs#L217-222
+            EagerError::PrintcSurrogate(n) => {
+                HaskellError::stderr(wspace, &format!("<stdout>: hPutChar: invalid argument (cannot encode character '\\{n}')"), 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L91
             EagerError::PrintPermissionDenied => {
@@ -377,11 +383,13 @@ impl EagerError {
                 HaskellError::stderr(wspace, "<stdin>: hGetLine: end of file", 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L82
+            // TODO: https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Encoding/Failure.hs#L212-215
             EagerError::ReadcInvalidUtf8 => {
                 // TODO: Print bad byte.
                 HaskellError::stderr(wspace, "<stdin>: hGetChar: invalid argument (cannot decode byte sequence starting from ...)", 1)
             }
             // https://github.com/wspace/whitespace-haskell/blob/master/VM.hs#L86
+            // TODO: https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/IO/Encoding/Failure.hs#L212-215
             EagerError::ReadiInvalidUtf8 => {
                 // TODO: Print bad byte.
                 HaskellError::stderr(wspace, "<stdin>: hGetLine: invalid argument (cannot decode byte sequence starting from ...)", 1)
