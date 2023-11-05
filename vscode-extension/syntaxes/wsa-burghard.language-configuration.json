@@ -8,11 +8,15 @@
     "lineComment": ";"
   },
   "folding": {},
-  "indentationRules": {
-    "increaseIndentPattern": "^[ \t]*label[ \t]+",
-    "decreaseIndentPattern": ""
-  },
-  "onEnterRules": [],
+  "indentationRules": {},
+  "onEnterRules": [
+    {
+      "action": {
+        "indent": "indent"
+      },
+      "beforeText": "^[ \t]*label[ \t]+"
+    }
+  ],
   "surroundingPairs": [],
   "wordPattern": "[^ \t]+"
 }

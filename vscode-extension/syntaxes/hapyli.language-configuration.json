@@ -1,7 +1,20 @@
 {
-  "autoCloseBefore": ";:.,=}])> \n\t",
+  "autoCloseBefore": ");=\\s",
   "autoClosingPairs": [
-    ["(", ")"]
+    {
+      "open": "(",
+      "close": ")"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": ["string"]
+    },
+    {
+      "open": "'",
+      "close": "'",
+      "notIn": ["string"]
+    }
   ],
   "brackets": [
     ["(", ")"]
@@ -15,11 +28,8 @@
   "folding": {
     "offSide": true
   },
-  "indentationRules": {
-    "increaseIndentPattern": "", // TODO: Look at Lisp
-    "decreaseIndentPattern": "^\\s*$" // TODO: Look at Lisp
-  },
-  "onEnterRules": [], // TODO: Look at Lisp
+  "indentationRules": {},
+  "onEnterRules": [],
   "surroundingPairs": [
     ["(", ")"]
   ],

@@ -8,8 +8,8 @@
       "match": "-?(:?[0-9]+|0[xX][0-9a-fA-F]+)"
     },
     {
-      "name": "constant.character.hapyli",
-      "match": "'(\\\\[strn0'\\\\]|[^\r\n'\\\\])'"
+      "name": "string.quoted.single.hapyli",
+      "match": "'(\\\\[strn0'\\\\]|[^\r\n'\\\\])*'"
     },
     {
       "name": "string.quoted.double.hapyli",
@@ -61,7 +61,7 @@
     },
     {
       "name": "variable.other.hapyli",
-      "match": "\\b[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+\\b"
+      "match": "[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+"
     }
   ],
   "fileTypes": ["hpl"]
