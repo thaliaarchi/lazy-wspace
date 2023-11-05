@@ -4,6 +4,8 @@ use std::cmp::Ordering;
 use std::ops::{Index, Range};
 use std::path::{Path, PathBuf};
 
+use bstr::ByteSlice;
+
 use crate::source::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -35,7 +37,7 @@ pub struct FileId(u16);
 #[derive(Clone, Debug)]
 pub struct FileInfo {
     path: PathBuf,
-    source_text: String,
+    source_text: Vec<u8>,
     line_starts: Vec<u32>,
 }
 
@@ -93,7 +95,7 @@ impl FileSpan {
     }
 
     #[inline]
-    pub fn source_text<'a>(&self, files: &'a FileSet) -> &'a str {
+    pub fn source_text<'a>(&self, files: &'a FileSet) -> &'a [u8] {
         &files[self.file].source_text[self.range()]
     }
 
@@ -105,22 +107,7 @@ impl FileSpan {
             self.start() <= file.len() && self.end() <= file.len(),
             "out of bounds"
         );
-        let start = file.line_column(self.start());
-        let end = if self.is_empty() {
-            start
-        } else if !file
-            .line_starts
-            .get(start.line)
-            .is_some_and(|&line_end| self.end() as u32 >= line_end)
-        {
-            // Start and end offsets are on the same line
-            let chars = file.source_text[self.range()].chars().count();
-            LineColumn::new(start.line, start.column + chars)
-        } else {
-            // Slower general case
-            file.line_column(self.end())
-        };
-        (start, end)
+        file.line_columns(self.range().into())
     }
 }
 
@@ -164,7 +151,16 @@ impl FileSet {
         FileSet { files: Vec::new() }
     }
 
-    pub fn insert(&mut self, path: PathBuf, source_text: String) -> FileId {
+    #[inline]
+    pub fn insert<P: Into<PathBuf>, S: Into<Vec<u8>>>(
+        &mut self,
+        path: P,
+        source_text: S,
+    ) -> FileId {
+        self.insert_inner(path.into(), source_text.into())
+    }
+
+    fn insert_inner(&mut self, path: PathBuf, source_text: Vec<u8>) -> FileId {
         assert!(
             u16::try_from(self.files.len()).is_ok_and(|l| l < u16::MAX),
             "number of files exceeds u16",
@@ -176,7 +172,7 @@ impl FileSet {
         let file = FileId(self.files.len() as u16);
 
         let mut line_starts = vec![0];
-        for (i, &b) in source_text.as_bytes().iter().enumerate() {
+        for (i, &b) in source_text.iter().enumerate() {
             if b == b'\n' {
                 line_starts.push(i as u32 + 1);
             }
@@ -235,7 +231,7 @@ impl FileInfo {
     }
 
     #[inline]
-    pub fn source_text(&self) -> &str {
+    pub fn source_text(&self) -> &[u8] {
         &self.source_text
     }
 
@@ -257,19 +253,41 @@ impl FileInfo {
         let column = self.source_text[line_start..offset].chars().count() + 1;
         LineColumn { line, column }
     }
+
+    /// Returns the line-column positions for the start (inclusive) and end
+    /// (exclusive) of the span in this file.
+    #[inline]
+    pub fn line_columns(&self, span: Span) -> (LineColumn, LineColumn) {
+        let start = self.line_column(span.start);
+        let end = if self.is_empty() {
+            start
+        } else if !self
+            .line_starts
+            .get(start.line)
+            .is_some_and(|&line_end| span.end as u32 >= line_end)
+        {
+            // Start and end offsets are on the same line
+            let chars = self.source_text[span.range()].chars().count();
+            LineColumn::new(start.line, start.column + chars)
+        } else {
+            // Slower general case
+            self.line_column(span.end)
+        };
+        (start, end)
+    }
 }
 
 #[test]
 fn line_column() {
     let mut files = FileSet::new();
 
-    let f = files.insert("empty".into(), "".into());
+    let f = files.insert("empty", "");
     assert_eq!(
         (LineColumn::new(1, 1), LineColumn::new(1, 1)),
         FileSpan::from_span(f, 0..0).line_columns(&files)
     );
 
-    let f = files.insert("utf-8".into(), "\nsüß\n".into());
+    let f = files.insert("utf-8", "\nsüß\n");
     assert_eq!(
         (LineColumn::new(1, 1), LineColumn::new(2, 1)),
         FileSpan::from_span(f, 0..1).line_columns(&files)
