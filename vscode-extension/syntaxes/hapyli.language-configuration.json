@@ -1,0 +1,27 @@
+{
+  "autoCloseBefore": ";:.,=}])> \n\t",
+  "autoClosingPairs": [
+    ["(", ")"]
+  ],
+  "brackets": [
+    ["(", ")"]
+  ],
+  "colorizedBracketPairs": [
+    ["(", ")"]
+  ],
+  "comments": {
+    "lineComment": ";"
+  },
+  "folding": {
+    "offSide": true
+  },
+  "indentationRules": {
+    "increaseIndentPattern": "", // TODO: Look at Lisp
+    "decreaseIndentPattern": "^\\s*$" // TODO: Look at Lisp
+  },
+  "onEnterRules": [], // TODO: Look at Lisp
+  "surroundingPairs": [
+    ["(", ")"]
+  ],
+  "wordPattern": "\\b[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+\\b"
+}

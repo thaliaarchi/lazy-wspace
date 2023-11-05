@@ -12,8 +12,8 @@
       "match": "-?(?:[0-9]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+)"
     },
     {
-      "name": "variable.wsa.burghard",
-      "match": "\\b_[^\\s]\\b"
+      "name": "variable.other.wsa.burghard",
+      "match": "\\b_[^ \t]\\b"
     },
     {
       "name": "comment.line.semi.wsa.burghard",
@@ -97,7 +97,7 @@
       "match": "\\bretrive\\b"
     },
     {
-      "name": "entity.name.function.label.wsa.burghard",
+      "name": "storage.type.function.wsa.burghard",
       "match": "\\blabel\\b"
     },
     {

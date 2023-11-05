@@ -31,7 +31,11 @@
     "typescript": "^5.2.2"
   },
   "main": "out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:whitespace",
+    "onLanguage:wsa-burghard",
+    "onLanguage:hapyli"
+  ],
   "contributes": {
     "languages": [
       {
@@ -44,7 +48,13 @@
         "id": "wsa-burghard",
         "extensions": [".wsa"],
         "aliases": ["Whitespace assembly (Burghard)", "wsa"],
-        "filenames": ["wsinterws.wsa"]
+        "configuration": "syntaxes/wsa-burghard.language-configuration.json"
+      },
+      {
+        "id": "hapyli",
+        "extensions": [".hpl"],
+        "aliases": ["HaPyLi", "hpl"],
+        "configuration": "syntaxes/hapyli.language-configuration.json"
       }
     ],
     "grammars": [
@@ -57,6 +67,11 @@
         "language": "wsa-burghard",
         "scopeName": "source.wsa.burghard",
         "path": "syntaxes/wsa-burghard.tmLanguage.json"
+      },
+      {
+        "language": "hapyli",
+        "scopeName": "source.hapyli",
+        "path": "syntaxes/hapyli.tmLanguage.json"
       }
     ],
     "configurationDefaults": {
@@ -71,7 +86,7 @@
         "editor.renderWhitespace": "all",
         "editor.stickyTabStops": false,
         "editor.tabCompletion": "off",
-        "editor.tabSize": 1,
+        "editor.tabSize": 4,
         "editor.trimAutoWhitespace": false,
         "editor.useTabStops": false,
         "editor.wrappingIndent": "none",

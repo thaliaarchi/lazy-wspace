@@ -1,0 +1,18 @@
+{
+  "autoCloseBefore": "",
+  "autoClosingPairs": [],
+  "brackets": [],
+  "colorizedBracketPairs": [],
+  "comments": {
+    "blockComment": ["{-", "-}"],
+    "lineComment": ";"
+  },
+  "folding": {},
+  "indentationRules": {
+    "increaseIndentPattern": "^[ \t]*label[ \t]+",
+    "decreaseIndentPattern": ""
+  },
+  "onEnterRules": [],
+  "surroundingPairs": [],
+  "wordPattern": "[^ \t]+"
+}
