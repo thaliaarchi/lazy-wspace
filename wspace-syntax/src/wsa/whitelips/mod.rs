@@ -31,7 +31,7 @@ fn lex_block_comment(lex: &mut Lexer<Token>) -> bool {
 
     let mut sub = CommentToken::lexer(lex.remainder());
     let mut depth = 1usize;
-    while let Some(res) = sub.next() {
+    for res in sub.by_ref() {
         match res {
             Ok(CommentToken::Start) => depth += 1,
             Ok(CommentToken::End) => {

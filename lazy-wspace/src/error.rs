@@ -459,7 +459,7 @@ impl HaskellError {
     fn stderr_line(wspace: &OsStr, msg: &str) -> Vec<u8> {
         let wspace = wspace.as_encoded_bytes();
         let mut buf = Vec::with_capacity(wspace.len() + 2 + msg.len() + 1);
-        buf.extend_from_slice(&wspace);
+        buf.extend_from_slice(wspace);
         buf.extend_from_slice(b": ");
         buf.extend_from_slice(msg.as_bytes());
         buf.push(b'\n');

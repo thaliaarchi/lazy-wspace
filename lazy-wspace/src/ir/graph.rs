@@ -75,12 +75,17 @@ impl Graph {
     pub fn nodes(&self) -> &[Node] {
         // SAFETY: The length is monotonically increasing and nodes cannot be
         // modified once pushed.
-        unsafe { &**self.nodes.get() }
+        unsafe { &*self.nodes.get() }
     }
 
     #[inline]
     pub fn len(&self) -> usize {
         self.nodes().len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[inline]
@@ -199,7 +204,7 @@ struct GraphDisplay<'a> {
 impl Display for GraphDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("Graph {")?;
-        if self.graph.len() != 0 {
+        if !self.graph.is_empty() {
             f.write_str("\n")?;
             for (i, node) in self.graph.iter_entries() {
                 writeln!(f, "    {i}: {}", node.inst().as_display(self.cfg))?;

@@ -97,7 +97,7 @@ impl<'a> LineParser<'a> {
                     continue;
                 }
                 Token::Lf => {
-                    if line.len() != 0 {
+                    if !line.is_empty() {
                         break;
                     } else {
                         continue;
@@ -143,7 +143,7 @@ impl Iterator for LineParser<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut line = Vec::new();
         self.next_line(&mut line);
-        if line.len() != 0 {
+        if !line.is_empty() {
             Some(line)
         } else {
             None

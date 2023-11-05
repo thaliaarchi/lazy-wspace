@@ -126,7 +126,7 @@ impl<'g> Cfg<'g> {
                     },
                     Ast::Ret => Inst::ret(),
                     Ast::End => Inst::exit(),
-                    Ast::ParseError(err) => Inst::trap(err.clone()),
+                    Ast::ParseError(err) => Inst::trap(*err),
                     _ => panic!("not a terminator: {inst}"),
                 };
                 bb.exit = Some(graph.insert(exit));

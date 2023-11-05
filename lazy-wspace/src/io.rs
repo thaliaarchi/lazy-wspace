@@ -73,6 +73,13 @@ impl IoRecorder {
     }
 }
 
+impl Default for IoRecorder {
+    #[inline]
+    fn default() -> Self {
+        IoRecorder::new()
+    }
+}
+
 impl<R: Read> Read for StdinRecorder<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         assert!(

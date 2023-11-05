@@ -22,7 +22,7 @@ fn main() {
         process::exit(2);
     }
 
-    let mut f = File::open(&filename).unwrap();
+    let mut f = File::open(filename).unwrap();
     let mut src = Vec::new();
     f.read_to_end(&mut src).unwrap();
 

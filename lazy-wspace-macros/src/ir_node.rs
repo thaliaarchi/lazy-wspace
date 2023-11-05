@@ -21,7 +21,7 @@ use syn::{
 pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
     if !input.generics.params.is_empty() {
         emit_error!(input.generics.params, "generics are not allowed");
-    } else if !input.generics.where_clause.is_none() {
+    } else if input.generics.where_clause.is_some() {
         emit_error!(input.generics.where_clause, "where clauses are not allowed");
     }
 
@@ -218,7 +218,7 @@ fn process_fields(fields: impl IntoIterator<Item = Field>) -> Vec<(Field, Option
     for field in fields {
         let mut is_input = false;
         for attr in &field.attrs {
-            match attr.path().get_ident().as_deref() {
+            match attr.path().get_ident() {
                 Some(path) if path == "input" => {
                     if is_input {
                         emit_error!(attr, "field marked as #[input] multiple times");

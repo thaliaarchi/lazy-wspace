@@ -572,7 +572,7 @@ impl NodeTable<'_> {
         match action {
             Action::New => self.insert(inst),
             Action::Insert(inst) => self.insert_peephole(inst),
-            Action::Use(i) => return i,
+            Action::Use(i) => i,
         }
     }
 
@@ -600,7 +600,7 @@ impl NodeTable<'_> {
         match action {
             Action::New => self.insert(inst),
             Action::Insert(inst) => self.insert_peephole(inst),
-            Action::Use(i) => return i,
+            Action::Use(i) => i,
         }
     }
 }

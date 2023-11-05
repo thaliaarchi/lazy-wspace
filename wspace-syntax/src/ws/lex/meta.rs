@@ -74,9 +74,9 @@ pub enum MatcherError {
     #[error("invalid syntax for pattern")]
     ParsePattern,
     #[error("parsing literal pattern: {0}")]
-    ParseLiteralPattern(#[from] EscapeError),
+    ParseLiteralPattern(Box<EscapeError>),
     #[error("parsing regex pattern: {0}")]
-    ParseRegexPattern(#[from] regex_syntax::Error),
+    ParseRegexPattern(Box<regex_syntax::Error>),
     #[error("invalid encoding")]
     ParseEncoding,
 
@@ -219,11 +219,11 @@ impl MetaMatcher {
                         Ok(MetaMatcher::from_char(matcher, encoding))
                     } else {
                         // TODO: Make a char matcher for non-UTF-8 input.
-                        let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
+                        let matcher = BytesMatcher::new(&s, &t, &l)?;
                         Ok(MetaMatcher::from_bytes(matcher, encoding))
                     }
                 } else {
-                    let matcher = BytesMatcher::new(&*s, &*t, &*l)?;
+                    let matcher = BytesMatcher::new(&s, &t, &l)?;
                     Ok(MetaMatcher::from_bytes(matcher, encoding))
                 }
             }
@@ -384,7 +384,7 @@ impl Pattern {
             Pattern::Regex(hir) => match hir.kind() {
                 HirKind::Literal(_) => {
                     if let HirKind::Literal(lit) = hir.into_kind() {
-                        Some(lit.0.into_vec().into())
+                        Some(lit.0.into_vec())
                     } else {
                         unreachable!()
                     }
@@ -406,6 +406,20 @@ impl Encoding {
     #[inline]
     pub fn is_utf8(&self) -> bool {
         matches!(self, Encoding::Utf8 | Encoding::LazyUtf8)
+    }
+}
+
+impl From<EscapeError> for MatcherError {
+    #[inline]
+    fn from(err: EscapeError) -> Self {
+        MatcherError::ParseLiteralPattern(Box::new(err))
+    }
+}
+
+impl From<regex_syntax::Error> for MatcherError {
+    #[inline]
+    fn from(err: regex_syntax::Error) -> Self {
+        MatcherError::ParseRegexPattern(Box::new(err))
     }
 }
 

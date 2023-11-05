@@ -15,11 +15,11 @@ fn main() {
 }
 
 fn try_main() -> Result<(), (Error, PathBuf)> {
-    let args = env::args_os();
-    if args.len() != 2 {
+    let mut args = env::args_os().skip(1);
+    if args.len() != 1 {
         return Err((UsageError::ArgumentCount.into(), PathBuf::new()));
     }
-    let filename = PathBuf::from(args.skip(1).next().unwrap());
+    let filename = PathBuf::from(args.next().unwrap());
 
     let mut src = Vec::new();
     if let Err(err) = File::open(&filename).and_then(|mut f| f.read_to_end(&mut src)) {

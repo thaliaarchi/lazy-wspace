@@ -50,7 +50,7 @@ impl Dialect for BurghardDialect {
             UncasedStr::new("endoption") => Opcode::EndOption,
         };
 
-        MNEMONICS.get(&UncasedStr::new(mnemonic)).copied()
+        MNEMONICS.get(UncasedStr::new(mnemonic)).copied()
     }
 
     fn to_mnemonic(opcode: Opcode) -> Option<&'static str> {

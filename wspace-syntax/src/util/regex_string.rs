@@ -190,12 +190,10 @@ fn scan_unicode(chars: &mut Chars<'_>, len: usize) -> Result<char, EscapeErrorKi
     } else {
         scan_hex_digits(chars, len)
     }?;
-    char::from_u32(value).ok_or_else(|| {
-        if value > 0x10FFFF {
-            EscapeErrorKind::OutOfRangeUnicodeEscape
-        } else {
-            EscapeErrorKind::LoneSurrogateUnicodeEscape
-        }
+    char::from_u32(value).ok_or(if value > 0x10FFFF {
+        EscapeErrorKind::OutOfRangeUnicodeEscape
+    } else {
+        EscapeErrorKind::LoneSurrogateUnicodeEscape
     })
 }
 

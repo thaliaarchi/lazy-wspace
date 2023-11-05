@@ -394,6 +394,13 @@ impl AbstractStack {
     }
 }
 
+impl Default for AbstractStack {
+    #[inline]
+    fn default() -> Self {
+        AbstractStack::new()
+    }
+}
+
 impl Clone for AbstractStack {
     #[inline]
     fn clone(&self) -> Self {

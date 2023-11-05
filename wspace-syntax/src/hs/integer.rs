@@ -197,7 +197,7 @@ impl ReadIntegerLit {
             }
             // SAFETY: Digits are constructed to be in range for the base.
             unsafe {
-                value.assign_bytes_radix_unchecked(&digits, base as i32, is_negative);
+                value.assign_bytes_radix_unchecked(digits, base as i32, is_negative);
             }
         } else if leading_zeros == 0 {
             return Err(Error::NoDigits);

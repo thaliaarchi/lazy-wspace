@@ -201,7 +201,7 @@ impl Display for LabelLit {
         write!(f, "@")?;
         if let Some(s) = self.to_utf8() {
             // Try to decode it as UTF-8
-            if s.len() == 0
+            if s.is_empty()
                 || s.starts_with(|c| char::is_ascii_digit(&c))
                 || s.contains(char::is_whitespace)
             {

@@ -106,7 +106,7 @@ impl ValueRef {
         match &*self.0.borrow() {
             Value::Integer(n) => return Ok(n.clone()),
             Value::Op(_, _, _) => {}
-            Value::Error(err) => return Err(err.clone()),
+            Value::Error(err) => return Err(*err),
         }
 
         let cell = self.0;
@@ -117,7 +117,7 @@ impl ValueRef {
         };
         let inner = cell.replace(match &res {
             Ok(n) => Value::Integer(n.clone()),
-            Err(err) => Value::Error(err.clone()),
+            Err(err) => Value::Error(*err),
         });
         debug_assert_eq!(Value::Error(ValueError::EmptyLit), inner);
         res

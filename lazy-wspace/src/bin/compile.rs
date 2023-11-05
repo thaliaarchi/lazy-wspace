@@ -9,7 +9,7 @@ use wspace_syntax::ws::{ast::Parser, lex::StdLexer};
 
 fn main() {
     let mut args = env::args_os();
-    let wspace_path = args.next().map(|p| PathBuf::from(p));
+    let wspace_path = args.next().map(PathBuf::from);
     let wspace = wspace_path
         .as_ref()
         .and_then(|p| p.file_name())
@@ -21,7 +21,7 @@ fn main() {
     }
     let filename = args.next().unwrap();
 
-    let mut f = File::open(&filename).unwrap();
+    let mut f = File::open(filename).unwrap();
     let mut src = Vec::<u8>::new();
     f.read_to_end(&mut src).unwrap();
 

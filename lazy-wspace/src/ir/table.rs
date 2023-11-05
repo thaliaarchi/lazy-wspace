@@ -37,11 +37,9 @@ impl<'g> NodeTable<'g> {
 
     #[inline]
     pub fn get(&self, inst: &Inst) -> Option<NodeRef> {
-        let hash = make_hash(inst);
-        match self.table.find(hash, |&key| &*self.graph[key] == inst) {
-            Some(bucket) => Some(*unsafe { bucket.as_ref() }),
-            None => None,
-        }
+        self.table
+            .find(make_hash(inst), |&key| &*self.graph[key] == inst)
+            .map(|bucket| *unsafe { bucket.as_ref() })
     }
 
     #[inline]
@@ -111,6 +109,11 @@ impl<'g> NodeTable<'g> {
     #[inline]
     pub fn len(&self) -> usize {
         self.table.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[inline]

@@ -28,6 +28,11 @@ impl Stack {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
     pub fn push(&mut self, n: ValueRef) {
         self.values.push(n);
     }

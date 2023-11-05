@@ -341,6 +341,13 @@ impl CallStack {
     }
 }
 
+impl Default for CallStack {
+    #[inline]
+    fn default() -> Self {
+        CallStack::new()
+    }
+}
+
 /// Models [`base:GHC.Exception.prettyCallStack`](https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.8.1-release/libraries/base/GHC/Exception.hs#L107-119)
 /// ([docs](https://hackage.haskell.org/package/base-4.19.0.0/docs/GHC-Exception.html#v:prettyCallStack)).
 impl Display for CallStack {

@@ -27,7 +27,7 @@ impl BytesMatcher {
         }
         let ac = AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostLongest)
-            .build(&[s, t, l])
+            .build([s, t, l])
             .unwrap();
         Ok(BytesMatcher { ac })
     }

@@ -71,25 +71,25 @@ impl Inst {
 
     #[inline]
     pub fn is_control_flow(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Inst::Label(_)
-            | Inst::Call(_)
-            | Inst::Jmp(_)
-            | Inst::Jz(_)
-            | Inst::Jn(_)
-            | Inst::Ret
-            | Inst::End
-            | Inst::ParseError(_) => true,
-            _ => false,
-        }
+                | Inst::Call(_)
+                | Inst::Jmp(_)
+                | Inst::Jz(_)
+                | Inst::Jn(_)
+                | Inst::Ret
+                | Inst::End
+                | Inst::ParseError(_),
+        )
     }
 
     #[inline]
     pub fn can_end_program(&self) -> bool {
-        match self {
-            Inst::Jmp(_) | Inst::Ret | Inst::End | Inst::ParseError(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Inst::Jmp(_) | Inst::Ret | Inst::End | Inst::ParseError(_),
+        )
     }
 }
 

@@ -191,6 +191,13 @@ impl FileSet {
     }
 }
 
+impl Default for FileSet {
+    #[inline]
+    fn default() -> Self {
+        FileSet::new()
+    }
+}
+
 impl FileId {
     #[inline]
     pub fn info<'a>(&self, files: &'a FileSet) -> &'a FileInfo {
@@ -238,11 +245,16 @@ impl FileInfo {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
     pub fn line_column(&self, offset: usize) -> LineColumn {
         assert!(offset <= self.len(), "offset out of bounds");
         let line = self.line_starts.partition_point(|&l| l <= offset as u32);
         let line_start = self.line_starts[line - 1] as usize;
-        let column = (self.source_text[line_start..offset as usize].chars()).count() + 1;
+        let column = self.source_text[line_start..offset].chars().count() + 1;
         LineColumn { line, column }
     }
 }

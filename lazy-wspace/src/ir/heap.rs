@@ -71,7 +71,7 @@ impl AbstractHeap {
             Inst::UnaryImmError {
                 opcode: Opcode::ConstError,
                 imm: err,
-            } => Err(err.clone().into()),
+            } => Err((*err).into()),
             _ => {
                 // A non-constant address may alias any other address.
                 self.vars.clear();
@@ -81,5 +81,12 @@ impl AbstractHeap {
                 Ok(())
             }
         }
+    }
+}
+
+impl Default for AbstractHeap {
+    #[inline]
+    fn default() -> Self {
+        AbstractHeap::new()
     }
 }
