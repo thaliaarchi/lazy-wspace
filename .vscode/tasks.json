@@ -13,8 +13,7 @@
       "isBackground": true,
       "presentation": {
         "panel": "dedicated",
-        "reveal": "silent",
-        "revealProblems": "onProblem"
+        "reveal": "never"
       },
       "problemMatcher": {
         "base": "$tsc-watch",

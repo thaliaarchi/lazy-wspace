@@ -5,7 +5,7 @@
   "patterns": [
     {
       "name": "constant.numeric.integer.hapyli",
-      "match": "-?(:?[0-9]+|0[xX][0-9a-fA-F]+)"
+      "match": "(?<=[\\s;()]|^)-?(:?[0-9]+|0[xX][0-9a-fA-F]+)(?=[\\s;()]|$)"
     },
     {
       "name": "string.quoted.single.hapyli",
@@ -25,43 +25,43 @@
     },
     {
       "name": "keyword.control.import.hapyli",
-      "match": "\\bimport\\b"
+      "match": "(?<=[\\s;()]|^)import(?=[\\s;()]|$)"
     },
     {
       "name": "storage.type.hapyli",
-      "match": "\\bvar\\b"
+      "match": "(?<=[\\s;()]|^)var(?=[\\s;()]|$)"
     },
     {
       "name": "storage.type.asm.hapyli",
-      "match": "\\basm\\b"
+      "match": "(?<=[\\s;()]|^)asm(?=[\\s;()]|$)"
     },
     {
       "name": "storage.type.function.hapyli",
-      "match": "\\bdef\\b"
+      "match": "(?<=[\\s;()]|^)def(?=[\\s;()]|$)"
     },
     {
       "name": "storage.modifier.hapyli",
-      "match": "\\binline\\b"
+      "match": "(?<=[\\s;()]|^)inline(?=[\\s;()]|$)"
     },
     {
       "name": "storage.type.hapyli",
-      "match": "\\blet\\b"
+      "match": "(?<=[\\s;()]|^)let(?=[\\s;()]|$)"
     },
     {
       "name": "storage.type.hapyli",
-      "match": "\\bin\\b"
+      "match": "(?<=[\\s;()]|^)in(?=[\\s;()]|$)"
     },
     {
       "name": "keyword.control.if.hapyli",
-      "match": "\\bif\\b"
+      "match": "(?<=[\\s;()]|^)if(?=[\\s;()]|$)"
     },
     {
       "name": "keyword.control.do.hapyli",
-      "match": "\\bdo\\b"
+      "match": "(?<=[\\s;()]|^)do(?=[\\s;()]|$)"
     },
     {
       "name": "variable.other.hapyli",
-      "match": "[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+"
+      "match": "(?<=[\\s;()]|^)[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+(?=[\\s;()]|$)"
     }
   ],
   "fileTypes": ["hpl"]

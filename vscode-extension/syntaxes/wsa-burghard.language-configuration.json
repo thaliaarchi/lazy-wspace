@@ -1,6 +1,12 @@
 {
   "autoCloseBefore": "",
-  "autoClosingPairs": [],
+  "autoClosingPairs": [
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": ["string", "comment"]
+    }
+  ],
   "brackets": [],
   "colorizedBracketPairs": [],
   "comments": {
@@ -17,6 +23,8 @@
       "beforeText": "^[ \t]*label[ \t]+"
     }
   ],
-  "surroundingPairs": [],
+  "surroundingPairs": [
+    ["\"", "\""]
+  ],
   "wordPattern": "[^ \t]+"
 }

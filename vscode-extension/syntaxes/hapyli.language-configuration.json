@@ -8,12 +8,12 @@
     {
       "open": "\"",
       "close": "\"",
-      "notIn": ["string"]
+      "notIn": ["string", "comment"]
     },
     {
       "open": "'",
       "close": "'",
-      "notIn": ["string"]
+      "notIn": ["string", "comment"]
     }
   ],
   "brackets": [
@@ -31,7 +31,9 @@
   "indentationRules": {},
   "onEnterRules": [],
   "surroundingPairs": [
-    ["(", ")"]
+    ["(", ")"],
+    ["\"", "\""],
+    ["'", "'"]
   ],
-  "wordPattern": "\\b[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+\\b"
+  "wordPattern": "(?<=[\\s;()]|^)[0-9a-zA-Z~!@#$%^&*\\-_=+|:,<.>/?]+(?=[\\s;()]|$)"
 }
