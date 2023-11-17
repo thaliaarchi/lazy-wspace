@@ -1,2 +1,2 @@
 [toolchain]
-channel = "beta" # 1.74
+channel = "stable"
