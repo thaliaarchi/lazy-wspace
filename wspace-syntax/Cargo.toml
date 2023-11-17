@@ -27,3 +27,6 @@ strum = { version = "0.25", features = ["derive"] }
 thiserror = "1.0"
 uncased = "0.9"
 unicode-ident = "1.0"
+
+[lints]
+workspace = true

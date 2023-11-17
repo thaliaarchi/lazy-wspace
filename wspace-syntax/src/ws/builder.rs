@@ -75,7 +75,7 @@ impl<'a, W: TokenWriter> Builder<'a, W> {
         self.push(Token::L);
     }
 
-    pub fn write_integer(&mut self, n: Integer) {
+    pub fn write_integer(&mut self, n: &Integer) {
         _ = n;
         todo!()
     }

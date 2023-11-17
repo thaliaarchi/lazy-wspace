@@ -445,8 +445,7 @@ impl LazySize {
         match (self, rhs) {
             (LazySize::Finite(n), LazySize::Finite(m)) => n
                 .checked_add(m)
-                .map(LazySize::Finite)
-                .unwrap_or(LazySize::Overflow),
+                .map_or(LazySize::Overflow, LazySize::Finite),
             (LazySize::Overflow | LazySize::EmptyLit, _) => self,
             (_, LazySize::Overflow | LazySize::EmptyLit) => rhs,
         }

@@ -11,3 +11,6 @@ publish = false
 [dependencies]
 rug = { version = "1.22", features = ["integer"], default-features = false }
 wspace-syntax = { path = "../wspace-syntax" }
+
+[lints]
+workspace = true

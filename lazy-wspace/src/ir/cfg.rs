@@ -359,8 +359,6 @@ impl<'g> IndexMut<BBlockId> for Cfg<'g> {
 
 impl Display for Cfg<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut visited = bitbox![0; self.graph.len()];
-        let mut new_visited = bitbox![0; self.graph.len()];
         fn visit_node(
             root: NodeRef,
             graph: &Graph,
@@ -398,6 +396,8 @@ impl Display for Cfg<'_> {
         }
 
         let reachable = self.reachable();
+        let mut visited = bitbox![0; self.graph.len()];
+        let mut new_visited = bitbox![0; self.graph.len()];
 
         let mut first = true;
         for bb in &self.bbs {

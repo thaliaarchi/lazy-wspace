@@ -14,7 +14,7 @@ pub fn derive_opcode(input: DeriveInput) -> TokenStream {
     let opcode_name = if name == "Inst" {
         Ident::new("Opcode", Span::call_site())
     } else {
-        Ident::new(&format!("{}Opcode", name), Span::call_site())
+        Ident::new(&format!("{name}Opcode"), Span::call_site())
     };
     let opcode_doc = format!("Opcode for [{name}].");
 

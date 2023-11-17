@@ -23,3 +23,6 @@ strum = { version = "0.25", features = ["derive"] }
 thiserror = "1.0"
 utf8-chars = "3.0"
 wspace-syntax = { path = "../wspace-syntax" }
+
+[lints]
+workspace = true

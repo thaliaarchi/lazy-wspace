@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Deref;
-use std::{mem, slice};
+use std::slice;
 
 use rug::Integer as Mpz;
 use strum::Display;
@@ -659,7 +659,7 @@ impl Inst {
             _ => {
                 let uses = self.args().unwrap_or_default();
                 // SAFETY: Value is repr(transparent) over NodeRef.
-                unsafe { mem::transmute(uses) }
+                unsafe { &*(uses as *const [Value] as *const [NodeRef]) }
             }
         }
     }

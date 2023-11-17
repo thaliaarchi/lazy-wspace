@@ -19,3 +19,12 @@ phf = { git = "https://github.com/thaliaarchi/rust-phf" }
 
 [profile.release]
 lto = true
+
+[workspace.lints.clippy]
+map_unwrap_or = "forbid"
+module_name_repetitions = "allow"
+uninlined_format_args = "forbid"
+# Until my API is more stable
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"

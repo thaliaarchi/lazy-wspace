@@ -13,8 +13,7 @@ fn main() {
     let wspace = wspace_path
         .as_ref()
         .and_then(|p| p.file_name())
-        .map(|p| p.to_string_lossy())
-        .unwrap_or("wspace".into());
+        .map_or("wspace".into(), |p| p.to_string_lossy());
     if args.len() != 1 {
         eprintln!("Usage: {wspace} <filename>");
         process::exit(2);

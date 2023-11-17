@@ -47,8 +47,7 @@ pub fn generate_ir_node(input: ItemStruct) -> TokenStream {
         if let Some(input) = &input {
             match input {
                 Input::Single => min_len += 1,
-                Input::Array(n) => min_len += n,
-                Input::Tuple(n) => min_len += n,
+                Input::Array(n) | Input::Tuple(n) => min_len += n,
                 Input::Vec => {
                     if !fixed_len {
                         emit_error!(field, "only one input field may have a dynamic length");

@@ -194,11 +194,11 @@ impl NodeTable<'_> {
             }
 
             // Shifts
-            (mul!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+            (mul!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(u32::is_power_of_two) => {
                 let rhs = self.insert_value(Inst::constz(rhs.to_u32().unwrap().ilog2()));
                 Insert(Inst::shl(lhs, rhs))
             }
-            (div!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(|r| r.is_power_of_two()) => {
+            (div!(..), _, constz!(rhs)) if rhs.to_u32().is_some_and(u32::is_power_of_two) => {
                 let rhs = self.insert_value(Inst::constz(rhs.to_u32().unwrap().ilog2()));
                 Insert(Inst::ashr(lhs, rhs))
             }

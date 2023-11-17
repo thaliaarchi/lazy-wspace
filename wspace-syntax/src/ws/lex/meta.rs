@@ -99,20 +99,6 @@ static META_RE: OnceLock<Regex> = OnceLock::new();
 
 impl MetaMatcher {
     pub fn new(patterns: &str) -> Result<MetaMatcher, MatcherError> {
-        let re = META_RE.get_or_init(|| {
-            Regex::new(
-                r#"(?x)
-                ^
-                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
-                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
-                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s*
-                (?:, \s*(\w+)\w* )?
-                $
-                "#,
-            )
-            .unwrap()
-        });
-
         fn get_cap<'a>(caps: &Captures<'a>, index: usize) -> Result<&'a str, MatcherError> {
             caps.get(index)
                 .map(|m| m.as_str())
@@ -152,6 +138,20 @@ impl MetaMatcher {
             }
             Err(MatcherError::ParsePattern)
         }
+
+        let re = META_RE.get_or_init(|| {
+            Regex::new(
+                r#"(?x)
+                ^
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s* ,
+                \s* (\w+) \s* = \s* ("(?:[^"] | \")*" | /(?:[^/] | \/)*/) \s*
+                (?:, \s*(\w+)\w* )?
+                $
+                "#,
+            )
+            .unwrap()
+        });
 
         let caps = re.captures(patterns).ok_or(MatcherError::ParseMatcher)?;
         let enc = match get_cap(&caps, 7) {
@@ -253,9 +253,7 @@ impl MetaMatcher {
 
     #[inline]
     pub fn from_char(matcher: CharMatcher, encoding: Encoding) -> Self {
-        if encoding == Encoding::Bytes {
-            panic!("char lexing requires UTF-8");
-        }
+        assert_ne!(encoding, Encoding::Bytes, "char lexing requires UTF-8");
         MetaMatcher {
             inner: MetaMatcherRepr::Char(matcher),
             encoding,
@@ -280,9 +278,7 @@ impl MetaMatcher {
 
     #[inline]
     pub fn from_bit(order: DynBitOrder, encoding: Encoding) -> Self {
-        if encoding != Encoding::Bytes {
-            panic!("bit lexing requires bytes");
-        }
+        assert_eq!(encoding, Encoding::Bytes, "bit lexing requires bytes");
         MetaMatcher {
             inner: MetaMatcherRepr::Bit(order),
             encoding,
@@ -302,15 +298,12 @@ impl MetaMatcher {
                     let valid_prefix =
                         unsafe { str::from_utf8_unchecked(&src[..err.valid_up_to()]) };
                     let err_start = err.valid_up_to();
-                    let err_end = err
-                        .error_len()
-                        .map(|len| err_start + len)
-                        .unwrap_or(src.len());
+                    let err_end = err.error_len().map_or(src.len(), |len| err_start + len);
                     (Some(valid_prefix), Some(Span::from(err_start..err_end)))
                 }
             },
         };
-        let src = src_str.map(|s| s.as_bytes()).unwrap_or(src);
+        let src = src_str.map_or(src, str::as_bytes);
         let inner = match &self.inner {
             MetaMatcherRepr::Byte(inner) => MetaLexerRepr::Byte(inner.lex(src)),
             MetaMatcherRepr::Char(inner) => {
