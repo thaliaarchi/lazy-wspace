@@ -21,6 +21,11 @@ phf = { git = "https://github.com/thaliaarchi/rust-phf" }
 lto = true
 
 [workspace.lints.clippy]
+map_unwrap_or = "warn"
+module_name_repetitions = "allow"
+uninlined_format_args = "forbid"
+
+## clippy::restriction
 dbg_macro = "warn"
 # default_numeric_fallback = "warn"
 filetype_is_file = "warn"
@@ -29,8 +34,6 @@ format_push_string = "warn"
 # iter_over_hash_type = "warn" # Rust 1.75
 lossy_float_literal = "warn"
 missing_assert_message = "warn"
-map_unwrap_or = "warn"
-module_name_repetitions = "allow"
 # missing_asserts_for_indexing = "warn"
 redundant_type_annotations = "warn"
 rest_pat_in_fully_bound_structs = "forbid"
@@ -41,11 +44,17 @@ string_to_string = "warn"
 tests_outside_test_module = "warn"
 try_err = "warn"
 undocumented_unsafe_blocks = "forbid"
-uninlined_format_args = "forbid"
 unnecessary_safety_comment = "forbid"
 unnecessary_safety_doc = "forbid"
 
-# Until my API is more stable
+## clippy::cargo
+cargo_common_metadata = "warn"
+multiple_crate_versions = "warn"
+negative_feature_names = "warn"
+redundant_feature_names = "warn"
+wildcard_dependencies = "warn"
+
+## Allowed until my API is more stable
 missing_docs_in_private_items = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
