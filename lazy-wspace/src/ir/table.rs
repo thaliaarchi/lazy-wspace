@@ -163,9 +163,7 @@ impl<'g> NodeTable<'g> {
 
 #[inline]
 fn make_hash<T: Hash>(v: &T) -> u64 {
-    let mut state = DefaultHashBuilder::default().build_hasher();
-    v.hash(&mut state);
-    state.finish()
+    DefaultHashBuilder::default().hash_one(v)
 }
 
 impl Index<NodeRef> for NodeTable<'_> {
