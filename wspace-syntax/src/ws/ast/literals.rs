@@ -143,7 +143,7 @@ impl LabelLit {
 
     /// Constructs a label from a non-negative integer.
     pub fn from_integer(value: &Integer) -> Self {
-        assert!(!value.is_negative());
+        assert!(!value.is_negative(), "label value must be non-negative");
         LabelLit::new(unsigned_bits_from_integer(value))
     }
 

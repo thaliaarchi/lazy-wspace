@@ -119,7 +119,11 @@ impl ValueRef {
             Ok(n) => Value::Integer(n.clone()),
             Err(err) => Value::Error(*err),
         });
-        debug_assert_eq!(Value::Error(ValueError::EmptyLit), inner);
+        debug_assert_eq!(
+            inner,
+            Value::Error(ValueError::EmptyLit),
+            "broken RefCell::replace invariant",
+        );
         res
     }
 
@@ -160,6 +164,7 @@ macro_rules! arith_op(($lhs:expr, $rhs:expr, $op:ident, $op_assign:ident, $op_fr
 // A copy of rhs_has_more_alloc(x, y) from Rug
 #[inline]
 fn rhs_has_more_alloc(lhs: &Integer, rhs: &Integer) -> bool {
+    // SAFETY: Pointers are valid and do not outlive integers.
     unsafe { (*lhs.as_raw()).alloc < (*rhs.as_raw()).alloc }
 }
 

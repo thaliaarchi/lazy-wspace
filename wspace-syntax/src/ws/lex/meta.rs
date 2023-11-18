@@ -295,6 +295,7 @@ impl MetaMatcher {
             Encoding::LazyUtf8 => match simdutf8::compat::from_utf8(src) {
                 Ok(src) => (Some(src), None),
                 Err(err) => {
+                    // SAFETY: Prefix is guaranteed valid.
                     let valid_prefix =
                         unsafe { str::from_utf8_unchecked(&src[..err.valid_up_to()]) };
                     let err_start = err.valid_up_to();

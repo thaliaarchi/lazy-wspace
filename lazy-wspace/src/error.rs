@@ -478,6 +478,7 @@ fn os_str_to_utf8_lossy_remove(s: &OsStr) -> Cow<'_, str> {
         Err(mut err) => {
             let mut cleaned = String::with_capacity(s.len());
             loop {
+                // SAFETY: Prefix is guaranteed valid.
                 cleaned += unsafe { str::from_utf8_unchecked(&s[..err.valid_up_to()]) };
                 if let Some(error_len) = err.error_len() {
                     s = &s[err.valid_up_to() + error_len..];

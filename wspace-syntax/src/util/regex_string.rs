@@ -198,7 +198,7 @@ fn scan_unicode(chars: &mut Chars<'_>, len: usize) -> Result<char, EscapeErrorKi
 }
 
 fn scan_unicode_brace(chars: &mut Chars<'_>) -> Result<u32, EscapeErrorKind> {
-    assert!(chars.next() == Some('{'));
+    assert_eq!(chars.next(), Some('{'), "expected {{");
     let mut value = 0u32;
     let mut empty = true;
     loop {

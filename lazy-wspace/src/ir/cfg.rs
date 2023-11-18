@@ -246,9 +246,15 @@ impl<'g> BBlockBuilder<'g> {
 
     fn push_inst(&mut self, inst: &Ast, globals: &mut NodeTable<'g>) -> Result<(), Error> {
         match inst {
-            Ast::Push(n) => self.do_stack(inst, |s, _| Ok(_ = s.push_integer(n, globals)))?,
+            Ast::Push(n) => self.do_stack(inst, |s, _| {
+                s.push_integer(n, globals);
+                Ok(())
+            })?,
             Ast::Dup => self.do_stack(inst, |s, t| s.dup(t))?,
-            Ast::Copy(n) => self.do_stack(inst, |s, t| Ok(s.copy(n.into(), t)))?,
+            Ast::Copy(n) => self.do_stack(inst, |s, t| {
+                s.copy(n.into(), t);
+                Ok(())
+            })?,
             Ast::Swap => self.do_stack(inst, |s, t| s.swap(t))?,
             Ast::Drop => self.do_stack(inst, |s, t| s.drop_eager(1, t))?,
             Ast::Slide(n) => self.do_stack(inst, |s, t| s.slide(n.into(), t))?,

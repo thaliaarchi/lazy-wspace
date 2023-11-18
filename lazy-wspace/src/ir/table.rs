@@ -39,7 +39,11 @@ impl<'g> NodeTable<'g> {
     pub fn get(&self, inst: &Inst) -> Option<NodeRef> {
         self.table
             .find(make_hash(inst), |&key| &*self.graph[key] == inst)
-            .map(|bucket| *unsafe { bucket.as_ref() })
+            .map(|bucket| {
+                // SAFETY: The value in the bucket is copied, so does not
+                // outlive the table.
+                *unsafe { bucket.as_ref() }
+            })
     }
 
     #[inline]
@@ -50,9 +54,14 @@ impl<'g> NodeTable<'g> {
             |&key| *self.graph[key] == inst,
             |&key| make_hash(&*self.graph[key]),
         ) {
-            Ok(bucket) => *unsafe { bucket.as_ref() },
+            Ok(bucket) => {
+                // SAFETY: The value in the bucket is copied, so does not
+                // outlive the table.
+                *unsafe { bucket.as_ref() }
+            }
             Err(slot) => {
                 let node = self.graph.insert(inst);
+                // SAFETY: The slot has not been mutated before this call.
                 unsafe { self.table.insert_in_slot(hash, slot, node) };
                 node
             }
@@ -61,7 +70,7 @@ impl<'g> NodeTable<'g> {
 
     #[inline]
     pub fn insert_value(&mut self, inst: Inst) -> Value {
-        debug_assert!(inst.is_value());
+        debug_assert!(inst.is_value(), "instruction must produce a value");
         Value::new(self.insert(inst))
     }
 
@@ -91,9 +100,14 @@ impl<'g> NodeTable<'g> {
             |&key| &*self.graph[key] == n,
             |&key| make_hash(&*self.graph[key]),
         ) {
-            Ok(bucket) => *unsafe { bucket.as_ref() },
+            Ok(bucket) => {
+                // SAFETY: The value in the bucket is copied, so does not
+                // outlive the table.
+                *unsafe { bucket.as_ref() }
+            }
             Err(slot) => {
                 let node = self.graph.insert(Inst::constz(n.clone()));
+                // SAFETY: The slot has not been mutated before this call.
                 unsafe { self.table.insert_in_slot(hash, slot, node) };
                 node
             }
@@ -119,6 +133,7 @@ impl<'g> NodeTable<'g> {
     #[inline]
     pub fn iter(&self) -> NodeTableIter<'_> {
         NodeTableIter {
+            // SAFETY: Invariants are enforced in `next`.
             inner: unsafe { self.table.iter() },
             marker: PhantomData,
         }
@@ -199,6 +214,8 @@ impl Iterator for NodeTableIter<'_> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
+        // SAFETY: The value in the bucket is copied, so it does not outlive the
+        // iterator. `RawIter` only yields initialized buckets.
         self.inner.next().map(|bucket| *unsafe { bucket.as_ref() })
     }
 

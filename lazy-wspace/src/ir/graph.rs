@@ -67,7 +67,7 @@ impl Graph {
 
     #[inline]
     pub fn insert_value(&self, inst: Inst) -> Value {
-        debug_assert!(inst.is_value());
+        debug_assert!(inst.is_value(), "instruction must produce a value");
         Value::new(self.insert(inst))
     }
 
@@ -125,7 +125,7 @@ impl Index<NodeRef> for Graph {
 
     #[inline]
     fn index(&self, index: NodeRef) -> &Node {
-        debug_assert!(index.index() < self.len());
+        debug_assert!(index.index() < self.len(), "index must be in bounds");
 
         // SAFETY: The pool length is monotonically increasing, so the index
         // will always be in bounds, as long as the index was created by this

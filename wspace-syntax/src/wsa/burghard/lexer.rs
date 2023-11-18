@@ -39,6 +39,7 @@ impl<'a> Lexer<'a> {
 
     #[inline]
     pub fn source_text(&self) -> &'a str {
+        // SAFETY: `src` was originally a `str`.
         unsafe { from_utf8_unchecked(self.src) }
     }
 }
