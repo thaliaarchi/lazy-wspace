@@ -166,7 +166,7 @@ impl<'g> Cfg<'g> {
             match *self.graph[bb.exit] {
                 Inst::Jmp { target: l, .. } => {
                     if !visited[l.index()] {
-                        queue.push_back(l)
+                        queue.push_back(l);
                     }
                 }
                 Inst::Call {

@@ -1,3 +1,9 @@
+#![allow(
+    clippy::many_single_char_names,
+    clippy::match_same_arms,
+    clippy::unnested_or_patterns
+)]
+
 use rug::ops::{DivRounding, RemRounding};
 use rug::{Complete, Integer as Mpz};
 

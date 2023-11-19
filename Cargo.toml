@@ -21,9 +21,24 @@ phf = { git = "https://github.com/thaliaarchi/rust-phf" }
 lto = true
 
 [workspace.lints.clippy]
+cargo = "warn"
+nursery = "warn"
+# pedantic = "warn"
+
+## clippy::nursery
+option_if_let_else = { level = "allow", priority = 2 }
+use_self = { level = "allow", priority = 2 }
+
+## clippy::pedantic
+enum_glob_use = { level = "allow", priority = 2 }
 map_unwrap_or = "warn"
-module_name_repetitions = "allow"
-uninlined_format_args = "forbid"
+match_same_arms = { level = "allow", priority = 2 }
+module_name_repetitions = { level = "allow", priority = 2 }
+redundant_closure_for_method_calls = { level = "allow", priority = 2 }
+semicolon_if_nothing_returned = "deny"
+similar_names = { level = "allow", priority = 2 }
+single_match_else = { level = "allow", priority = 2 }
+uninlined_format_args = "deny"
 
 ## clippy::restriction
 dbg_macro = "warn"
@@ -36,27 +51,26 @@ lossy_float_literal = "warn"
 missing_assert_message = "warn"
 # missing_asserts_for_indexing = "warn"
 redundant_type_annotations = "warn"
-rest_pat_in_fully_bound_structs = "forbid"
-self_named_module_files = "forbid"
+rest_pat_in_fully_bound_structs = "deny"
+self_named_module_files = "deny"
 string_add = "warn"
 string_lit_chars_any = "warn"
 string_to_string = "warn"
 tests_outside_test_module = "warn"
 try_err = "warn"
-undocumented_unsafe_blocks = "forbid"
-unnecessary_safety_comment = "forbid"
-unnecessary_safety_doc = "forbid"
+undocumented_unsafe_blocks = "deny"
+unnecessary_safety_comment = "deny"
+unnecessary_safety_doc = "deny"
 
-## clippy::cargo
-cargo_common_metadata = "warn"
-multiple_crate_versions = "warn"
-negative_feature_names = "warn"
-redundant_feature_names = "warn"
-wildcard_dependencies = "warn"
+## clippy::style
+module_inception = "allow"
 
 ## Allowed until my API is more stable
-missing_docs_in_private_items = "allow"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-must_use_candidate = "allow"
-todo = "allow"
+cognitive_complexity = { level = "allow", priority = 2 } # nursery
+missing_const_for_fn = { level = "allow", priority = 2 } # nursery
+missing_docs_in_private_items = "allow" # restriction
+missing_errors_doc = { level = "allow", priority = 2 } # pedantic
+missing_panics_doc = { level = "allow", priority = 2 } # pedantic
+must_use_candidate = { level = "allow", priority = 2 } # pedantic
+return_self_not_must_use = { level = "allow", priority = 2 } # pedantic
+todo = "allow" # restriction

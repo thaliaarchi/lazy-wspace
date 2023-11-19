@@ -456,13 +456,7 @@ impl From<&IntegerLit> for LazySize {
     #[inline]
     fn from(n: &IntegerLit) -> Self {
         match n.value() {
-            Some(n) => {
-                if let Some(n) = n.to_usize() {
-                    LazySize::Finite(n)
-                } else {
-                    LazySize::Overflow
-                }
-            }
+            Some(n) => n.to_usize().map_or(LazySize::Overflow, LazySize::Finite),
             None => LazySize::EmptyLit,
         }
     }

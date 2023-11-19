@@ -56,7 +56,7 @@ impl Heap {
                 return self
                     .heap
                     .entry(addr)
-                    .or_insert(Value::zero().into())
+                    .or_insert_with(|| Value::zero().into())
                     .clone();
             }
         }
