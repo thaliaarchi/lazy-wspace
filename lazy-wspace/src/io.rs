@@ -44,7 +44,7 @@ impl IoRecorder {
     }
 
     #[inline]
-    pub fn stdin<R: Read>(&self, r: R) -> StdinRecorder<R> {
+    pub fn stdin<R: Read>(&self, r: R) -> StdinRecorder<'_, R> {
         StdinRecorder {
             rec: self,
             inner: BufReader::new(r),
@@ -53,12 +53,12 @@ impl IoRecorder {
     }
 
     #[inline]
-    pub fn stdout(&self) -> StdoutRecorder {
+    pub fn stdout(&self) -> StdoutRecorder<'_> {
         StdoutRecorder { rec: self }
     }
 
     #[inline]
-    pub fn stderr(&self) -> StderrRecorder {
+    pub fn stderr(&self) -> StderrRecorder<'_> {
         StderrRecorder { rec: self }
     }
 

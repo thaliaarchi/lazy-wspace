@@ -74,3 +74,28 @@ missing_panics_doc = { level = "allow", priority = 2 } # pedantic
 must_use_candidate = { level = "allow", priority = 2 } # pedantic
 return_self_not_must_use = { level = "allow", priority = 2 } # pedantic
 todo = "allow" # restriction
+
+[workspace.lints.rust]
+rust_2018_compatibility = "warn"
+rust_2018_idioms = "warn"
+rust_2021_compatibility = "warn"
+unused = "warn"
+
+elided_lifetimes_in_paths = "deny"
+explicit_outlives_requirements = "warn"
+meta_variable_misuse = "warn"
+missing_abi = "deny"
+# missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+pointer_structural_match = "deny"
+single_use_lifetimes = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+unused_tuple_struct_fields = "warn"
+variant_size_differences = "warn"
+
+## Allowed until my API is more stable
+missing_docs = "allow"
+unreachable_pub = "allow"

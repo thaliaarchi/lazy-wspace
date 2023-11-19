@@ -64,7 +64,7 @@ pub enum Encoding {
     Bytes,
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[non_exhaustive]
 pub enum MatcherError {
     #[error("invalid syntax for matcher")]
@@ -88,7 +88,7 @@ pub enum MatcherError {
     BuildRegex(Box<regex_automata::meta::BuildError>),
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LexerError {
     #[error("invalid UTF-8 sequence")]

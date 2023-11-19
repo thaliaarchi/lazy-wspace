@@ -3,7 +3,7 @@ use rug::Integer;
 use crate::ws::ast::IntegerLit;
 
 /// Error from parsing an integer literal.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseIntegerError {
     InvalidDigit(usize),
     NoDigits,

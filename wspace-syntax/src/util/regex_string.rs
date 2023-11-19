@@ -104,6 +104,7 @@ pub fn unescape_byte_string(src: &str) -> Result<Vec<u8>, EscapeError> {
     Ok(unescaped)
 }
 
+#[allow(variant_size_differences)]
 enum ByteOrChar {
     Byte(u8),
     Char(char),

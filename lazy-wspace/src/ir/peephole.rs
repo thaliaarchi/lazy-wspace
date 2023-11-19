@@ -1,7 +1,8 @@
 #![allow(
     clippy::many_single_char_names,
     clippy::match_same_arms,
-    clippy::unnested_or_patterns
+    clippy::unnested_or_patterns,
+    unused_qualifications
 )]
 
 use rug::ops::{DivRounding, RemRounding};
@@ -35,6 +36,7 @@ macro_rules! const_error(($error:pat) => {
         imm: $error,
     }
 });
+#[allow(unused_macro_rules)]
 macro_rules! unary(
     ($opcode:ident, $val:pat) => {
         Inst::Unary {

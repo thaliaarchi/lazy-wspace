@@ -7,7 +7,7 @@ use crate::ws::{
 };
 
 pub trait FormatTokens {
-    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>);
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<'_, W>);
 }
 
 pub trait TokenWriter {
@@ -89,6 +89,7 @@ impl TokenWriter for Vec<Token> {
     fn write_comment(&mut self, _comment: &[u8]) {}
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapping {
     pub s: Vec<u8>,
     pub t: Vec<u8>,
@@ -118,6 +119,7 @@ impl Default for Mapping {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct MappingWriter<'a> {
     buf: Vec<u8>,
     map: &'a Mapping,
@@ -152,7 +154,7 @@ impl TokenWriter for MappingWriter<'_> {
 }
 
 impl FormatTokens for Inst {
-    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<'_, W>) {
         use Token::*;
         let opcode: &[Token] = match self {
             Inst::Push(_) => &[S, S],
@@ -195,13 +197,13 @@ impl FormatTokens for Inst {
 }
 
 impl FormatTokens for IntegerLit {
-    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<'_, W>) {
         b.write_bits(&self.to_bits());
     }
 }
 
 impl FormatTokens for LabelLit {
-    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<W>) {
+    fn fmt_tokens<W: TokenWriter>(&self, b: &mut Builder<'_, W>) {
         b.write_bits(self.bits());
     }
 }

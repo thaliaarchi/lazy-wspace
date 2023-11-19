@@ -18,7 +18,7 @@ pub enum Token {
     Comment,
 }
 
-fn lex_block_comment(lex: &mut Lexer<Token>) -> bool {
+fn lex_block_comment(lex: &mut Lexer<'_, Token>) -> bool {
     #[derive(Logos)]
     enum CommentToken {
         #[token("{-")]

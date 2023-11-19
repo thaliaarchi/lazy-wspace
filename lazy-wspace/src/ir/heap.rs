@@ -23,7 +23,7 @@ impl AbstractHeap {
     /// Get the value at address `addr` in the heap. It will return the same
     /// value as previous calls to `retrieve` with the same value for `addr`,
     /// unless a potentially-aliasing address has been written to.
-    pub fn retrieve(&mut self, addr: Value, table: &mut NodeTable) -> Value {
+    pub fn retrieve(&mut self, addr: Value, table: &mut NodeTable<'_>) -> Value {
         match &*table[addr] {
             Inst::UnaryImmZ {
                 opcode: Opcode::ConstZ,
@@ -51,7 +51,7 @@ impl AbstractHeap {
 
     /// Write a value to address `addr` in the heap. It invalidates any known
     /// values at addresses that may alias with `addr`.
-    pub fn store(&mut self, addr: Value, val: Value, table: &mut NodeTable) -> Result<(), Error> {
+    pub fn store(&mut self, addr: Value, val: Value, table: &NodeTable<'_>) -> Result<(), Error> {
         match &*table[addr] {
             Inst::UnaryImmZ {
                 opcode: Opcode::ConstZ,

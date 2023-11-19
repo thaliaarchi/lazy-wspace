@@ -266,7 +266,7 @@ impl<'g> BBlockBuilder<'g> {
             Ast::Store => {
                 let (addr, val) = self.do_stack(inst, |s, t| s.pop2(t))?;
                 self.stmts.push(self.table.insert_unique(Inst::eval(addr)));
-                self.heap.store(addr, val, &mut self.table)?;
+                self.heap.store(addr, val, &self.table)?;
                 self.stmts
                     .push(self.table.insert_unique(Inst::store(addr, val)));
             }
@@ -320,7 +320,7 @@ impl<'g> BBlockBuilder<'g> {
 
     fn do_stack<T, F>(&mut self, inst: &Ast, f: F) -> Result<T, Error>
     where
-        F: FnOnce(&mut AbstractStack, &mut NodeTable) -> Result<T, UnderflowError>,
+        F: FnOnce(&mut AbstractStack, &mut NodeTable<'g>) -> Result<T, UnderflowError>,
     {
         f(&mut self.stack, &mut self.table).map_err(|err| err.to_error(inst))
     }
