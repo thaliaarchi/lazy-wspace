@@ -13,17 +13,17 @@ categories = ["parser-implementations"]
 [dependencies]
 aho-corasick = "1.1"
 bitvec = "1.0"
-bstr = { version = "1.7", default-features = false }
+bstr = { version = "1.9", default-features = false }
 lazy-wspace-macros = { path = "../lazy-wspace-macros" }
-logos = "0.13"
-memchr = "2.6"
+logos = "0.14"
+memchr = "2.7"
 phf = { version = "0.11", features = ["macros", "uncased"] }
 regex = "1.10"
 regex-automata = "0.4"
 regex-syntax = "0.8"
-rug = { version = "1.22", features = ["integer"], default-features = false }
+rug = { version = "1.24", features = ["integer", "std"], default-features = false }
 simdutf8 = "0.1"
-strum = { version = "0.25", features = ["derive"] }
+strum = { version = "0.26", features = ["derive"] }
 thiserror = "1.0"
 uncased = "0.9"
 unicode-ident = "1.0"

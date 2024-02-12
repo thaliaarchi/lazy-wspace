@@ -9,7 +9,7 @@ license = "MPL-2.0"
 publish = false
 
 [dependencies]
-rug = { version = "1.22", features = ["integer"], default-features = false }
+rug = { version = "1.24", features = ["integer", "std"], default-features = false }
 wspace-syntax = { path = "../wspace-syntax" }
 
 [lints]
