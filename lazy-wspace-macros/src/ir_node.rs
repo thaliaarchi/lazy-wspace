@@ -310,9 +310,7 @@ fn is_node_ref(ty: &Type) -> bool {
 }
 
 fn path_is_node_ref(path: &TypePath) -> bool {
-    path.qself.is_none()
-        && path.path.leading_colon.is_none()
-        && path.path.get_ident().is_some_and(|id| id == "NodeRef")
+    path.path.is_ident("NodeRef")
 }
 
 fn strip_groups(mut ty: &Type) -> &Type {
