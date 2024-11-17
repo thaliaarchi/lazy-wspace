@@ -1,7 +1,6 @@
 //! Lexing for Whitespace tokens by bits.
 
 use std::iter::FusedIterator;
-use std::mem;
 use std::str::FromStr;
 
 use bitvec::{
@@ -47,7 +46,7 @@ impl<'a, O: BitOrder, T: BitStore> BitLexer<'a, O, T> {
         let mut bits = BitSlice::from_slice(src);
         // Trim trailing zeros in the last element.
         let tz = bits.trailing_zeros();
-        if 0 < tz && tz < mem::size_of::<T>() * 8 {
+        if 0 < tz && tz < size_of::<T>() * 8 {
             bits = &bits[..bits.len() - tz];
         }
         BitLexer::from(bits)

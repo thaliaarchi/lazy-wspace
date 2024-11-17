@@ -10,6 +10,5 @@ mod table;
 pub use cfg::*;
 pub use graph::*;
 pub use heap::*;
-pub use peephole::*;
 pub use stack::*;
 pub use table::*;
