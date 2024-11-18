@@ -348,9 +348,9 @@ pub enum Opcode {
 
     // Error propagation
     //
-    /// Evaluate a value thunk and possibly trap (Unary : Value →).
-    /// `eval %val`.
-    Eval,
+    /// Force evaluation of a value thunk and possibly trap (Unary : Value →).
+    /// `force %val`.
+    Force,
     /// Select the LHS, if it's an error, otherwise the RHS
     /// (Binary : Value, Value → Value).
     /// `%r = error_or %maybe_error %or_value`.
@@ -491,7 +491,7 @@ impl Opcode {
             Opcode::CountTz => "count_tz",
             Opcode::PopCount => "pop_count",
             Opcode::LNot => "lnot",
-            Opcode::Eval => "eval",
+            Opcode::Force => "force",
             Opcode::ErrorOr => "error_or",
             Opcode::StackRef => "stack_ref",
             Opcode::CheckedStackRef => "checked_stack_ref",
@@ -566,7 +566,7 @@ impl Opcode {
             | Opcode::NandNot
             | Opcode::NNotAnd
             | Opcode::NTestBit => true,
-            Opcode::Eval // TODO: make eval a value
+            Opcode::Force // TODO: make force a value
             | Opcode::GuardStack
             | Opcode::Push
             | Opcode::Drop
@@ -714,7 +714,7 @@ impl Inst {
     unary!(count_tz(Opcode::CountTz, val));
     unary!(pop_count(Opcode::PopCount, val));
     unary!(lnot(Opcode::LNot, val));
-    unary!(eval(Opcode::Eval, val));
+    unary!(force(Opcode::Force, val));
     binary!(error_or(Opcode::ErrorOr, maybe_error, or_value));
     #[inline]
     pub fn stack_ref(index: usize, guard: NodeRef) -> Self {

@@ -115,7 +115,7 @@ impl<'g> Cfg<'g> {
                     Ast::Jmp(l) => Inst::jmp(get_label!(l)),
                     Ast::Jz(l) | Ast::Jn(l) => match bb.do_stack(inst, |s, table| s.pop(table)) {
                         Ok(top) => {
-                            bb.stmts.push(graph.insert(Inst::eval(top)));
+                            bb.stmts.push(graph.insert(Inst::force(top)));
                             let cond = match inst {
                                 Ast::Jz(_) => Cond::Zero,
                                 _ => Cond::Neg,
@@ -265,7 +265,7 @@ impl<'g> BBlockBuilder<'g> {
             Ast::Mod => self.do_stack(inst, |s, t| s.apply_op(Op::Mod, t))?,
             Ast::Store => {
                 let (addr, val) = self.do_stack(inst, |s, t| s.pop2(t))?;
-                self.stmts.push(self.table.insert_unique(Inst::eval(addr)));
+                self.stmts.push(self.table.insert_unique(Inst::force(addr)));
                 self.heap.store(addr, val, &self.table)?;
                 self.stmts
                     .push(self.table.insert_unique(Inst::store(addr, val)));
@@ -276,13 +276,13 @@ impl<'g> BBlockBuilder<'g> {
             }
             Ast::Printc => {
                 let val = self.do_stack(inst, |s, t| s.pop(t))?;
-                self.stmts.push(self.table.insert_unique(Inst::eval(val)));
+                self.stmts.push(self.table.insert_unique(Inst::force(val)));
                 self.stmts
                     .push(self.table.insert_unique(Inst::print(IoFormat::Char, val)));
             }
             Ast::Printi => {
                 let val = self.do_stack(inst, |s, t| s.pop(t))?;
-                self.stmts.push(self.table.insert_unique(Inst::eval(val)));
+                self.stmts.push(self.table.insert_unique(Inst::force(val)));
                 self.stmts
                     .push(self.table.insert_unique(Inst::print(IoFormat::Int, val)));
             }
@@ -290,7 +290,7 @@ impl<'g> BBlockBuilder<'g> {
                 let addr = self.do_stack(inst, |s, t| s.pop(t))?;
                 let read = self.table.insert_unique(Inst::read(IoFormat::Char));
                 self.stmts.push(read);
-                self.stmts.push(self.table.insert_unique(Inst::eval(addr)));
+                self.stmts.push(self.table.insert_unique(Inst::force(addr)));
                 self.stmts.push(
                     self.table
                         .insert_unique(Inst::store(addr, Value::new(read))),
@@ -300,7 +300,7 @@ impl<'g> BBlockBuilder<'g> {
                 let addr = self.do_stack(inst, |s, t| s.pop(t))?;
                 let read = self.table.insert_unique(Inst::read(IoFormat::Int));
                 self.stmts.push(read);
-                self.stmts.push(self.table.insert_unique(Inst::eval(addr)));
+                self.stmts.push(self.table.insert_unique(Inst::force(addr)));
                 self.stmts.push(
                     self.table
                         .insert_unique(Inst::store(addr, Value::new(read))),

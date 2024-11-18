@@ -200,9 +200,9 @@ mod lazy {
         /// `drop (last []) []` in the reference interpreter. The combination of
         /// `push 2` and `store` transforms the stack from
         /// `1 : drop (last []) []` to `drop (last []) []`, without forcing the
-        /// error. Only `push` does not for evaluation of the error from slide,
-        /// because it appears before the first pattern match on the stack in
-        /// `doInstr`.
+        /// error. Only `push` does not force evaluation of the error from
+        /// slide, because it appears before the first pattern match on the
+        /// stack in `doInstr`.
         ///
         /// ```wsa
         ///     push 1
